@@ -1,0 +1,99 @@
+# Paths
+paths:
+  input_directory: "C:/Users/Amaya/Documents/PhD/Data/R4RA_results" # Histopathology Slide location - unprocessed.
+  output_directory: "C:/Users/Amaya/Documents/PhD/Data/R4RA_results"
+  embedding_weights: "C:/Users/Amaya/Documents/PhD/Data/WSI_foundation/"
+  path_to_patches: "C:/Users/Amaya/Documents/PhD/Data/R4RA_results/extracted_patches_2/patches"
+  unet_weights: "C:/Users/Amaya/Documents/PhD/Data/UNet_512_1.pth.tar"
+
+# Dataset configurations
+dataset:
+  name: "RA"  # choices: ['RA', 'Sjogren']
+  patch_size: 224
+  overlap: 0
+  coverage: 0.4 # percent of tissue coverage in the patch
+  slide_level: 2
+  mask_level: 2
+  patch_batch_size: 10
+  train_fraction: 0.8
+  val_fraction: 0.20
+  stain_used: 'all' # RA choices: ['all', 'H&E', 'CD68', 'CD138', 'CD20']
+
+# Parsing configurations
+parsing:
+  patient_ID: 'img.split("_")[0]' # "Patient123_stain.tiff" -> Patient123
+  stain: 'img.split("_")[1]' # "Patient123_stain.tiff" -> stain
+  stain_types: {'NA': 0, 'H&E': 1, 'CD68': 2, 'CD138': 3, 'CD20': 4} # RA stain types
+  stain_colors: {'H&E': 'tab:pink', 'CD68': 'tab:brown', 'CD20': 'tab:blue', 'CD138': 'tab:orange'}
+  edge_types: { 'RAG': 0, 'KNN': 1, 'BOTH': 2 }
+  edge_colors: { 'RAG': 'red', 'KNN': 'dodgerblue', 'BOTH': 'blueviolet' }
+
+# Label/split configurations
+labels:
+  label: 'label'
+  label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
+  n_classes: 2
+  patient_id: 'Patient_ID'
+
+# Graph configurations
+graph:
+  K: 7
+  graph_mode: "krag"
+  encoding_size: 20
+  positional_encoding: true
+
+GNN:
+  num_layers: 4
+  convolution: "GAT"
+  use_node_embedding: false
+  use_edge_embedding: false
+  attention_heads: 2
+  use_attention: true
+  pooling_ratio: 0.7
+  dropout: 0.5
+
+training:
+  hidden_dim: 512
+  learning_rate: 0.0001
+  num_epochs: 100
+  L2_norm: 0.01
+  batch_size: 1
+  slide_batch: 1
+  num_workers: 0
+  scheduler: 1
+  checkpoint: true
+  seed: 42
+  stratified_splits: 5
+  weight_type: 'accuracy' # choices: ['accuracy', 'loss', 'auc']
+
+# Visualization configurations
+visualization:
+  test_fold: 0
+  test_ids: null
+  specific_ids: false
+
+model:
+  name: 'ProtoPathway'
+
+# Execution flags
+execution:
+  preprocess: false
+  segmentation: false
+  embedding: false
+  create_splits: false
+  compute_rwpe: false
+  train: false
+  val: false
+  test: false
+  visualise: false
+
+# Embedding models configs & paths
+embedding_net:
+  UNI:
+    size: 1024
+    weight_path: ""
+    class: "UNI_embedding"
+
+# Mapping of class names to module paths
+embedding_class:
+  UNI_embedding: "models.embedding_models.UNI_embedding"
