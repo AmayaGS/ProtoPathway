@@ -1,10 +1,48 @@
-# Paths
-paths:
-  input_directory: "C:/Users/Amaya/Documents/PhD/Data/R4RA_results" # Histopathology Slide location - unprocessed.
-  output_directory: "C:/Users/Amaya/Documents/PhD/Data/R4RA_results"
-  embedding_weights: "C:/Users/Amaya/Documents/PhD/Data/WSI_foundation/"
-  path_to_patches: "C:/Users/Amaya/Documents/PhD/Data/R4RA_results/extracted_patches_2/patches"
-  unet_weights: "C:/Users/Amaya/Documents/PhD/Data/UNet_512_1.pth.tar"
+# ProtoPathway Configuration File
+
+# Base paths
+base_dir : "C:/Users/Amaya/Documents/PhD/ProtoPathway"
+output_dir: "${base_dir}/output"
+
+# Input files
+input:
+  gtf_file: "${base_dir}/input_files/Homo_sapiens.GRCh38.113.gtf"
+  gene_expression: "${base_dir}/input_files/gene_expression_R4RA_cpm.csv"
+  reactome_gmt: "${base_dir}/input_files/ReactomePathways.gmt"
+  reactome_relations: "${base_dir}/input_files/ReactomePathwaysRelation.txt"
+  reactome_pathways: "${base_dir}/input_files/ReactomePathways.txt"
+
+# Output directory structure
+output:
+  data:
+    dir: "${output_dir}/processed_data"
+    gene_annotations: "${output_dir}/processed_data/gene_annotations.csv"
+    filtered_genes: "${output_dir}/processed_data/gene_expression_filtered.csv"
+    reactome_pathways: "${output_dir}/processed_data/reactome_pathways_gene_lists.csv"
+    final_pathways: "${output_dir}/processed_data/final_filtered_pathways.csv"
+    removed_pathways_csv: "${output_dir}/processed_data/removed_pathways_report.csv"
+    removed_pathways_md: "${output_dir}/processed_data/removed_pathways_report.md"
+  figures:
+    dir: "${output_dir}/figures/"
+  reports:
+    dir: "${output_dir}/reports/"
+    removed_pathways: "${output_dir}/reports/removed_pathways_report.csv"
+    removed_pathways_md: "${output_dir}/reports/removed_pathways_report.md"
+
+
+parameters:
+  gene_expression:
+    threshold: 1         # Minimum expression level
+    min_proportion: 0.10 # Minimum proportion of patients with expression
+    variance_proportion: 0.80 # Top proportion of variable genes to keep
+
+  pathway:
+    min_genes: 4         # Minimum number of genes in a pathway
+    max_genes: 200       # Maximum number of genes in a pathway
+    similarity_threshold: 1.0 # Threshold for redundant pathways
+    target_depth: 5      # Target pathway depth in Reactome hierarchy
+    max_visualization: 100 # Maximum number of pathways to visualize in hypergraph
+
 
 # Dataset configurations
 dataset:
@@ -77,6 +115,7 @@ model:
 
 # Execution flags
 execution:
+  ge_preprocess: true
   preprocess: false
   segmentation: false
   embedding: false

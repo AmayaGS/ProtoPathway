@@ -1,3 +1,4 @@
+![](figures/prototype_pipeline.png)
 
 ## Setup
 
@@ -9,7 +10,7 @@ git clone https://github.com/AmayaGS/ProtoPathway
 cd ProtoPathway
 ```
 
-Then create a virtual environememt and install the requirements.txt
+Then create a virtual environmemt and install the requirements.txt
 
 #### General Requirements
 - Python 3.11.7
@@ -18,7 +19,7 @@ Then create a virtual environememt and install the requirements.txt
 
 ```bash
 # Virtual Environment
-python -m venv bioxcpath
+python -m venv protopath
 source protopath/bin/activate
 
 # PyTorch with cuda capabilities
