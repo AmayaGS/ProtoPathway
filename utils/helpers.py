@@ -8,10 +8,15 @@ def load_config(config_path):
         return yaml.safe_load(file)
 
 
-def ensure_directory(directory_path):
-    if not os.path.exists(directory_path):
-        os.makedirs(directory_path, exist_ok=True)
-    return directory_path
+def flatten_config(d, parent_key='', sep='_'):
+    items = {}
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.update(flatten_config(v, new_key, sep=sep))
+        elif isinstance(v, str):
+            items[new_key] = v
+    return items
 
 
 def resolve_all_vars(obj, env):
@@ -34,3 +39,9 @@ def resolve_all_vars(obj, env):
         return substitute(obj)
     else:
         return obj
+
+
+def ensure_directory(directory_path):
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path, exist_ok=True)
+    return directory_path

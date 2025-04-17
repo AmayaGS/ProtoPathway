@@ -4,6 +4,9 @@
 base_dir : "C:/Users/Amaya/Documents/PhD/ProtoPathway"
 output_dir: "${base_dir}/output"
 
+# Dataset name
+dataset_name: "R4RA" # choices: ['R4RA', 'Sjogren']
+
 # Input files
 input:
   gtf_file: "${base_dir}/input_files/Homo_sapiens.GRCh38.113.gtf"
@@ -11,15 +14,16 @@ input:
   reactome_gmt: "${base_dir}/input_files/ReactomePathways.gmt"
   reactome_relations: "${base_dir}/input_files/ReactomePathwaysRelation.txt"
   reactome_pathways: "${base_dir}/input_files/ReactomePathways.txt"
+  patient_labels: "patient_labels_${dataset_name}.csv"
 
 # Output directory structure
 output:
   data:
     dir: "${output_dir}/processed_data"
     gene_annotations: "${output_dir}/processed_data/gene_annotations.csv"
-    filtered_genes: "${output_dir}/processed_data/gene_expression_filtered.csv"
+    filtered_genes: "${output_dir}/processed_data/gene_expression_filtered_${dataset_name}.csv"
     reactome_pathways: "${output_dir}/processed_data/reactome_pathways_gene_lists.csv"
-    final_pathways: "${output_dir}/processed_data/final_filtered_pathways.csv"
+    final_pathways: "${output_dir}/processed_data/final_filtered_reactome_pathways.csv"
     removed_pathways_csv: "${output_dir}/processed_data/removed_pathways_report.csv"
     removed_pathways_md: "${output_dir}/processed_data/removed_pathways_report.md"
   figures:
@@ -46,7 +50,6 @@ parameters:
 
 # Dataset configurations
 dataset:
-  name: "RA"  # choices: ['RA', 'Sjogren']
   patch_size: 224
   overlap: 0
   coverage: 0.4 # percent of tissue coverage in the patch

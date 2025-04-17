@@ -76,7 +76,7 @@ def gene_expression_preprocessing(config):
     )
 
     # Filter pathway DataFrame to selected pathways
-    selected_pathway_df = pathway_df[pathway_df['pathway_id'].isin(selected_pathways)]
+    selected_pathway_df = pathway_df[pathway_df['pathway_id'].isin(selected_pathways)].copy()
     selected_pathway_df['gene_count'] = selected_pathway_df['genes'].apply(len)
     selected_pathway_df = selected_pathway_df.merge(
         depth_df, how='inner', on=['pathway_name', 'pathway_id']

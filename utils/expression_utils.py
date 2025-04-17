@@ -79,6 +79,7 @@ def filter_expression_data(gene_df, protein_coding_genes,
     top_genes = variances.nlargest(N).index
     df_final = df_centered.loc[top_genes]
     print(f"After variance filter: {df_final.shape[0]} genes")
+    df_final = df_final.transpose()
 
     # Save the final DataFrame
     # Ensure output directory exists
