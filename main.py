@@ -5,6 +5,7 @@ from runners.expression_run import gene_expression_preprocessing
 from utils.helpers import load_config, resolve_all_vars, flatten_config
 from utils.model_utils import create_cross_validation_splits
 from runners.cross_validation_run import cross_validation
+from utils.logging_utils import ExperimentLogger
 
 def parser():
 
@@ -25,27 +26,30 @@ def parser():
 
     return config
 
-def main(config):
+def main(config, experiment_logger):
+
+    logger = experiment_logger.logger
+    logger.info(f"Using dataset: {config['dataset_name']}")
 
     if config['execution']['ge_preprocess']:
-        print("Gene Expression and Reactome Pathways preprocessing")
+        logger.info("Gene Expression and Reactome Pathways preprocessing")
         gene_expression_preprocessing(config)
-        print("Gene Expression and Reactome Pathways preprocessing")
+        logger.info("Gene Expression and Reactome Pathways preprocessing")
 
     if config['execution']['create_splits']:
-        print("Creating cross-validation splits")
+        logger.info("Creating cross-validation splits")
         create_cross_validation_splits(config)
-        print("Cross-validation splits created")
+        logger.info("Cross-validation splits created")
 
     if config['execution']['cross_validation']:
-        print("Cross-validation of the model")
-        cross_validation(config)
-        print("Cross-validation complete")
+        logger.info("Cross-validation of the model")
+        cross_validation(config, experiment_logger=experiment_logger)
+        logger.info("Cross-validation complete")
 
     if config['execution']['full_train']:
-        print("Cross-validation of the model")
-        cross_validation(config)
-        print("Cross-validation complete")
+        logger.info("Cross-validation of the model")
+        cross_validation(config, is_full_train=True, experiment_logger=experiment_logger)
+        logger.info("Cross-validation complete")
 
 
 
@@ -53,4 +57,10 @@ if __name__ == "__main__":
 
     # Parse command-line arguments
     config = parser()
-    main(config)
+    # Set up logging
+    experiment_logger = ExperimentLogger(
+        config,
+        capture_console=True
+    )
+
+    main(config, experiment_logger)

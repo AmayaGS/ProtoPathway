@@ -3,17 +3,43 @@ ProtoPathway: Experiment logging and tracking utilities.
 """
 
 import os
-import json
+import sys
 import time
 import yaml
 import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import logging
 from datetime import datetime
 from pathlib import Path
 
 from typing import Dict, List, Union, Optional, Any, Tuple
+
+
+class StreamToLogger:
+    """
+    Custom stream object that redirects writes to a logger instance.
+    """
+    def __init__(self, logger, log_level=logging.INFO):
+        self.logger = logger
+        self.log_level = log_level
+        self.linebuf = ''
+
+    def write(self, buf):
+        temp_linebuf = self.linebuf + buf
+        self.linebuf = ''
+        for line in temp_linebuf.splitlines(True):
+            # If line ends with a newline, it's complete
+            if line[-1] == '\n':
+                self.logger.log(self.log_level, line.rstrip())
+            else:
+                self.linebuf += line
+
+    def flush(self):
+        if self.linebuf != '':
+            self.logger.log(self.log_level, self.linebuf)
+            self.linebuf = ''
 
 
 class ExperimentLogger:
@@ -33,7 +59,8 @@ class ExperimentLogger:
             use_comet: bool = False,
             comet_project: Optional[str] = None,
             comet_workspace: Optional[str] = None,
-            wandb_project: Optional[str] = None
+            wandb_project: Optional[str] = None,
+            capture_console: bool = False
     ):
         """
         Initialize the experiment logger.
@@ -49,16 +76,26 @@ class ExperimentLogger:
             comet_project: Comet.ml project name.
             comet_workspace: Comet.ml workspace name.
             wandb_project: W&B project name.
+            capture_console: Whether to capture console output to file
         """
         self.config = config
-        self.experiment_name = experiment_name or f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self.timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # self.experiment_name = experiment_name or f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        # Generate descriptive experiment name if none provided
+        if experiment_name is None:
+            experiment_name = self._generate_experiment_name()
+
+        self.experiment_name = experiment_name
 
         # Set up directory structure
-        self.log_dir = log_dir or os.path.join(config['output_dir'], 'logs', self.experiment_name)
+        self.log_dir = log_dir or os.path.join(config['output_dir'], 'experiments', self.experiment_name)
         self.checkpoint_dir = os.path.join(self.log_dir, 'checkpoints')
         self.tensorboard_dir = os.path.join(self.log_dir, 'tensorboard')
         self.plots_dir = os.path.join(self.log_dir, 'plots')
         self.results_dir = os.path.join(self.log_dir, 'results')
+
+        self.console_log_file = os.path.join(self.log_dir, f"console_{self.timestamp}.log")
 
         # Create directories
         for directory in [self.log_dir, self.checkpoint_dir, self.plots_dir, self.results_dir]:
@@ -74,6 +111,9 @@ class ExperimentLogger:
         # Log hyperparameters
         self.hyperparams = self._extract_hyperparams(config)
 
+        # Set up Python's logging system
+        self.logger = self._setup_logging(capture_console)
+
         # Save config if requested
         if save_config:
             self._save_config()
@@ -86,7 +126,7 @@ class ExperimentLogger:
                 Path(self.tensorboard_dir).mkdir(parents=True, exist_ok=True)
                 self.writer = SummaryWriter(log_dir=self.tensorboard_dir)
             except ImportError:
-                print("TensorBoard not installed. Run: pip install tensorboard")
+                self.logger.warning("TensorBoard not installed. Run: pip install tensorboard")
                 self.use_tensorboard = False
 
         # Set up Weights & Biases if requested
@@ -101,7 +141,7 @@ class ExperimentLogger:
                 )
                 self.wandb = wandb
             except ImportError:
-                print("Weights & Biases not installed. Run: pip install wandb")
+                self.logger.warning("Weights & Biases not installed. Run: pip install wandb")
                 self.use_wandb = False
 
         # Set up Comet.ml if requested
@@ -125,16 +165,110 @@ class ExperimentLogger:
 
                 # Store experiment instance
                 self.comet_experiment = experiment
-                print(f"Comet.ml experiment initialized: {experiment.get_key()}")
+                self.logger.info(f"Comet.ml experiment initialized: {experiment.get_key()}")
 
             except ImportError:
-                print("Comet.ml not installed. Run: pip install comet_ml")
+                self.logger.warning("Comet.ml not installed. Run: pip install comet_ml")
                 self.use_comet = False
 
         # Initialize timers
         self.timers = {}
 
-        print(f"ExperimentLogger initialized at {self.log_dir}")
+        self.logger.info(f"ExperimentLogger initialized at {self.log_dir}")
+        self.logger.info(f"Experiment name: {self.experiment_name}")
+
+
+    def _generate_experiment_name(self) -> str:
+        """
+        Generate a descriptive experiment name based on model type and hyperparameters.
+
+        Returns:
+            A formatted experiment name string
+        """
+        # Extract key information from config
+        try:
+            # Get model name
+            model_name = self.config.get('model', {}).get('name', 'unknown')
+
+            # Get key hyperparameters
+            training_config = self.config.get('training', {})
+            lr = training_config.get('learning_rate', 0)
+            batch_size = training_config.get('batch_size', 0)
+            dropout = training_config.get('dropout_rate', 0)
+            l1_reg = training_config.get('L1_norm', 0)
+            l2_reg = training_config.get('L2_norm', 0)
+
+            # Get dataset information
+            dataset_name = self.config.get('dataset_name', 'unknown')
+
+            # Format learning rate with scientific notation for readability
+            lr_str = f"{lr:.1e}".replace('e-0', 'e-')
+
+            # Create name components
+            components = [
+                f"{model_name}",
+                f"ds-{dataset_name}",
+                f"lr-{lr_str}",
+                f"bs-{batch_size}",
+                f"dr-{dropout}",
+                f"l1-{l1_reg}",
+                f"l2-{l2_reg}",
+                self.timestamp
+            ]
+
+            # Join components with underscores
+            return "_".join(components)
+        except Exception as e:
+            # Fallback if there's any issue extracting config values
+            return f"experiment_{self.timestamp}"
+
+    def _setup_logging(self, capture_console: bool = False) -> logging.Logger:
+        """
+        Set up Python's logging system for both file and console output
+
+        Args:
+            capture_console: Whether to capture console output to log file
+
+        Returns:
+            The configured logger instance
+        """
+        # Create a unique log filename with timestamp
+        log_file = self.console_log_file
+
+        # Configure logging
+        logger = logging.getLogger(self.config['model']['name'])
+        logger.setLevel(logging.DEBUG)
+
+        # If logger already has handlers, don't add more
+        if logger.handlers:
+            return logger
+
+        # File handler with detailed formatting
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.DEBUG)
+        file_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_format)
+
+        # Console handler with simpler formatting
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.INFO)
+        console_format = logging.Formatter('%(message)s')  # Keep console output clean
+        console_handler.setFormatter(console_format)
+
+        # Add handlers to logger
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+
+        # Capture stdout and stderr if requested
+        if capture_console:
+            sys.stdout = StreamToLogger(logger, logging.INFO)
+            sys.stderr = StreamToLogger(logger, logging.ERROR)
+            logger.info(f"Console output capture enabled. Log file: {log_file}")
+        else:
+            logger.info(f"Logging initialized. Log file: {log_file}")
+
+        return logger
+
 
     def _extract_hyperparams(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Extract hyperparameters from config for logging."""
