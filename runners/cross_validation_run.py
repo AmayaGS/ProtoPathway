@@ -2,6 +2,7 @@ import pandas as pd
 import pickle
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import DataLoader
@@ -13,15 +14,14 @@ from utils.dataset_utils import GeneExpressionDataset
 from train_test_loops.train_val_loop import Trainer
 
 from utils.visualization_utils import (
-    create_result_summary, visualize_model_results,
-    plot_confusion_matrix, plot_roc_curves,
-    plot_precision_recall_curves
+    visualize_fold_results,
+    visualize_aggregated_results,
+    visualize_full_training_results
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def cross_validation(config, is_full_train=False, experiment_logger=None):
-
 
     logger = experiment_logger.logger
     run_type = "full_train" if is_full_train else "cross_validation"
@@ -64,15 +64,22 @@ def cross_validation(config, is_full_train=False, experiment_logger=None):
     with open(splits_dict_path, "rb") as f:
         split_dict = pickle.load(f)
 
-    if config['execution']['cross_validation']:
-        training_folds, validation_folds = load_ge_cv_folds(gene_expression_df, split_dict)
-    elif config['execution']['full_train']:
+    if is_full_train:
+        logger.info("Using train/test split for full training")
         training_folds, validation_folds = load_ge_train_test_folds(gene_expression_df, split_dict)
+        # For full training, we have just one "fold" which is the train/test split
+        n_folds = 1
+    else:
+        logger.info(f"Using {len(split_dict['CV'])} cross-validation folds")
+        training_folds, validation_folds = load_ge_cv_folds(gene_expression_df, split_dict)
+        n_folds = len(split_dict['CV'])
 
     fold_histories = []
+    fold_summaries = []
 
     for fold_idx, (train_fold, val_fold) in enumerate(zip(training_folds, validation_folds)):
-        logger.info(f"Training on Fold {fold_idx + 1}")
+        fold_name = "Full Training" if is_full_train else f"Fold {fold_idx + 1}/{n_folds}"
+        logger.info(f"=== Training {fold_name} ===")
 
         # Create datasets for the current fold
         train_dataset = GeneExpressionDataset(config, train_fold, labels_df)
@@ -105,8 +112,58 @@ def cross_validation(config, is_full_train=False, experiment_logger=None):
                           fold_idx,
                           device)
         # Train the model
-        model, history = trainer.train()
+        model, history = trainer.train() # remember to save best model
 
+        model_path = os.path.join(experiment_logger.checkpoint_dir, trainer.checkpoint_name)
 
+        # Store fold results
+        fold_data = {
+            'fold': fold_idx,
+            'history': history,
+            'model_path': model_path
+        }
 
-    print("Training complete")
+        fold_histories.append(fold_data)
+
+        # Generate visualizations for this fold
+        logger.info(f"Generating visualizations for {fold_name}")
+        fold_summary = visualize_fold_results(
+            fold_data,
+            fold_idx,
+            plots_dir,
+            config,
+            metric_for_best='acc' if config['training']['weight_type'] == 'accuracy' else 'loss',
+            mode='max' if config['training']['weight_type'] == 'accuracy' else 'min'
+        )
+
+        fold_summaries.append(fold_summary)
+        logger.info(f"Completed {fold_name} training and visualization")
+
+        # Process results depending on run type
+    if is_full_train:
+        # For full training, generate comprehensive visualizations
+        logger.info("Generating full training visualizations")
+        visualize_full_training_results(
+            fold_histories[0]['history'],
+            plots_dir,
+            config,
+            metric_for_best='acc' if config['training']['weight_type'] == 'accuracy' else 'loss',
+            mode='max' if config['training']['weight_type'] == 'accuracy' else 'min'
+        )
+    else:
+        # For cross-validation, generate aggregated results
+        logger.info("Generating aggregated cross-validation visualizations")
+        visualize_aggregated_results(
+            fold_summaries,
+            fold_histories,
+            plots_dir,
+            config
+        )
+
+        # Save all fold histories for later use
+    history_path = os.path.join(metrics_dir, f"{run_type}_histories.pkl")
+    with open(history_path, 'wb') as f:
+        pickle.dump(fold_histories, f)
+    logger.info(f"Saved complete training histories to {history_path}")
+
+    logger.info(f"{run_type.capitalize()} completed successfully!")

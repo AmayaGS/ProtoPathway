@@ -183,7 +183,10 @@ class Trainer:
             'recall': recall_score(all_targets, all_preds, average='weighted', zero_division=0),
             'f1': f1_score(all_targets, all_preds, average='weighted', zero_division=0),
             'confusion_matrix': confusion_matrix(all_targets, all_preds),
-            'classification_report': classification_report(all_targets, all_preds, zero_division=0)
+            'classification_report': classification_report(all_targets, all_preds, zero_division=0),
+            'all_labels': all_targets,
+            'all_preds': all_preds,
+            'all_probs': all_probs
         }
 
         # Calculate AUC if binary classification
@@ -208,17 +211,23 @@ class Trainer:
                 'acc': []
             },
             'val': {
-                'loss': [],
-                'acc': []
-            }
+                    # Initialize complex metrics as empty dictionaries
+                    'confusion_matrix': {},
+                    'all_labels': {},
+                    'all_probs': {},
+                    'classification_report': {}
+                },
+            'best_epoch': None,
+            'best_val_metric': None
         }
 
         # Training loop
         for epoch in range(1, self.num_epochs + 1):
-
             self.current_epoch = epoch
             self.logger.start_timer(f"epoch_{epoch}")
+
             train_metrics = self.train_epoch()
+
             self.logger.log_metrics(train_metrics, epoch, 'train')
 
             # Validate
@@ -227,11 +236,18 @@ class Trainer:
 
             # Update training history
             for metric, value in train_metrics.items():
-                if metric in history['train']:
-                    history['train'][metric].append(value)
+                if metric not in history['train']:
+                    history['train'][metric] = []
+                history['train'][metric].append(value)
 
             for metric, value in val_metrics.items():
-                if metric in history['val']:
+                # Store complex metrics by epoch
+                if metric in ['confusion_matrix', 'all_labels', 'all_probs', 'classification_report']:
+                    history['val'][metric][epoch] = value
+                # Store scalar metrics as lists across epochs
+                else:
+                    if metric not in history['val']:
+                        history['val'][metric] = []
                     history['val'][metric].append(value)
 
             # Update learning rate scheduler if configured
@@ -248,6 +264,8 @@ class Trainer:
 
             if is_best:
                 self.best_val_metric = current_metric
+                history['best_epoch'] = epoch
+                history['best_val_metric'] = current_metric
 
                 # Save best model checkpoint
                 if self.config['training']['checkpoint']:
@@ -275,16 +293,5 @@ class Trainer:
             if 'classification_report' in val_metrics:
                 print(f"Classification Report:\n{val_metrics['classification_report']}")
             print(f"Best val {self.metric_to_track}: {self.best_val_metric:.4f}\n" + "-" * 50)
-
-        # # Load best model if requested
-        # if self.config['training']['checkpoint']:
-        #     best_path = os.path.join(self.logger.checkpoint_dir, self.checkpoint_name)
-        #     if os.path.exists(best_path):
-        #         print(f"Loading best model from {best_path}")
-        #         self.model, checkpoint = self.logger.load_checkpoint(
-        #             self.model, self.optimizer, best_path, self.device
-        #         )
-        #         best_epoch = checkpoint['epoch']
-        #         print(f"Loaded best model from epoch {best_epoch}")
 
         return self.model, history
