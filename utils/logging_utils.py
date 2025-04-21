@@ -204,17 +204,33 @@ class ExperimentLogger:
             # Format learning rate with scientific notation for readability
             lr_str = f"{lr:.1e}".replace('e-0', 'e-')
 
-            # Create name components
-            components = [
-                f"{model_name}",
-                f"ds-{dataset_name}",
-                f"lr-{lr_str}",
-                f"bs-{batch_size}",
-                f"dr-{dropout}",
-                f"l1-{l1_reg}",
-                f"l2-{l2_reg}",
-                self.timestamp
-            ]
+            if self.config['execution']['cross_validation']:
+                # Create name components
+                components = [
+                    f"{model_name}",
+                    "CV",
+                    f"ds-{dataset_name}",
+                    f"lr-{lr_str}",
+                    f"bs-{batch_size}",
+                    f"dr-{dropout}",
+                    f"l1-{l1_reg}",
+                    f"l2-{l2_reg}",
+                    self.timestamp
+                ]
+
+            elif self.config['execution']['full_train']:
+                # Create name components
+                components = [
+                    f"{model_name}",
+                    "FT",
+                    f"ds-{dataset_name}",
+                    f"lr-{lr_str}",
+                    f"bs-{batch_size}",
+                    f"dr-{dropout}",
+                    f"l1-{l1_reg}",
+                    f"l2-{l2_reg}",
+                    self.timestamp
+                ]
 
             # Join components with underscores
             return "_".join(components)
