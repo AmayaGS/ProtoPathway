@@ -8,16 +8,18 @@ from PIL import Image
 
 class GeneExpressionDataset(Dataset):
 
-    def __init__(self, gene_expr_path, labels_path):
+    def __init__(self, config, gene_expr_df, labels_df):
+
+        self.config = config
 
         # Load gene expression data
-        self.gene_expr_df = pd.read_csv(gene_expr_path, index_col=0)
+        self.gene_expr_df = gene_expr_df
 
         # Load patient labels
-        self.labels_df = pd.read_csv(labels_path)
+        self.labels_df = labels_df
 
-        # Get common patient IDs
-        self.patient_ids = list(set(self.gene_expr_df.columns) &
+        # Double check common patient IDs
+        self.patient_ids = list(set(self.gene_expr_df.index) &
                                 set(self.labels_df['Patient_ID']))
 
         print(f"Found {len(self.patient_ids)} patients with both expression data and labels")
@@ -30,21 +32,20 @@ class GeneExpressionDataset(Dataset):
         patient_id = self.patient_ids[idx]
 
         # Get gene expression vector
-        gene_expr = self.gene_expr_df[patient_id].values
+        gene_expr = self.gene_expr_df.loc[patient_id].values
 
         # Convert to tensor
         gene_expr_tensor = torch.FloatTensor(gene_expr)
 
         # Get label for this patient
-        label = self.labels_df.loc[self.labels_df['Patient_ID'] == patient_id, 'label'].iloc[0]
-        label_tensor = torch.tensor(label, dtype=torch.float32)
+        label = self.labels_df.loc[self.labels_df[self.config['patient_id']] == patient_id, self.config['label']].iloc[0]
+        label_tensor = torch.tensor(label, dtype=torch.long)
 
         return {
             'data': gene_expr_tensor,
             'target': label_tensor,
             'id': patient_id
         }
-
 
 
 class ExpressionDataset(Dataset):

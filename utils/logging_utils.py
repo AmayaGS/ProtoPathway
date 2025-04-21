@@ -30,7 +30,7 @@ class ExperimentLogger:
             save_config: bool = True,
             use_tensorboard: bool = False,
             use_wandb: bool = False,
-            use_comet: bool = True,
+            use_comet: bool = False,
             comet_project: Optional[str] = None,
             comet_workspace: Optional[str] = None,
             wandb_project: Optional[str] = None

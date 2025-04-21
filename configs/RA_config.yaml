@@ -6,11 +6,17 @@ output_dir: "${base_dir}/output"
 
 # Dataset name
 dataset_name: "R4RA" # choices: ['R4RA', 'Sjogren']
+label: 'label'
+label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
+n_classes: 2
+patient_id: 'Patient_ID'
+
 
 # Input files
 input:
+  dir: "${base_dir}/input_files"
   gtf_file: "${base_dir}/input_files/Homo_sapiens.GRCh38.113.gtf"
-  gene_expression: "${base_dir}/input_files/gene_expression_R4RA_cpm.csv"
+  gene_expression: "${base_dir}/input_files/gene_expression_${dataset_name}_cpm.csv"
   reactome_gmt: "${base_dir}/input_files/ReactomePathways.gmt"
   reactome_relations: "${base_dir}/input_files/ReactomePathwaysRelation.txt"
   reactome_pathways: "${base_dir}/input_files/ReactomePathways.txt"
@@ -33,20 +39,18 @@ output:
     removed_pathways: "${output_dir}/reports/removed_pathways_report.csv"
     removed_pathways_md: "${output_dir}/reports/removed_pathways_report.md"
 
-
 parameters:
   gene_expression:
     threshold: 1         # Minimum expression level
     min_proportion: 0.10 # Minimum proportion of patients with expression
     variance_proportion: 0.80 # Top proportion of variable genes to keep
 
-  pathway:
-    min_genes: 4         # Minimum number of genes in a pathway
-    max_genes: 200       # Maximum number of genes in a pathway
-    similarity_threshold: 1.0 # Threshold for redundant pathways
-    target_depth: 5      # Target pathway depth in Reactome hierarchy
-    max_visualization: 100 # Maximum number of pathways to visualize in hypergraph
-
+pathway:
+  min_genes: 4         # Minimum number of genes in a pathway
+  max_genes: 200       # Maximum number of genes in a pathway
+  similarity_threshold: 1.0 # Threshold for redundant pathways
+  target_depth: 5      # Target pathway depth in Reactome hierarchy
+  max_visualization: 100 # Maximum number of pathways to visualize in hypergraph
 
 # Dataset configurations
 dataset:
@@ -59,6 +63,8 @@ dataset:
   train_fraction: 0.8
   val_fraction: 0.20
   stain_used: 'all' # RA choices: ['all', 'H&E', 'CD68', 'CD138', 'CD20']
+  split_seed: 42
+  stratified_splits: 5
 
 # Parsing configurations
 parsing:
@@ -68,13 +74,6 @@ parsing:
   stain_colors: {'H&E': 'tab:pink', 'CD68': 'tab:brown', 'CD20': 'tab:blue', 'CD138': 'tab:orange'}
   edge_types: { 'RAG': 0, 'KNN': 1, 'BOTH': 2 }
   edge_colors: { 'RAG': 'red', 'KNN': 'dodgerblue', 'BOTH': 'blueviolet' }
-
-# Label/split configurations
-labels:
-  label: 'label'
-  label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
-  n_classes: 2
-  patient_id: 'Patient_ID'
 
 # Graph configurations
 graph:
@@ -91,21 +90,28 @@ GNN:
   attention_heads: 2
   use_attention: true
   pooling_ratio: 0.7
-  dropout: 0.5
 
 training:
   hidden_dim: 512
-  learning_rate: 0.0001
+  learning_rate: 0.00001
+  dropout_rate: 0.5
   num_epochs: 100
   L2_norm: 0.01
-  batch_size: 1
+  L1_norm: 0.01
+  batch_size: 5
   slide_batch: 1
   num_workers: 0
-  scheduler: 1
   checkpoint: true
   seed: 42
-  stratified_splits: 5
   weight_type: 'accuracy' # choices: ['accuracy', 'loss', 'auc']
+
+scheduler:
+  use: false  # toggle this to true when you want to activate it
+  type: step
+  step: 10
+  gamma: 0.1
+  patience: 5
+  min_lr: 1e-6
 
 # Visualization configurations
 visualization:
@@ -114,18 +120,18 @@ visualization:
   specific_ids: false
 
 model:
-  name: 'ProtoPathway'
+  name: 'MLP'
 
 # Execution flags
 execution:
-  ge_preprocess: true
-  preprocess: false
-  segmentation: false
-  embedding: false
+  ge_preprocess: false
+  wsi_preprocess: false
+  wsi_segmentation: false
+  wsi_embedding: false
   create_splits: false
-  compute_rwpe: false
-  train: false
-  val: false
+#  compute_rwpe: false
+  cross_validation: false
+  full_train: true
   test: false
   visualise: false
 

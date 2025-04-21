@@ -1,39 +1,46 @@
 import os
 import time
 import numpy as np
-import pandas as pd
 
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 
-from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, f1_score
+from sklearn.preprocessing import label_binarize
+from sklearn.metrics import (roc_auc_score, precision_score, recall_score, f1_score,
+                             confusion_matrix, classification_report, average_precision_score)
 
-from typing import Dict, List, Tuple, Optional, Any, Callable
+from typing import Dict, Optional, Any
 
 from utils.logging_utils import ExperimentLogger
-from utils.model_utils import initialise_model, minority_sampler
+from utils.model_utils import l1_regularization
 
 
 class Trainer:
 
     def __init__(
             self,
+            logger: ExperimentLogger,
+            config: Dict[str, Any],
             train_loader: torch.utils.data.DataLoader,
             val_loader: torch.utils.data.DataLoader,
-            config: Dict[str, Any],
-            logger: ExperimentLogger,
+            model: torch.nn.Module,
+            criterion: torch.nn.Module,
+            optimizer: optim.Optimizer,
+            lr_scheduler: Optional[optim.lr_scheduler._LRScheduler],
+            fold: Optional[int] = None,
             device: torch.device = None,
-            fold: Optional[int] = None
-    ):
 
-        model, criterion, optimizer, lr_scheduler = initialise_model(config)
+    ):
 
         self.model = model
         self.optimizer = optimizer
         self.criterion = criterion
+        self.lr = config['training']['learning_rate']
         self.lr_scheduler = lr_scheduler
-        self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.l2_norm = config['training']['L2_norm']
+        self.l1_norm = config['training']['L1_norm']
+        self.device = device
 
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -60,7 +67,8 @@ class Trainer:
         fold_str = f"Fold {self.fold}" if self.fold is not None else "Full dataset"
         print(f"Training {fold_str} on {self.device}")
         print(f"Model: {self.config['model']['name']}")
-        print(f"Optimizer: {self.optimizer.__class__.__name__}, LR={self.lr}, Weight Decay={self.weight_decay}")
+        print(f"Optimizer: {self.optimizer.__class__.__name__}, LR={self.lr}, Weight Decay={self.l2_norm}")
+        print(f"L1 regularization: {self.l1_norm}")
         print(f"Epochs: {self.num_epochs}")
         print(f"Tracking {self.metric_to_track} ({self.mode}) for best model\n")
 
@@ -84,7 +92,12 @@ class Trainer:
 
             self.optimizer.zero_grad()
             outputs = self.model(data)
-            loss = self.criterion(outputs, target)
+            logits = F.softmax(outputs, dim=1)
+            loss = self.criterion(logits, target)
+            # Apply L1 regularization
+            l1_loss = l1_regularization(self.model, self.l1_norm)
+            loss = loss + l1_loss
+
             loss.backward()
             self.optimizer.step()
 
@@ -98,19 +111,19 @@ class Trainer:
             correct += batch_correct
             total += batch_total
 
-            # Track batch metrics
-            batch_metrics['loss'].append(loss.item())
-            batch_metrics['acc'].append(100. * batch_correct / batch_total)
+            # # Track batch metrics
+            # batch_metrics['loss'].append(loss.item())
+            # batch_metrics['acc'].append(100. * batch_correct / batch_total)
 
-            # Log batch metrics occasionally
-            if batch_idx % 10 == 0:
-                batch_step = self.current_epoch * len(self.train_loader) + batch_idx
-                self.logger.log_metric('batch_loss', loss.item(), batch_step, 'train')
-                self.logger.log_metric('batch_acc', 100. * batch_correct / batch_total, batch_step, 'train')
-
-                # Print progress
-                print(f'Epoch: {self.current_epoch} | Batch: {batch_idx}/{len(self.train_loader)} | '
-                      f'Loss: {loss.item():.4f} | Acc: {100. * batch_correct / batch_total:.2f}%')
+            # # Log batch metrics occasionally
+            # if batch_idx % 10 == 0:
+            #     batch_step = self.current_epoch * len(self.train_loader) + batch_idx
+            #     self.logger.log_metric('batch_loss', loss.item(), batch_step, 'train')
+            #     self.logger.log_metric('batch_acc', 100. * batch_correct / batch_total, batch_step, 'train')
+            #
+            #     # Print progress
+            #     print(f'Epoch: {self.current_epoch} | Batch: {batch_idx}/{len(self.train_loader)} | '
+            #           f'Loss: {loss.item():.4f} | Acc: {100. * batch_correct / batch_total:.2f}%')
 
         # Calculate epoch metrics
         avg_loss = total_loss / len(self.train_loader)
@@ -145,7 +158,7 @@ class Trainer:
 
                 loss = self.criterion(outputs, target)
                 pred = outputs.argmax(dim=1)
-                probs = torch.nn.functional.softmax(outputs, dim=1)
+                probs = F.softmax(outputs, dim=1)
 
                 total_loss += loss.item()
                 correct += (pred == target).sum().item()
@@ -168,14 +181,22 @@ class Trainer:
             'acc': avg_acc,
             'precision': precision_score(all_targets, all_preds, average='weighted', zero_division=0),
             'recall': recall_score(all_targets, all_preds, average='weighted', zero_division=0),
-            'f1': f1_score(all_targets, all_preds, average='weighted', zero_division=0)
+            'f1': f1_score(all_targets, all_preds, average='weighted', zero_division=0),
+            'confusion_matrix': confusion_matrix(all_targets, all_preds),
+            'classification_report': classification_report(all_targets, all_preds, zero_division=0)
         }
 
         # Calculate AUC if binary classification
         if all_probs.shape[1] == 2:
-            from sklearn.metrics import roc_auc_score
             metrics['auc'] = roc_auc_score(all_targets, all_probs[:, 1])
-
+        else:
+            n_classes = self.config['labels']['n_classes']
+            binary_labels = label_binarize(all_targets, classes=n_classes)
+            metrics['auc']  = roc_auc_score(binary_labels, all_probs, average='macro', multi_class='ovr')
+            all_preds = np.argmax(all_probs, axis=1)
+            metrics['precision'] = average_precision_score(all_targets,
+                                                    label_binarize(all_preds, classes=n_classes),
+                                                    average='macro')
         return metrics
 
 
@@ -249,103 +270,21 @@ class Trainer:
                       f"Val Recall: {val_metrics['recall']:.4f}")
             if 'auc' in val_metrics:
                 print(f"Val AUC: {val_metrics['auc']:.4f}")
+            if 'confusion_matrix' in val_metrics:
+                print(f"Confusion Matrix:\n{val_metrics['confusion_matrix']}")
+            if 'classification_report' in val_metrics:
+                print(f"Classification Report:\n{val_metrics['classification_report']}")
             print(f"Best val {self.metric_to_track}: {self.best_val_metric:.4f}\n" + "-" * 50)
 
-        # Load best model if requested
-        if self.config['training']['checkpoint']:
-            best_path = os.path.join(self.logger.checkpoint_dir, self.checkpoint_name)
-            if os.path.exists(best_path):
-                print(f"Loading best model from {best_path}")
-                self.model, checkpoint = self.logger.load_checkpoint(
-                    self.model, self.optimizer, best_path, self.device
-                )
-                best_epoch = checkpoint['epoch']
-                print(f"Loaded best model from epoch {best_epoch}")
+        # # Load best model if requested
+        # if self.config['training']['checkpoint']:
+        #     best_path = os.path.join(self.logger.checkpoint_dir, self.checkpoint_name)
+        #     if os.path.exists(best_path):
+        #         print(f"Loading best model from {best_path}")
+        #         self.model, checkpoint = self.logger.load_checkpoint(
+        #             self.model, self.optimizer, best_path, self.device
+        #         )
+        #         best_epoch = checkpoint['epoch']
+        #         print(f"Loaded best model from epoch {best_epoch}")
 
         return self.model, history
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def train_val_loop(config, train_loader, val_loader, logger, fold_idx, checkpoint=True, checkpoint_path=None):
-
-
-    model, criterion, optimizer, lr_scheduler = initialise_model(config)
-
-    num_epochs = config['training']['num_epochs']
-
-    history = {
-        'train_loss': [],
-        'val_loss': [],
-        'train_acc': [],
-        'val_acc': []
-    }
-
-    # Best validation accuracy
-    best_val_acc = 0.0
-
-    # Training loop
-    for epoch in range(num_epochs):
-        model.train()
-        train_loss = 0.0
-        train_correct = 0
-        train_total = 0
-
-        # Training phase
-        for batch in train_loader:
-            # Get data
-            data = batch['data']
-            targets = batch['target']
-
-            # Forward pass
-            outputs = model(data)
-            loss = criterion(outputs, targets)
-
-            # Backward and optimize
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            # Track metrics
-            train_loss += loss.item()
-            _, predicted = torch.max(outputs.data, 1)
-            train_total += targets.size(0)
-            train_correct += (predicted == targets).sum().item()
-
-        # Calculate epoch metrics
-        epoch_train_loss = train_loss / len(train_loader)
-        epoch_train_acc = 100 * train_correct / train_total
-
-        # Validation phase
-        model.eval()
-        val_loss = 0.0
-        val_correct = 0
-        val_total = 0
-        val_predictions = []
-        val_targets = []
-
