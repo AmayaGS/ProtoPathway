@@ -64,7 +64,7 @@ def gene_expression_preprocessing(config):
     # Visualize pathway depths
     plot_pathway_depth_histogram(
         depth_df,
-        config['parameters']['pathway']['target_depth'],
+        config['pathway']['target_depth'],
         config['output']['figures']['dir']
     )
 
@@ -72,7 +72,7 @@ def gene_expression_preprocessing(config):
     selected_pathways = select_pathways_by_depth(
         hierarchy_graph,
         depth_df,
-        target_depth=config['parameters']['pathway']['target_depth']
+        target_depth=config['pathway']['target_depth']
     )
 
     # Filter pathway DataFrame to selected pathways
@@ -87,15 +87,15 @@ def gene_expression_preprocessing(config):
     # Step 5: Visualize and filter pathways by min/max size
     plot_pathway_size_histograms(
         selected_pathway_df,
-        config['parameters']['pathway']['min_genes'],
-        config['parameters']['pathway']['max_genes'],
+        config['pathway']['min_genes'],
+        config['pathway']['max_genes'],
         config['output']['figures']['dir']
     )
 
     filtered_pathway_df = filter_pathways_by_size(
         selected_pathway_df,
-        min_genes=config['parameters']['pathway']['min_genes'],
-        max_genes=config['parameters']['pathway']['max_genes']
+        min_genes=config['pathway']['min_genes'],
+        max_genes=config['pathway']['max_genes']
     )
 
     # Step 6: Analyze pathway similarity and redundancy
@@ -134,8 +134,8 @@ def gene_expression_preprocessing(config):
 
     plot_filtered_pathway_histogram(
         final_filtered_pathways,
-        config['parameters']['pathway']['min_genes'],
-        config['parameters']['pathway']['max_genes'],
+        config['pathway']['min_genes'],
+        config['pathway']['max_genes'],
         config['output']['figures']['dir']
     )
 
@@ -154,7 +154,7 @@ def gene_expression_preprocessing(config):
     visualize_pathway_hypergraph(
         hypergraph,
         final_pathway_dict,
-        max_pathways=config['parameters']['pathway']['max_visualization'],
+        max_pathways=config['pathway']['max_visualization'],
         output_path=config['output']['figures']['dir']
     )
 

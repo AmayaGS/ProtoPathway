@@ -46,8 +46,8 @@ parameters:
     variance_proportion: 0.80 # Top proportion of variable genes to keep
 
 pathway:
-  min_genes: 4         # Minimum number of genes in a pathway
-  max_genes: 200       # Maximum number of genes in a pathway
+  min_genes: 0        # Minimum number of genes in a pathway
+  max_genes: 3000       # Maximum number of genes in a pathway
   similarity_threshold: 1.0 # Threshold for redundant pathways
   target_depth: 5      # Target pathway depth in Reactome hierarchy
   max_visualization: 100 # Maximum number of pathways to visualize in hypergraph
@@ -93,12 +93,12 @@ GNN:
 
 training:
   hidden_dim: 512
-  learning_rate: 0.00001
+  learning_rate: 0.001
   dropout_rate: 0.5
-  num_epochs: 200
-  L2_norm: 0.01
-  L1_norm: 0.01
-  batch_size: 5
+  num_epochs: 100
+  L2_norm: 0
+  L1_norm: 0
+  batch_size: 1
   slide_batch: 1
   num_workers: 0
   checkpoint: true
@@ -120,7 +120,7 @@ visualization:
   specific_ids: false
 
 model:
-  name: 'MLP'
+  name: 'Hypergraph' # choices ['MLP', 'Hypergraph']
 
 # Execution flags
 execution:

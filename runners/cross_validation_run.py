@@ -7,10 +7,13 @@ import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import DataLoader
 
+from torch_geometric.loader import DataLoader as PyGDataLoader
+
 from utils.helpers import ensure_directory
 from utils.model_utils import load_ge_cv_folds, load_ge_train_test_folds, initialise_model
 
 from utils.dataset_utils import GeneExpressionDataset
+from utils.dataset_utils import build_incidence_matrix, HypergraphDataset
 from train_test_loops.train_val_loop import Trainer
 
 from utils.visualization_utils import (
@@ -51,10 +54,9 @@ def cross_validation(config, is_full_train=False, experiment_logger=None):
     logger.info(f"Results will be saved to {results_dir}")
 
     # Load the dataset
-    gene_expression_df = pd.read_csv(os.path.join(config['output']['data']['dir'],
-                                                  f"shared_subset_gene_expression_{config['dataset_name']}.csv"),
-                                                   index_col=0)
+    gene_expression_df = pd.read_csv(config['output']['data']['filtered_genes'], index_col=0)
     ge_input_dim = gene_expression_df.shape[1]
+
     labels_df = pd.read_csv(
         os.path.join(config['output']['data']['dir'], f"shared_patient_labels_{config['dataset_name']}.csv"))
 
@@ -63,6 +65,9 @@ def cross_validation(config, is_full_train=False, experiment_logger=None):
     # Load the cross-validation splits
     with open(splits_dict_path, "rb") as f:
         split_dict = pickle.load(f)
+
+    if config['model']['name'] == 'Hypergraph':
+        data = build_incidence_matrix(config['output']['data']['final_pathways'], gene_expression_df)
 
     if is_full_train:
         logger.info("Using train/test split for full training")
@@ -81,21 +86,38 @@ def cross_validation(config, is_full_train=False, experiment_logger=None):
         fold_name = "Full Training" if is_full_train else f"Fold {fold_idx + 1}/{n_folds}"
         logger.info(f"=== Training {fold_name} ===")
 
-        # Create datasets for the current fold
-        train_dataset = GeneExpressionDataset(config, train_fold, labels_df)
-        val_dataset = GeneExpressionDataset(config, val_fold, labels_df)
+        if config['model']['name'] == 'MLP':
+            # Create datasets for the current fold
+            train_dataset = GeneExpressionDataset(config, train_fold, labels_df)
+            val_dataset = GeneExpressionDataset(config, val_fold, labels_df)
 
-        # Create data loaders
-        train_loader = DataLoader(train_dataset,
-                                   batch_size=config['training']['batch_size'],
-                                   num_workers= config['training']['num_workers'],
-                                   shuffle=True,
-                                   drop_last=False)
-        val_loader = DataLoader(val_dataset,
-                                 batch_size=config['training']['batch_size'],
-                                 num_workers=config['training']['num_workers'],
-                                 shuffle=False)
+            # Create data loaders
+            train_loader = DataLoader(train_dataset,
+                                       batch_size=config['training']['batch_size'],
+                                       num_workers= config['training']['num_workers'],
+                                       shuffle=True,
+                                       drop_last=False)
+            val_loader = DataLoader(val_dataset,
+                                     batch_size=config['training']['batch_size'],
+                                     num_workers=config['training']['num_workers'],
+                                     shuffle=False)
 
+        elif config['model']['name'] == 'Hypergraph':
+
+            train_dataset = HypergraphDataset(config, train_fold, labels_df, data)
+            val_dataset = HypergraphDataset(config, val_fold, labels_df, data)
+
+            # Create data loaders
+            train_loader = PyGDataLoader(train_dataset,
+                                       batch_size=config['training']['batch_size'],
+                                       num_workers= config['training']['num_workers'],
+                                       shuffle=True,
+                                       drop_last=False)
+
+            val_loader = PyGDataLoader(val_dataset,
+                                     batch_size=config['training']['batch_size'],
+                                     num_workers=config['training']['num_workers'],
+                                     shuffle=False)
 
         # Initialize model, loss function, and other components
         model, loss_function, optimizer, lr_scheduler = initialise_model(config, ge_input_dim)

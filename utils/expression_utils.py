@@ -65,7 +65,7 @@ def filter_expression_data(gene_df, protein_coding_genes,
     # Step 2: Filter genes expressed in >min_proportion of patients
     expression_mask = (gene_df > min_expression).sum(axis=1) > (min_proportion * gene_df.shape[1])
     df_filtered = gene_df[expression_mask]
-    print(f"After expression filter: {df_filtered.shape[0]} genes")
+    print(f"After expression filter: {df_filtered.shape[1]} genes")
 
     # Step 3: Log2 transform
     df_log = np.log2(df_filtered + 1)
@@ -73,13 +73,15 @@ def filter_expression_data(gene_df, protein_coding_genes,
     # Step 4: Centering (subtract mean expression per gene)
     df_centered = df_log.sub(df_log.mean(axis=1), axis=0)
 
-    # Step 5: Variance filtering - keep top variance_proportion most variable genes
-    N = int(variance_proportion * df_centered.shape[0])
-    variances = df_centered.var(axis=1)
-    top_genes = variances.nlargest(N).index
-    df_final = df_centered.loc[top_genes]
-    print(f"After variance filter: {df_final.shape[0]} genes")
-    df_final = df_final.transpose()
+    # # Step 5: Variance filtering - keep top variance_proportion most variable genes
+    # N = int(variance_proportion * df_centered.shape[0])
+    # variances = df_centered.var(axis=1)
+    # top_genes = variances.nlargest(N).index
+    # df_final = df_centered.loc[top_genes]
+    # print(f"After variance filter: {df_final.shape[0]} genes")
+    # df_final = df_final.transpose()
+
+    df_final = df_centered.transpose()
 
     # Save the final DataFrame
     # Ensure output directory exists

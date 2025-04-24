@@ -142,3 +142,4 @@ def visualize_pathway_hypergraph(G, pathway_dict, max_pathways, output_path):
     # Save the legend as a separate file
     fig_legend.savefig(output_path + "hypergraph_legend.pdf", bbox_inches='tight')
     plt.close()
+

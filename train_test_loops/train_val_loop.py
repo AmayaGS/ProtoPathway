@@ -87,13 +87,28 @@ class Trainer:
             'acc': []
         }
 
+        # for batch_idx, batch in enumerate(self.train_loader):
+        #     data, target = batch['data'].to(self.device), batch['target'].to(self.device)
+        #
+        #     self.optimizer.zero_grad()
+        #     outputs = self.model(data)
+
         for batch_idx, batch in enumerate(self.train_loader):
-            data, target = batch['data'].to(self.device), batch['target'].to(self.device)
+
+            if self.config['model']['name'] == 'MLP':
+                # data, target = batch['data'].to(self.device), batch['target'].to(self.device)
+                data, target = batch['data'].to(self.device), batch['target'].to(self.device)
+                outputs = self.model(data)
+
+            if self.config['model']['name'] == 'Hypergraph':
+                #data, target = batch.x.to(self.device), batch.y.to(self.device)
+                #H = batch.H.to(self.device)  # [num_genes, num_pathways]
+                batch.to(self.device)
+                target = batch.y
+                outputs = self.model(batch)
 
             self.optimizer.zero_grad()
-            outputs = self.model(data)
-            logits = F.softmax(outputs, dim=1)
-            loss = self.criterion(logits, target)
+            loss = self.criterion(outputs, target)
             # Apply L1 regularization
             l1_loss = l1_regularization(self.model, self.l1_norm)
             loss = loss + l1_loss
@@ -153,8 +168,17 @@ class Trainer:
 
         with torch.no_grad():
             for batch in self.val_loader:
-                data, target = batch['data'].to(self.device), batch['target'].to(self.device)
-                outputs = self.model(data)
+                if self.config['model']['name'] == 'MLP':
+                    # data, target = batch['data'].to(self.device), batch['target'].to(self.device)
+                    data, target = batch['data'].to(self.device), batch['target'].to(self.device)
+                    outputs = self.model(data)
+
+                if self.config['model']['name'] == 'Hypergraph':
+                    #data, target = batch.x.to(self.device), batch.y.to(self.device)
+                    #H = batch.incidence_matrix.to(self.device)  # [num_genes, num_pathways]
+                    batch.to(self.device)
+                    target = batch.y
+                    outputs = self.model(batch)
 
                 loss = self.criterion(outputs, target)
                 pred = outputs.argmax(dim=1)
