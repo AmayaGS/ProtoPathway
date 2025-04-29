@@ -5,13 +5,12 @@ import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 
 
-class GeneExpressionBranch(torch.nn.Module):
+class PathwayEmbeddingModel(torch.nn.Module):
     """
     Bipartite graph representation of HGNN for gene expression data.
     """
-
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.5):
-        super(GeneExpressionBranch, self).__init__()
+        super().__init__()
 
         self.num_layers = num_layers
         self.dropout = dropout
