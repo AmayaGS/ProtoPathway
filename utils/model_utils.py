@@ -9,7 +9,8 @@ import torch.nn as nn
 import torch.optim as optim
 
 from models.GeneExpressionMLP import MLPBaseline
-from models.GeneExprHyperGraph import BipartiteHGNN, BipartiteAttentionHGNN, HierAttnBipartiteHGNN
+from models.GeneExprHyperGraph import BipartiteHGNN, BipartiteAttentionHGNN, HierAttnBipartiteHGNN, BipartiteGATHGNN
+from models.GeneExprHyperGraph import BipartiteGAT_MHSA
 from models.GeneExprHyperGraph import MLPBaseline as MLPBaselineHG
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -26,16 +27,31 @@ def initialise_model(config, input_dim):
 
     if config['model']['name'] == 'Hypergraph':
 
-        # model = MLPBaselineHG(9483, 512, 2)
+        #model = MLPBaselineHG(9483, 100, 2)
+        #
+        # model = BipartiteHGNN(
+        #     in_channels=1,  # Gene expression value
+        #     hidden_channels=100,
+        #     out_channels=config['n_classes'],
+        #     num_layers=3,
+        #     dropout=0.5
+        # )
+        # #
+        # model = BipartiteGATHGNN(
+        #     in_channels=1,  # Gene expression value
+        #     hidden_channels=100,
+        #     out_channels=config['n_classes'],
+        #     num_layers=3,
+        #     dropout=0.2
+        # )
 
-        model = BipartiteHGNN(
+        model = BipartiteGAT_MHSA(
             in_channels=1,  # Gene expression value
             hidden_channels=100,
             out_channels=config['n_classes'],
             num_layers=3,
-            dropout=0.5
+            dropout=0.2
         )
-
         # model = HierAttnBipartiteHGNN(
         #     in_channels=1,  # Gene expression value
         #     hidden_channels=100,

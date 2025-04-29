@@ -92,7 +92,7 @@ GNN:
   pooling_ratio: 0.7
 
 training:
-  hidden_dim: 512
+  hidden_dim: 100
   learning_rate: 0.001
   dropout_rate: 0.5
   num_epochs: 100

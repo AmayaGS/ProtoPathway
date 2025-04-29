@@ -106,23 +106,23 @@ def build_incidence_matrix(pathway_genes_path, filtered_genes):
 
     edge_index = torch.tensor(edge_indices, dtype=torch.long).t()
 
-    # Create hyperedge_index for HypergraphConv
-    # Format: [node_idx, hyperedge_idx]
-    node_indices = []
-    hyperedge_indices = []
+    # # Create hyperedge_index for HypergraphConv
+    # # Format: [node_idx, hyperedge_idx]
+    # node_indices = []
+    # hyperedge_indices = []
 
-    for j, pathway in enumerate(pathway_names):
-        for gene in df.loc[df['pathway_name'] == pathway, 'filtered_genes'].iloc[0]:
-            if gene in gene_idx:  # Ensure the gene is in our index
-                node_indices.append(gene_idx[gene])
-                hyperedge_indices.append(j)
-
-    hyperedge_index = torch.tensor([node_indices, hyperedge_indices], dtype=torch.long)
+    # for j, pathway in enumerate(pathway_names):
+    #     for gene in df.loc[df['pathway_name'] == pathway, 'filtered_genes'].iloc[0]:
+    #         if gene in gene_idx:  # Ensure the gene is in our index
+    #             node_indices.append(gene_idx[gene])
+    #             hyperedge_indices.append(j)
+    #
+    # hyperedge_index = torch.tensor([node_indices, hyperedge_indices], dtype=torch.long)
 
     return {
-        'H': H_tensor,  # Incidence matrix [num_genes, num_pathways]
+        #'H': H_tensor,  # Incidence matrix [num_genes, num_pathways]
         'edge_index': edge_index,  # Bipartite edge index [2, num_edges]
-        'hyperedge_index': hyperedge_index,  # Hyperedge index [2, num_connections]
+        #'hyperedge_index': hyperedge_index,  # Hyperedge index [2, num_connections]
         'num_genes': len(used_genes),
         'num_pathways': len(pathway_names),
         'gene_names': used_genes,
@@ -139,9 +139,9 @@ class HypergraphDataset(Dataset):
         # self.labels_df = labels_df
 
         # Hypergraph structure (shared across all samples)
-        self.H = hypergraph_data['H']
+        #self.H = hypergraph_data['H']
         self.edge_index = hypergraph_data['edge_index']
-        self.hyperedge_index = hypergraph_data['hyperedge_index']
+        #self.hyperedge_index = hypergraph_data['hyperedge_index']
         self.gene_names = hypergraph_data['gene_names']
         self.pathway_names = hypergraph_data['pathway_names']
         self.gene_idx = hypergraph_data['gene_idx']
@@ -187,8 +187,8 @@ class HypergraphDataset(Dataset):
         data = Data(
             x=x,
             edge_index=self.edge_index,
-            hyperedge_index=self.hyperedge_index,
-            H=self.H,  # Store incidence matrix too if needed
+            #hyperedge_index=self.hyperedge_index,
+            #H=self.H,  # Store incidence matrix too if needed
             y=y,
             patient_id=patient_id,
             num_genes=self.num_genes,

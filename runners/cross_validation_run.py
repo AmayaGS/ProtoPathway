@@ -58,7 +58,7 @@ def cross_validation(config, is_full_train=False, experiment_logger=None):
     ge_input_dim = gene_expression_df.shape[1]
 
     labels_df = pd.read_csv(
-        os.path.join(config['output']['data']['dir'], f"shared_patient_labels_{config['dataset_name']}.csv"))
+        os.path.join(config['output']['data']['dir'], f"patient_labels_{config['dataset_name']}.csv"))
 
     splits_dict_path = os.path.join(config['output']['data']['dir'], f"data_splits_{config['dataset_name']}.pkl")
 

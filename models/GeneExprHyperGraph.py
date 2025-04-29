@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from torch_geometric.nn import GCNConv, global_mean_pool
 from torch_geometric.nn import HypergraphConv, GlobalAttention
+from torch_geometric.nn import GATv2Conv
 
 from torch.sparse import FloatTensor
 
@@ -59,6 +60,127 @@ class BipartiteHGNN(torch.nn.Module):
 
         return out
 
+class BipartiteGATHGNN(torch.nn.Module):
+    """
+    Bipartite graph representation of HGNN for gene expression data.
+    """
+
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.5):
+        super(BipartiteGATHGNN, self).__init__()
+
+        self.num_layers = num_layers
+        self.dropout = dropout
+
+        # GCN layers for the bipartite representation
+        self.conv1 = GATv2Conv(in_channels, hidden_channels, concat=False)
+
+        if num_layers > 1:
+            self.convs = nn.ModuleList()
+            for _ in range(num_layers - 1):
+                self.convs.append(GATv2Conv(hidden_channels, hidden_channels, concat=False))
+
+        # Output layer
+        self.lin = nn.Linear(hidden_channels, out_channels)
+
+    def forward(self, data):
+        x, edge_index = data.x, data.edge_index
+        num_genes = data.num_genes
+        num_pathways = data.num_pathways
+
+        # First layer
+        x = self.conv1(x, edge_index)
+        x = F.relu(x)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+
+        # Additional layers
+        for i in range(self.num_layers - 1):
+            x = self.convs[i](x, edge_index)
+            x = F.relu(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+
+        # Extract only gene nodes' representations
+        #gene_x = x[:num_genes]
+        gene_x = x[num_genes:num_genes + num_pathways] # here only using the pathway features
+
+        # Global pooling
+        pooled = torch.mean(gene_x, dim=0).unsqueeze(0)
+
+        # Final prediction
+        out = self.lin(pooled)
+
+        return out
+
+class BipartiteGAT_MHSA(torch.nn.Module):
+    """
+    Bipartite graph representation of HGNN for gene expression data.
+    """
+
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.5):
+        super(BipartiteGAT_MHSA, self).__init__()
+
+        self.num_layers = num_layers
+        self.dropout = dropout
+
+        # GCN layers for the bipartite representation
+        self.conv1 = GATv2Conv(in_channels, hidden_channels, concat=False)
+
+        if num_layers > 1:
+            self.convs = nn.ModuleList()
+            for _ in range(num_layers - 1):
+                self.convs.append(GATv2Conv(hidden_channels, hidden_channels, concat=False))
+
+        ## Multi-head self-attention layer
+        #self.mhsa = nn.MultiheadAttention(embed_dim=hidden_channels, num_heads=1, batch_first=True)
+        # pathway-level attention gate 𝑔(·)
+        self.gate_nn = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_channels // 2, 1)
+        )
+
+        # Output layer
+        self.lin = nn.Linear(hidden_channels, out_channels)
+
+    def forward(self, data):
+        x, edge_index = data.x, data.edge_index
+        num_genes = data.num_genes
+        num_pathways = data.num_pathways
+
+        # First layer
+        x = self.conv1(x, edge_index)
+        x = F.relu(x)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+
+        # Additional layers
+        for i in range(self.num_layers - 1):
+            x = self.convs[i](x, edge_index)
+            x = F.relu(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+
+        # Extract only gene nodes' representations
+        #gene_x = x[:num_genes]
+        pathway_x = x[num_genes:num_genes + num_pathways]# here only using the pathway features
+
+        # # Pathway-level attention
+        # path_attn_scores = self.gate_nn(pathway_x).squeeze(-1)  # [num_pathways]
+        # path_weights = F.softmax(path_attn_scores, dim=1)  # [num_pathways]
+        #
+        # # Create a graph-level embedding by weighting pathway features
+        # graph_emb = (path_weights.unsqueeze(-1) * pathway_x).sum(dim=1)  # [1, hidden]
+
+        # attn_out, attn_weights = self.mhsa(pathway_x, pathway_x, pathway_x)
+        #
+        # # attn_weights shape: [1, num_pathways, num_pathways]
+        # pathway_importance = attn_weights.mean(dim=1).squeeze(0)
+        # attn_out = attn_out.squeeze(0)
+        # graph_emb = (pathway_importance.unsqueeze(-1) * attn_out).sum(dim=0, keepdim=True)
+
+        graph_emb = torch.mean(pathway_x, dim=0).unsqueeze(0)
+
+        # Final prediction
+        out = self.lin(graph_emb)
+
+        return out
 
 class BipartiteAttentionHGNN(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.5):
@@ -218,6 +340,8 @@ class MLPBaseline(nn.Module):
         """
         super(MLPBaseline, self).__init__()
 
+        self.input_size = input_size
+
         # Define layers
         self.fc1 = nn.Linear(input_size, hidden_size)
         # self.bn1 = nn.BatchNorm1d(hidden_size)
@@ -229,7 +353,11 @@ class MLPBaseline(nn.Module):
 
         self.fc3 = nn.Linear(hidden_size // 2, num_classes)
 
-    def forward(self, x, H):
+    def forward(self, data):
+        x = data.x
+
+        x = x[:self.input_size]  # Select only the gene features
+
         # First layer
         x = x.view(1, -1)
         x = self.fc1(x)
