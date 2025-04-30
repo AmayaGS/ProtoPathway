@@ -4,7 +4,7 @@ import argparse
 from runners.expression_run import gene_expression_preprocessing
 from utils.helpers import load_config, resolve_all_vars, flatten_config
 from utils.model_utils import create_cross_validation_splits
-from runners.cross_validation_run import cross_validation
+from runners.training_run import train_model
 from utils.logging_utils import ExperimentLogger
 
 def parser():
@@ -43,13 +43,18 @@ def main(config, experiment_logger):
 
     if config['execution']['cross_validation']:
         logger.info("Cross-validation of the model")
-        cross_validation(config, experiment_logger=experiment_logger)
+        train_model(config, experiment_logger=experiment_logger)
         logger.info("Cross-validation complete")
 
     if config['execution']['full_train']:
         logger.info("Cross-validation of the model")
-        cross_validation(config, is_full_train=True, experiment_logger=experiment_logger)
+        train_model(config, is_full_train=True, experiment_logger=experiment_logger)
         logger.info("Cross-validation complete")
+
+    if config['execution']['test']:
+        logger.info("Testing the model")
+        test_model(config, is_full_train=False, experiment_logger=experiment_logger)
+        logger.info("Testing complete")
 
 
 if __name__ == "__main__":

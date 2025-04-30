@@ -24,7 +24,7 @@ from utils.visualization_utils import (
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def cross_validation(config, is_full_train=False, experiment_logger=None):
+def train_model(config, is_full_train=False, experiment_logger=None):
 
     logger = experiment_logger.logger
     run_type = "full_train" if is_full_train else "cross_validation"

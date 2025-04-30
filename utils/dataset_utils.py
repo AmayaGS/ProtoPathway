@@ -93,7 +93,7 @@ def build_incidence_matrix(pathway_genes_path, filtered_genes):
             i = gene_idx[gene]
             H[i, j] = 1.0
 
-    H_tensor = torch.tensor(H, dtype=torch.float)
+    # H_tensor = torch.tensor(H, dtype=torch.float)
 
     # Also create edge_index format for PyG compatibility
     # This represents the hypergraph as a bipartite graph
@@ -135,8 +135,6 @@ def build_incidence_matrix(pathway_genes_path, filtered_genes):
 class HypergraphDataset(Dataset):
     def __init__(self, config, gene_expr_df, labels_df, hypergraph_data):
         self.config = config
-        #self.gene_expr_df = gene_expr_df
-        # self.labels_df = labels_df
 
         # Hypergraph structure (shared across all samples)
         #self.H = hypergraph_data['H']
