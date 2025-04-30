@@ -11,6 +11,8 @@ label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
 n_classes: 2
 patient_id: 'Patient_ID'
 
+model:
+  name: 'Hypergraph' # choices ['MLP', 'Hypergraph']
 
 # Input files
 input:
@@ -38,6 +40,9 @@ output:
     dir: "${output_dir}/reports/"
     removed_pathways: "${output_dir}/reports/removed_pathways_report.csv"
     removed_pathways_md: "${output_dir}/reports/removed_pathways_report.md"
+
+testing:
+  experiment_path: "${output_dir}/experiments/EXPERIMENT_NAME_HERE" # Path to the experiment directory to load model from
 
 parameters:
   gene_expression:
@@ -95,7 +100,7 @@ training:
   hidden_dim: 100
   learning_rate: 0.001
   dropout_rate: 0.5
-  num_epochs: 100
+  num_epochs: 1
   L2_norm: 0
   L1_norm: 0
   batch_size: 1
@@ -119,9 +124,6 @@ visualization:
   test_ids: null
   specific_ids: false
 
-model:
-  name: 'Hypergraph' # choices ['MLP', 'Hypergraph']
-
 # Execution flags
 execution:
   ge_preprocess: false
@@ -132,7 +134,7 @@ execution:
 #  compute_rwpe: false
   cross_validation: false
   full_train: true
-  test: false
+  test: true
   visualise: false
 
 # Embedding models configs & paths

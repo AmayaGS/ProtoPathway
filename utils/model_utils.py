@@ -9,8 +9,8 @@ import torch.nn as nn
 import torch.optim as optim
 
 from models.GeneExpressionMLP import MLPBaseline
-from models.GeneExprHyperGraph import BipartiteHGNN, BipartiteAttentionHGNN, HierAttnBipartiteHGNN, BipartiteGATHGNN
 from models.GeneExprHyperGraph import BipartiteGAT_MHSA
+from models.ProtoPathway import PathwayEmbeddingModel
 from models.GeneExprHyperGraph import MLPBaseline as MLPBaselineHG
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,17 +27,15 @@ def initialise_model(config, input_dim):
 
     if config['model']['name'] == 'Hypergraph':
 
-        #model = MLPBaselineHG(9483, 100, 2)
-        #
-        # model = BipartiteHGNN(
-        #     in_channels=1,  # Gene expression value
-        #     hidden_channels=100,
-        #     out_channels=config['n_classes'],
-        #     num_layers=3,
-        #     dropout=0.5
-        # )
-        # #
-        # model = BipartiteGATHGNN(
+        model = PathwayEmbeddingModel(
+            in_channels=1,
+            hidden_channels=100,
+            out_channels=config['n_classes'],
+            num_layers=3,
+            dropout=0.2
+        )
+
+        # model = BipartiteGAT_MHSA(
         #     in_channels=1,  # Gene expression value
         #     hidden_channels=100,
         #     out_channels=config['n_classes'],
@@ -45,22 +43,8 @@ def initialise_model(config, input_dim):
         #     dropout=0.2
         # )
 
-        model = BipartiteGAT_MHSA(
-            in_channels=1,  # Gene expression value
-            hidden_channels=100,
-            out_channels=config['n_classes'],
-            num_layers=3,
-            dropout=0.2
-        )
-        # model = HierAttnBipartiteHGNN(
-        #     in_channels=1,  # Gene expression value
-        #     hidden_channels=100,
-        #     n_classes=config['n_classes'],
-        #     n_layers=3,
-        #     heads=1,
-        #     dropout=0.5
-        #
-        # )
+        #model = MLPBaselineHG(9483, 100, 2)
+
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=config['training']['learning_rate'], weight_decay=config['training']['L2_norm'])
@@ -215,7 +199,6 @@ def load_ge_train_test_folds(df, split_dict):
     validation_folds.append(test_df)
 
     return training_folds, validation_folds
-
 
 
 def load_train_test_split(data_dict, split_dict):
