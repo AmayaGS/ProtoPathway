@@ -42,7 +42,7 @@ output:
     removed_pathways_md: "${output_dir}/reports/removed_pathways_report.md"
 
 testing:
-  experiment_path: "${output_dir}/experiments/EXPERIMENT_NAME_HERE" # Path to the experiment directory to load model from
+  experiment_path: "${output_dir}/experiments/Hypergraph_FT_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_20250430_184419" # Path to the experiment directory to load model from
 
 parameters:
   gene_expression:
@@ -100,7 +100,7 @@ training:
   hidden_dim: 100
   learning_rate: 0.001
   dropout_rate: 0.5
-  num_epochs: 1
+  num_epochs: 2
   L2_norm: 0
   L1_norm: 0
   batch_size: 1

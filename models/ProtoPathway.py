@@ -1,3 +1,4 @@
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,7 +10,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
     """
     Bipartite graph representation of HGNN for gene expression data.
     """
-    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.5):
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.5, gene_names=None, pathway_names=None):
         super().__init__()
 
         self.num_layers = num_layers
@@ -32,6 +33,9 @@ class PathwayEmbeddingModel(torch.nn.Module):
 
         # Output layer
         self.lin = nn.Linear(hidden_channels, out_channels)
+
+        self.gene_names = gene_names
+        self.pathway_names = pathway_names
 
         # To store importance values
         self.pathway_importance = None
@@ -109,4 +113,101 @@ class PathwayEmbeddingModel(torch.nn.Module):
         # This gives us a single importance score for each gene
         weighted_gene_importance = self.gene_pathway_attention @ self.pathway_importance
         return weighted_gene_importance
+
+    def set_names(self, gene_names, pathway_names):
+        self.gene_names = gene_names
+        self.pathway_names = pathway_names
+
+    def get_top_pathways(self, top_k=10):
+        if self.pathway_importance is None:
+            raise ValueError("Pathway importance not computed. Set return_importance=True during forward pass.")
+
+        if self.pathway_names is None:
+            raise ValueError("Pathway names not set. Use set_names() to set pathway names.")
+
+        pathway_imp = self.pathway_importance.cpu().numpy()
+
+        top_indices = pathway_imp.argsort()[-top_k:][::-1]
+
+        top_pathways = pd.DataFrame({
+            'pathway_name': [self.pathway_names[i] for i in top_indices],
+            'importance_score': pathway_imp[top_indices]
+        })
+
+        return top_pathways
+
+    def get_top_genes(self, top_k=10):
+
+        gene_imp = self.get_gene_importance()
+        if gene_imp is None:
+            raise ValueError("Gene importance not computed. Set return_importance=True during forward pass.")
+
+        if self.gene_names is None:
+            raise ValueError("Gene names not set. Use set_names() to set gene names.")
+
+        gene_imp = gene_imp.cpu().numpy()
+        top_indices = gene_imp.argsort()[-top_k:][::-1]
+
+        top_genes = pd.DataFrame({
+            'gene_name': [self.gene_names[i] for i in top_indices],
+            'importance_score': gene_imp[top_indices]
+        })
+
+        return top_genes
+
+    def get_top_genes_for_pathway(self, pathway_name=None, pathway_idx=None, top_k=10):
+
+        if self.gene_pathway_attention is None:
+            return None
+
+        if self.gene_names is None:
+            raise ValueError("Gene names not set. Use set_names() to set gene names.")
+
+        if pathway_idx is None:
+            if pathway_name is None:
+                raise ValueError("Either pathway_name or pathway_idx must be provided")
+
+        if self.pathway_names is None:
+            raise ValueError("Pathway names have not been set. Use set_names() first.")
+
+        try:
+            pathway_idx = self.pathway_names.index(pathway_name)
+        except ValueError:
+            raise ValueError(f"Pathway {pathway_name} not found in pathway names.")
+
+        # Get the attention scores for the specified pathway
+        gene_pathway_imp = self.gene_pathway_attention[:, pathway_idx].cpu().numpy()
+
+        top_indices = gene_pathway_imp.argsort()[-top_k:][::-1]
+
+        top_genes = pd.DataFrame({
+            'gene_name': [self.gene_names[i] for i in top_indices],
+            'importance_score': gene_pathway_imp[top_indices]
+        })
+
+        return top_genes
+
+    def generate_importance_report(self, top_pathways=10, top_genes=10, top_genes_per_pathway=10):
+
+        if not self.pathway_importance or not self.gene_pathway_attention:
+            raise ValueError(
+                "Model has not calculated importance scores. Run forward with return_importance=True first.")
+
+        report = {
+            'top_pathways': self.get_top_pathways(top_k=top_pathways),
+            'top_genes': self.get_top_genes(top_k=top_genes),
+            'genes_by_pathway': {}
+        }
+
+        # Get top genes for each of the top pathways
+        top_pathway_df = report['top_pathways']
+        for idx, row in top_pathway_df.iterrows():
+            pathway_name = row['pathway_name']
+            report['genes_by_pathway'][pathway_name] = self.get_top_genes_for_pathway(
+                pathway_name=pathway_name,
+                top_k=top_genes_per_pathway
+            )
+
+        return report
+
 

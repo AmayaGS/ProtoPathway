@@ -54,9 +54,24 @@ class Trainer:
         self.metric_to_track = 'loss' if self.weight_type == 'loss' else 'acc' if self.weight_type == 'accuracy' else 'auc'
         self.mode = 'min' if self.weight_type == 'loss' else 'max'
 
-        self.best_val_metric = float('inf') if self.mode == 'min' else float('-inf')
-        self.current_epoch = 0
+        # self.best_val_metric = float('inf') if self.mode == 'min' else float('-inf')
+        self.best_metrics = {
+            'acc': 0.0,
+            'auc': 0.0,
+            'precision': 0.0,
+            'loss': float('inf'),
+            'epoch': 0
+        }
 
+        # Metrics change thresholds - how much improvement is considered significant
+        self.thresholds = {
+            'acc': 0.,  # 1 percentage point for accuracy
+            'auc': 0.,  # 0.005 for AUC
+            'precision': 0.,  # 0.005 for precision
+            'loss': 0.05  # 5% for loss (relative)
+        }
+
+        self.current_epoch = 0
         self.checkpoint_name = f"best_fold_{fold}.pt" if fold is not None else "best_model.pt"
 
         self._print_training_info()
@@ -281,24 +296,42 @@ class Trainer:
                 else:
                     self.lr_scheduler.step()
 
-            # Check if this is the best model so far
-            current_metric = val_metrics[self.metric_to_track]
-            is_best = (self.mode == 'min' and current_metric < self.best_val_metric) or \
-                      (self.mode == 'max' and current_metric > self.best_val_metric)
+            # Check if we should save this model
+            should_save, save_reason = self.should_save_model(val_metrics)
 
-            if is_best:
-                self.best_val_metric = current_metric
+            if should_save:
+                # Update best metrics
+                self.best_metrics['acc'] = val_metrics['acc']
+                self.best_metrics['auc'] = val_metrics['auc']
+                self.best_metrics['precision'] = val_metrics['precision']
+                self.best_metrics['loss'] = val_metrics['loss']
+                self.best_metrics['epoch'] = epoch
+
+                # Update history
                 history['best_epoch'] = epoch
-                history['best_val_metric'] = current_metric
+                history['best_metrics'] = self.best_metrics.copy()
 
-                # Save best model checkpoint
                 if self.config['training']['checkpoint']:
-                    checkpoint_path = self.logger.save_checkpoint(
-                        self.model, self.optimizer, epoch,
-                        {**val_metrics, **train_metrics},
-                        self.checkpoint_name
-                    )
-                    print(f"Saved best model to {checkpoint_path}")
+                    path = os.path.join(self.logger.checkpoint_dir, self.checkpoint_name)
+                    torch.save(self.model.state_dict(), path)
+                    print(f"Saved best model to {path}")
+                    print(f"Reason: {save_reason}")
+
+            # # Check if this is the best model so far
+            # current_metric = val_metrics[self.metric_to_track]
+            # is_best = (self.mode == 'min' and current_metric < self.best_val_metric) or \
+            #           (self.mode == 'max' and current_metric > self.best_val_metric )
+            #
+            # if is_best:
+            #     self.best_val_metric = current_metric
+            #     history['best_epoch'] = epoch
+            #     history['best_val_metric'] = current_metric
+            #
+            #     # Save best model checkpoint
+            #     if self.config['training']['checkpoint']:
+            #         path = os.path.join(self.logger.checkpoint_dir, self.checkpoint_name)
+            #         torch.save(self.model.state_dict(), path)
+            #         print(f"Saved best model to {path}")
 
             # Stop epoch timer
             epoch_time = self.logger.stop_timer(f"epoch_{epoch}")
@@ -316,6 +349,73 @@ class Trainer:
                 print(f"Confusion Matrix:\n{val_metrics['confusion_matrix']}")
             if 'classification_report' in val_metrics:
                 print(f"Classification Report:\n{val_metrics['classification_report']}")
-            print(f"Best val {self.metric_to_track}: {self.best_val_metric:.4f}\n" + "-" * 50)
+            print(f"Best val {self.metric_to_track}: {self.best_metrics['acc']:.4f}\n" + "-" * 50)
 
         return self.model, history
+
+
+    def should_save_model(self, metrics):
+        """
+        Implements nested decision logic for model saving:
+        1. If accuracy is significantly better, save
+        2. If accuracy is the same (within threshold):
+           a. If AUC is better, save
+           b. If AUC is the same:
+              i. If precision is better, save
+              ii. If precision is the same and loss is better by significant threshold, save
+        """
+        # Extract current metrics
+        curr_acc = metrics['acc']
+        curr_auc = metrics['auc']
+        curr_precision = metrics['precision']
+        curr_loss = metrics['loss']
+
+        # Get best metrics so far
+        best_acc = self.best_metrics['acc']
+        best_auc = self.best_metrics['auc']
+        best_precision = self.best_metrics['precision']
+        best_loss = self.best_metrics['loss']
+
+        # Get thresholds
+        acc_threshold = self.thresholds['acc']
+        auc_threshold = self.thresholds['auc']
+        precision_threshold = self.thresholds['precision']
+        loss_threshold = self.thresholds['loss']
+
+        # Calculate if metrics are significantly better or approximately equal
+        acc_significantly_better = curr_acc > best_acc + acc_threshold
+        acc_approximately_same = abs(curr_acc - best_acc) <= acc_threshold
+
+        auc_better = curr_auc > best_auc
+        auc_approximately_same = abs(curr_auc - best_auc) <= auc_threshold
+
+        precision_better = curr_precision > best_precision
+        precision_approximately_same = abs(curr_precision - best_precision) <= precision_threshold
+
+        # For loss, lower is better, and we check for relative improvement
+        loss_significantly_better = curr_loss < best_loss * (1 - loss_threshold)
+
+        # Reason for saving (for logging)
+        save_reason = None
+
+        # Decision tree
+        if acc_significantly_better:
+            save_reason = f"Accuracy significantly improved: {curr_acc:.2f}% vs {best_acc:.2f}%"
+            return True, save_reason
+
+        elif acc_approximately_same:
+            if auc_better:
+                save_reason = f"Equal accuracy with better AUC: {curr_auc:.4f} vs {best_auc:.4f}"
+                return True, save_reason
+
+            elif auc_approximately_same:
+                if precision_better:
+                    save_reason = f"Equal accuracy & AUC with better precision: {curr_precision:.4f} vs {best_precision:.4f}"
+                    return True, save_reason
+
+                elif precision_approximately_same and loss_significantly_better:
+                    save_reason = f"Equal accuracy, AUC & precision with significantly better loss: {curr_loss:.4f} vs {best_loss:.4f}"
+                    return True, save_reason
+
+        # Default case - no saving
+        return False, save_reason

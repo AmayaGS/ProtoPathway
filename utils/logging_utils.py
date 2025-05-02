@@ -375,126 +375,126 @@ class ExperimentLogger:
         for name, value in metrics_dict.items():
             self.log_metric(name, value, step, phase)
 
-    def save_checkpoint(self,
-                        model: torch.nn.Module,
-                        optimizer: torch.optim.Optimizer,
-                        epoch: int,
-                        metrics: Dict[str, float],
-                        filename: Optional[str] = None) -> str:
-        """
-        Save a model checkpoint.
+    # def save_checkpoint(self,
+    #                     model: torch.nn.Module,
+    #                     optimizer: torch.optim.Optimizer,
+    #                     epoch: int,
+    #                     metrics: Dict[str, float],
+    #                     filename: Optional[str] = None) -> str:
+    #     """
+    #     Save a model checkpoint.
+    #
+    #     Args:
+    #         model: PyTorch model
+    #         optimizer: PyTorch optimizer
+    #         epoch: Current epoch
+    #         metrics: Dictionary of metrics to save with checkpoint
+    #         filename: Optional custom filename
+    #
+    #     Returns:
+    #         Path to saved checkpoint
+    #     """
+    #     if filename is None:
+    #         filename = f"checkpoint_epoch_{epoch}.pt"
+    #
+    #     path = os.path.join(self.checkpoint_dir, filename)
+    #
+    #     # Prepare state dictionary
+    #     checkpoint = {
+    #         'epoch': epoch,
+    #         'model_state_dict': model.state_dict(),
+    #         'optimizer_state_dict': optimizer.state_dict(),
+    #         'metrics': metrics
+    #     }
+    #
+    #     # Save checkpoint
+    #     torch.save(checkpoint, path)
+    #
+    #     # Log to Weights & Biases if enabled
+    #     if self.use_wandb:
+    #         if epoch % 10 == 0 or epoch == 1:  # Save model artifacts only occasionally
+    #             self.wandb.save(path)
+    #
+    #     return path
 
-        Args:
-            model: PyTorch model
-            optimizer: PyTorch optimizer
-            epoch: Current epoch
-            metrics: Dictionary of metrics to save with checkpoint
-            filename: Optional custom filename
+    # def load_checkpoint(self,
+    #                     model: torch.nn.Module,
+    #                     optimizer: Optional[torch.optim.Optimizer] = None,
+    #                     path: Optional[str] = None,
+    #                     device: Optional[torch.device] = None) -> Tuple[torch.nn.Module, Dict[str, Any]]:
+    #     """
+    #     Load a model checkpoint.
+    #
+    #     Args:
+    #         model: PyTorch model to load weights into
+    #         optimizer: Optional PyTorch optimizer to load state into
+    #         path: Path to checkpoint, if None loads latest checkpoint
+    #         device: Device to load the model to
+    #
+    #     Returns:
+    #         Tuple of (model, checkpoint_data)
+    #     """
+    #     if path is None:
+    #         # Find latest checkpoint
+    #         checkpoints = list(Path(self.checkpoint_dir).glob('*.pt'))
+    #         if not checkpoints:
+    #             raise FileNotFoundError(f"No checkpoints found in {self.checkpoint_dir}")
+    #
+    #         # Sort by modification time (newest first)
+    #         checkpoints = sorted(checkpoints, key=lambda x: os.path.getmtime(x), reverse=True)
+    #         path = str(checkpoints[0])
+    #
+    #     device = device or next(model.parameters()).device
+    #     checkpoint = torch.load(path, map_location=device)
+    #
+    #     model.load_state_dict(checkpoint['model_state_dict'])
+    #
+    #     if optimizer is not None and 'optimizer_state_dict' in checkpoint:
+    #         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    #
+    #     return model, checkpoint
 
-        Returns:
-            Path to saved checkpoint
-        """
-        if filename is None:
-            filename = f"checkpoint_epoch_{epoch}.pt"
-
-        path = os.path.join(self.checkpoint_dir, filename)
-
-        # Prepare state dictionary
-        checkpoint = {
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'metrics': metrics
-        }
-
-        # Save checkpoint
-        torch.save(checkpoint, path)
-
-        # Log to Weights & Biases if enabled
-        if self.use_wandb:
-            if epoch % 10 == 0 or epoch == 1:  # Save model artifacts only occasionally
-                self.wandb.save(path)
-
-        return path
-
-    def load_checkpoint(self,
-                        model: torch.nn.Module,
-                        optimizer: Optional[torch.optim.Optimizer] = None,
-                        path: Optional[str] = None,
-                        device: Optional[torch.device] = None) -> Tuple[torch.nn.Module, Dict[str, Any]]:
-        """
-        Load a model checkpoint.
-
-        Args:
-            model: PyTorch model to load weights into
-            optimizer: Optional PyTorch optimizer to load state into
-            path: Path to checkpoint, if None loads latest checkpoint
-            device: Device to load the model to
-
-        Returns:
-            Tuple of (model, checkpoint_data)
-        """
-        if path is None:
-            # Find latest checkpoint
-            checkpoints = list(Path(self.checkpoint_dir).glob('*.pt'))
-            if not checkpoints:
-                raise FileNotFoundError(f"No checkpoints found in {self.checkpoint_dir}")
-
-            # Sort by modification time (newest first)
-            checkpoints = sorted(checkpoints, key=lambda x: os.path.getmtime(x), reverse=True)
-            path = str(checkpoints[0])
-
-        device = device or next(model.parameters()).device
-        checkpoint = torch.load(path, map_location=device)
-
-        model.load_state_dict(checkpoint['model_state_dict'])
-
-        if optimizer is not None and 'optimizer_state_dict' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-
-        return model, checkpoint
-
-    def save_best_model(self,
-                        model: torch.nn.Module,
-                        optimizer: torch.optim.Optimizer,
-                        epoch: int,
-                        metrics: Dict[str, float],
-                        metric_name: str,
-                        mode: str = 'max') -> None:
-        """
-        Save the model if it's the best so far according to the specified metric.
-
-        Args:
-            model: PyTorch model
-            optimizer: PyTorch optimizer
-            epoch: Current epoch
-            metrics: Dictionary of metrics
-            metric_name: Name of metric to compare
-            mode: 'max' or 'min' - whether higher or lower is better
-        """
-        if metric_name not in metrics:
-            print(f"Warning: Metric {metric_name} not found in metrics. Cannot save best model.")
-            return
-
-        current_value = metrics[metric_name]
-        best_filename = f"best_{metric_name}.pt"
-        best_path = os.path.join(self.checkpoint_dir, best_filename)
-
-        # Check if this is the best model so far
-        is_best = False
-
-        if not os.path.exists(best_path):
-            is_best = True
-        else:
-            best_checkpoint = torch.load(best_path, map_location='cpu')
-            if mode == 'max':
-                is_best = current_value > best_checkpoint['metrics'][metric_name]
-            else:  # mode == 'min'
-                is_best = current_value < best_checkpoint['metrics'][metric_name]
-
-        if is_best:
-            print(f"\n==> New best model with {metric_name} = {current_value:.4f}")
-            self.save_checkpoint(model, optimizer, epoch, metrics, best_filename)
+    # def save_best_model(self,
+    #                     model: torch.nn.Module,
+    #                     optimizer: torch.optim.Optimizer,
+    #                     epoch: int,
+    #                     metrics: Dict[str, float],
+    #                     metric_name: str,
+    #                     mode: str = 'max') -> None:
+    #     """
+    #     Save the model if it's the best so far according to the specified metric.
+    #
+    #     Args:
+    #         model: PyTorch model
+    #         optimizer: PyTorch optimizer
+    #         epoch: Current epoch
+    #         metrics: Dictionary of metrics
+    #         metric_name: Name of metric to compare
+    #         mode: 'max' or 'min' - whether higher or lower is better
+    #     """
+    #     if metric_name not in metrics:
+    #         print(f"Warning: Metric {metric_name} not found in metrics. Cannot save best model.")
+    #         return
+    #
+    #     current_value = metrics[metric_name]
+    #     best_filename = f"best_{metric_name}.pt"
+    #     best_path = os.path.join(self.checkpoint_dir, best_filename)
+    #
+    #     # Check if this is the best model so far
+    #     is_best = False
+    #
+    #     if not os.path.exists(best_path):
+    #         is_best = True
+    #     else:
+    #         best_checkpoint = torch.load(best_path, map_location='cpu')
+    #         if mode == 'max':
+    #             is_best = current_value > best_checkpoint['metrics'][metric_name]
+    #         else:  # mode == 'min'
+    #             is_best = current_value < best_checkpoint['metrics'][metric_name]
+    #
+    #     if is_best:
+    #         print(f"\n==> New best model with {metric_name} = {current_value:.4f}")
+    #         self.save_checkpoint(model, optimizer, epoch, metrics, best_filename)
 
     def log_figure(self,
                    figure: plt.Figure,

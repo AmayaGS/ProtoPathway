@@ -14,6 +14,8 @@ from utils.model_utils import initialise_model
 from utils.dataset_utils import build_incidence_matrix, HypergraphDataset
 from train_test_loops.testing_loop import evaluate_model, save_metrics
 
+from models.ProtoPathway import  PathwayEmbeddingModel
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -69,10 +71,28 @@ def test_model(config, is_continuation=False, experiment_logger=None):
     checkpoint_name = "best_fold_0.pt"
     model_path = os.path.join(model_dir, checkpoint_name)
 
-    model, _, _, _ = initialise_model(config, ge_input_dim)
+    # model, _, _, _ = initialise_model(config, ge_input_dim)
 
-    checkpoint = torch.load(model_path, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model = PathwayEmbeddingModel(
+        in_channels=1,
+        hidden_channels=100,
+        out_channels=2,  # binary classification
+        num_layers=3,
+        dropout=0.2,
+        gene_names=data['gene_names'],
+        pathway_names=data['pathway_names']
+    )
+
+    state_dict = torch.load(model_path, weights_only=True)
+    # If the model was saved with save_checkpoint, the weights might be nested in 'model_state_dict'
+    if isinstance(state_dict, dict) and 'model_state_dict' in state_dict:
+        model.load_state_dict(state_dict['model_state_dict'])
+    else:
+        # Otherwise assume the file contains just the model weights
+        model.load_state_dict(state_dict)
+
+    # checkpoint = torch.load(model_path, weights_only=True)
+    # model.load_state_dict(checkpoint['model_state_dict'])
     model = model.to(device)
     model.eval()
 
