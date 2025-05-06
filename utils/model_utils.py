@@ -173,6 +173,18 @@ def load_cv_folds(df, split_dict):
 
     return training_folds, validation_folds
 
+def load_wsi_train_test_folds(data_dict, split_dict):
+
+    training_folds = []
+    validation_folds = []
+
+    train_dict = {k: data_dict[k] for k in split_dict['Train']}
+    test_dict = {k: data_dict[k] for k in split_dict['Test']}
+    training_folds.append(train_dict)
+    validation_folds.append(test_dict)
+
+    return training_folds, validation_folds
+
 
 def load_ge_cv_folds(df, split_dict):
 

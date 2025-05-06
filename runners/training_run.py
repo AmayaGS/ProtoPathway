@@ -11,6 +11,7 @@ from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from utils.helpers import ensure_directory
 from utils.model_utils import load_ge_cv_folds, load_ge_train_test_folds, initialise_model
+from utils.model_utils import load_wsi_train_test_folds
 
 from utils.dataset_utils import GeneExpressionDataset
 from utils.dataset_utils import build_incidence_matrix, HypergraphDataset
@@ -62,9 +63,15 @@ def train_model(config, is_full_train=False, experiment_logger=None):
 
     splits_dict_path = os.path.join(config['output']['data']['dir'], f"data_splits_{config['dataset_name']}.pkl")
 
-    # Load the cross-validation splits
+    # Load the splits
     with open(splits_dict_path, "rb") as f:
         split_dict = pickle.load(f)
+
+    # Check if the dataset is WSI or GE
+    if config['execution']['WSI']:
+        logger.info("Using WSI dataset")
+        # Load the WSI dataset
+        wsi_df = load_wsi_train_test_folds(config['output']['data']['dir'], split_dict)
 
     if config['model']['name'] == 'Hypergraph':
         data = build_incidence_matrix(config['output']['data']['final_pathways'], gene_expression_df)
@@ -134,7 +141,7 @@ def train_model(config, is_full_train=False, experiment_logger=None):
                           fold_idx,
                           device)
         # Train the model
-        model, history = trainer.train() # remember to save best model
+        model, history = trainer.train()
 
         model_path = os.path.join(experiment_logger.checkpoint_dir, trainer.checkpoint_name)
 

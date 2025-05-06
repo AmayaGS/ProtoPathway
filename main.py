@@ -6,6 +6,7 @@ from utils.helpers import load_config, resolve_all_vars, flatten_config
 from utils.model_utils import create_cross_validation_splits
 from runners.training_run import train_model
 from runners.test_run import test_model
+from runners.visualisation_run import test_model_with_biomarkers
 from utils.logging_utils import ExperimentLogger
 
 def parser():
@@ -60,6 +61,12 @@ def main(config, experiment_logger):
         is_continuation = training_performed
         test_model(config, is_continuation=is_continuation, experiment_logger=experiment_logger)
         logger.info("Testing complete")
+
+    if config['execution']['visualise']:
+        logger.info("Visualising model results")
+        is_continuation = training_performed
+        test_model_with_biomarkers(config, is_continuation=is_continuation, experiment_logger=experiment_logger)
+        logger.info("Done visualising model results")
 
 
 if __name__ == "__main__":

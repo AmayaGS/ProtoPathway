@@ -126,6 +126,8 @@ visualization:
 
 # Execution flags
 execution:
+  GE: false
+  WSI: false
   ge_preprocess: false
   wsi_preprocess: false
   wsi_segmentation: false
@@ -133,9 +135,9 @@ execution:
   create_splits: false
 #  compute_rwpe: false
   cross_validation: false
-  full_train: true
-  test: true
-  visualise: false
+  full_train: false
+  test: false
+  visualise: true
 
 # Embedding models configs & paths
 embedding_net:

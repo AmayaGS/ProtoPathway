@@ -25,7 +25,8 @@ def evaluate_model(model, test_loader, config, device):
         for batch in test_loader:
             batch.to(device)
             target = batch.y
-            outputs = model(batch, return_importance=True)
+            patient_id = batch.patient_id
+            outputs = model(batch)
 
             # Calculate loss just for reference
             loss = F.cross_entropy(outputs, target)

@@ -189,7 +189,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
 
     def generate_importance_report(self, top_pathways=10, top_genes=10, top_genes_per_pathway=10):
 
-        if not self.pathway_importance or not self.gene_pathway_attention:
+        if self.pathway_importance is None or self.gene_pathway_attention is None:
             raise ValueError(
                 "Model has not calculated importance scores. Run forward with return_importance=True first.")
 
