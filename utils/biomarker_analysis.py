@@ -7,6 +7,11 @@ from scipy import stats
 import os
 from collections import defaultdict
 
+# Fix for non-interactive environments
+import matplotlib
+
+matplotlib.use('Agg')  # Use non-interactive backend
+
 
 class BiomarkerAnalysis:
     """
@@ -44,6 +49,10 @@ class BiomarkerAnalysis:
 
         # Results storage
         self.biomarker_results = None
+
+        # Parameters for biomarker analysis
+        self.min_fold_change = 1.5
+        self.max_pvalue = 0.05
 
     def collect_patient_importance(self, test_loader, device):
         """
@@ -166,6 +175,10 @@ class BiomarkerAnalysis:
         Returns:
             DataFrame with differential biomarkers
         """
+        # Store parameters for later use in visualization
+        self.min_fold_change = min_fold_change
+        self.max_pvalue = max_pvalue
+
         # Only applicable for binary classification currently
         if len(self.population_data) != 2:
             raise ValueError("Differential biomarker analysis requires exactly 2 classes")
@@ -302,179 +315,187 @@ class BiomarkerAnalysis:
         Returns:
             List of generated figure paths
         """
-        if self.biomarker_results is None:
-            raise ValueError("Run identify_differential_biomarkers() first")
+        try:
+            if self.biomarker_results is None:
+                raise ValueError("Run identify_differential_biomarkers() first")
 
-        os.makedirs(output_dir, exist_ok=True)
-        figure_paths = []
+            os.makedirs(output_dir, exist_ok=True)
+            figure_paths = []
 
-        # Get results
-        pathway_df = self.biomarker_results["pathway_biomarkers"]
-        gene_df = self.biomarker_results["gene_biomarkers"]
-        classes = self.biomarker_results["classes"]
+            # Get results
+            pathway_df = self.biomarker_results["pathway_biomarkers"]
+            gene_df = self.biomarker_results["gene_biomarkers"]
+            classes = self.biomarker_results["classes"]
 
-        # 1. Volcano plot for pathways
-        fig, ax = plt.subplots(figsize=(12, 8))
+            # 1. Volcano plot for pathways
+            fig, ax = plt.subplots(figsize=(12, 8))
 
-        # Create volcano plot
-        significant = pathway_df['significant']
+            # Create volcano plot
+            significant = pathway_df['significant']
 
-        # Plot points
-        ax.scatter(
-            pathway_df.loc[~significant, 'log2_fold_change'],
-            -np.log10(pathway_df.loc[~significant, 'p_value']),
-            alpha=0.5, s=30, color='gray', label='Not Significant'
-        )
-
-        ax.scatter(
-            pathway_df.loc[significant, 'log2_fold_change'],
-            -np.log10(pathway_df.loc[significant, 'p_value']),
-            alpha=0.8, s=50, color='red', label='Significant'
-        )
-
-        # Add labels for top significant pathways
-        top_pathways = pathway_df.loc[significant].sort_values('p_value').head(10)
-        for _, row in top_pathways.iterrows():
-            ax.annotate(
-                row['pathway_name'],
-                xy=(row['log2_fold_change'], -np.log10(row['p_value'])),
-                xytext=(5, 5), textcoords='offset points',
-                fontsize=8,
-                bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.3)
+            # Plot points
+            ax.scatter(
+                pathway_df.loc[~significant, 'log2_fold_change'],
+                -np.log10(pathway_df.loc[~significant, 'p_value']),
+                alpha=0.5, s=30, color='gray', label='Not Significant'
             )
 
-        # Add threshold lines
-        ax.axhline(-np.log10(max_pvalue), linestyle='--', color='gray', alpha=0.6)
-        ax.axvline(np.log2(min_fold_change), linestyle='--', color='gray', alpha=0.6)
-        ax.axvline(-np.log2(min_fold_change), linestyle='--', color='gray', alpha=0.6)
+            ax.scatter(
+                pathway_df.loc[significant, 'log2_fold_change'],
+                -np.log10(pathway_df.loc[significant, 'p_value']),
+                alpha=0.8, s=50, color='red', label='Significant'
+            )
 
-        # Labels and title
-        ax.set_xlabel('Log2 Fold Change', fontsize=12)
-        ax.set_ylabel('-Log10 P-value', fontsize=12)
-        ax.set_title(f'Pathway Importance: {classes[0]} vs {classes[1]}', fontsize=14)
-        ax.legend()
+            # Add labels for top significant pathways
+            top_pathways = pathway_df.loc[significant].sort_values('p_value').head(10)
+            for _, row in top_pathways.iterrows():
+                ax.annotate(
+                    row['pathway_name'],
+                    xy=(row['log2_fold_change'], -np.log10(row['p_value'])),
+                    xytext=(5, 5), textcoords='offset points',
+                    fontsize=8,
+                    bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.3)
+                )
 
-        # Save figure
-        path = os.path.join(output_dir, 'pathway_volcano_plot.png')
-        fig.savefig(path, dpi=300, bbox_inches='tight')
-        figure_paths.append(path)
-        plt.close(fig)
+            # Add threshold lines - using the class variables now
+            ax.axhline(-np.log10(self.max_pvalue), linestyle='--', color='gray', alpha=0.6)
+            ax.axvline(np.log2(self.min_fold_change), linestyle='--', color='gray', alpha=0.6)
+            ax.axvline(-np.log2(self.min_fold_change), linestyle='--', color='gray', alpha=0.6)
 
-        # 2. Bar plot of top differential pathways
-        top_diff_pathways = pathway_df[pathway_df['significant']].head(15)
-        if len(top_diff_pathways) > 0:
-            fig, ax = plt.subplots(figsize=(12, 10))
-
-            # Prepare data for grouped bar plot
-            pathway_names = top_diff_pathways['pathway_name'].tolist()
-            class0_values = top_diff_pathways['importance_class0'].tolist()
-            class1_values = top_diff_pathways['importance_class1'].tolist()
-
-            # Plot bars
-            x = np.arange(len(pathway_names))
-            width = 0.35
-
-            ax.barh(x - width / 2, class0_values, width, label=classes[0], color='skyblue')
-            ax.barh(x + width / 2, class1_values, width, label=classes[1], color='salmon')
-
-            # Add labels and formatting
-            ax.set_yticks(x)
-            ax.set_yticklabels(pathway_names)
-            ax.invert_yaxis()  # Labels read top-to-bottom
-
-            ax.set_xlabel('Importance Score', fontsize=12)
-            ax.set_title('Top Differential Pathways', fontsize=14)
+            # Labels and title
+            ax.set_xlabel('Log2 Fold Change', fontsize=12)
+            ax.set_ylabel('-Log10 P-value', fontsize=12)
+            ax.set_title(f'Pathway Importance: {classes[0]} vs {classes[1]}', fontsize=14)
             ax.legend()
 
             # Save figure
-            path = os.path.join(output_dir, 'top_differential_pathways.png')
+            path = os.path.join(output_dir, 'pathway_volcano_plot.png')
             fig.savefig(path, dpi=300, bbox_inches='tight')
             figure_paths.append(path)
             plt.close(fig)
 
-        # 3. Similar volcano plot for genes
-        fig, ax = plt.subplots(figsize=(12, 8))
+            # 2. Bar plot of top differential pathways
+            top_diff_pathways = pathway_df[pathway_df['significant']].head(15)
+            if len(top_diff_pathways) > 0:
+                fig, ax = plt.subplots(figsize=(12, 10))
 
-        # Create volcano plot
-        significant = gene_df['significant']
+                # Prepare data for grouped bar plot
+                pathway_names = top_diff_pathways['pathway_name'].tolist()
+                class0_values = top_diff_pathways['importance_class0'].tolist()
+                class1_values = top_diff_pathways['importance_class1'].tolist()
 
-        # Plot points
-        ax.scatter(
-            gene_df.loc[~significant, 'log2_fold_change'],
-            -np.log10(gene_df.loc[~significant, 'p_value']),
-            alpha=0.5, s=20, color='gray', label='Not Significant'
-        )
+                # Plot bars
+                x = np.arange(len(pathway_names))
+                width = 0.35
 
-        ax.scatter(
-            gene_df.loc[significant, 'log2_fold_change'],
-            -np.log10(gene_df.loc[significant, 'p_value']),
-            alpha=0.8, s=30, color='blue', label='Significant'
-        )
+                ax.barh(x - width / 2, class0_values, width, label=classes[0], color='skyblue')
+                ax.barh(x + width / 2, class1_values, width, label=classes[1], color='salmon')
 
-        # Add labels for top significant genes
-        top_genes = gene_df.loc[significant].sort_values('p_value').head(10)
-        for _, row in top_genes.iterrows():
-            ax.annotate(
-                row['gene_name'],
-                xy=(row['log2_fold_change'], -np.log10(row['p_value'])),
-                xytext=(5, 5), textcoords='offset points',
-                fontsize=8,
-                bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.3)
+                # Add labels and formatting
+                ax.set_yticks(x)
+                ax.set_yticklabels(pathway_names)
+                ax.invert_yaxis()  # Labels read top-to-bottom
+
+                ax.set_xlabel('Importance Score', fontsize=12)
+                ax.set_title('Top Differential Pathways', fontsize=14)
+                ax.legend()
+
+                # Save figure
+                path = os.path.join(output_dir, 'top_differential_pathways.png')
+                fig.savefig(path, dpi=300, bbox_inches='tight')
+                figure_paths.append(path)
+                plt.close(fig)
+
+            # 3. Similar volcano plot for genes
+            fig, ax = plt.subplots(figsize=(12, 8))
+
+            # Create volcano plot
+            significant = gene_df['significant']
+
+            # Plot points
+            ax.scatter(
+                gene_df.loc[~significant, 'log2_fold_change'],
+                -np.log10(gene_df.loc[~significant, 'p_value']),
+                alpha=0.5, s=20, color='gray', label='Not Significant'
             )
 
-        # Add threshold lines
-        ax.axhline(-np.log10(max_pvalue), linestyle='--', color='gray', alpha=0.6)
-        ax.axvline(np.log2(min_fold_change), linestyle='--', color='gray', alpha=0.6)
-        ax.axvline(-np.log2(min_fold_change), linestyle='--', color='gray', alpha=0.6)
-
-        # Labels and title
-        ax.set_xlabel('Log2 Fold Change', fontsize=12)
-        ax.set_ylabel('-Log10 P-value', fontsize=12)
-        ax.set_title(f'Gene Importance: {classes[0]} vs {classes[1]}', fontsize=14)
-        ax.legend()
-
-        # Save figure
-        path = os.path.join(output_dir, 'gene_volcano_plot.png')
-        fig.savefig(path, dpi=300, bbox_inches='tight')
-        figure_paths.append(path)
-        plt.close(fig)
-
-        # 4. Generate heatmap for top differential genes by class
-        top_diff_genes = gene_df[gene_df['significant']].head(25)
-        if len(top_diff_genes) > 0:
-            fig, ax = plt.subplots(figsize=(10, 12))
-
-            # Prepare data for heatmap
-            gene_names = top_diff_genes['gene_name'].tolist()
-
-            # Create matrix: rows=genes, cols=classes
-            heatmap_data = np.zeros((len(gene_names), 2))
-            for i, gene_name in enumerate(gene_names):
-                row = top_diff_genes[top_diff_genes['gene_name'] == gene_name].iloc[0]
-                heatmap_data[i, 0] = row['importance_class0']
-                heatmap_data[i, 1] = row['importance_class1']
-
-            # Plot heatmap
-            sns.heatmap(
-                heatmap_data,
-                annot=True,
-                fmt=".3f",
-                yticklabels=gene_names,
-                xticklabels=classes,
-                cmap="YlOrRd",
-                ax=ax
+            ax.scatter(
+                gene_df.loc[significant, 'log2_fold_change'],
+                -np.log10(gene_df.loc[significant, 'p_value']),
+                alpha=0.8, s=30, color='blue', label='Significant'
             )
 
-            # Add labels and title
-            ax.set_title('Top Differential Genes by Class', fontsize=14)
+            # Add labels for top significant genes
+            top_genes = gene_df.loc[significant].sort_values('p_value').head(10)
+            for _, row in top_genes.iterrows():
+                ax.annotate(
+                    row['gene_name'],
+                    xy=(row['log2_fold_change'], -np.log10(row['p_value'])),
+                    xytext=(5, 5), textcoords='offset points',
+                    fontsize=8,
+                    bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.3)
+                )
+
+            # Add threshold lines - using the class variables
+            ax.axhline(-np.log10(self.max_pvalue), linestyle='--', color='gray', alpha=0.6)
+            ax.axvline(np.log2(self.min_fold_change), linestyle='--', color='gray', alpha=0.6)
+            ax.axvline(-np.log2(self.min_fold_change), linestyle='--', color='gray', alpha=0.6)
+
+            # Labels and title
+            ax.set_xlabel('Log2 Fold Change', fontsize=12)
+            ax.set_ylabel('-Log10 P-value', fontsize=12)
+            ax.set_title(f'Gene Importance: {classes[0]} vs {classes[1]}', fontsize=14)
+            ax.legend()
 
             # Save figure
-            path = os.path.join(output_dir, 'gene_importance_heatmap.png')
+            path = os.path.join(output_dir, 'gene_volcano_plot.png')
             fig.savefig(path, dpi=300, bbox_inches='tight')
             figure_paths.append(path)
             plt.close(fig)
 
-        return figure_paths
+            # 4. Generate heatmap for top differential genes by class
+            top_diff_genes = gene_df[gene_df['significant']].head(25)
+            if len(top_diff_genes) > 0:
+                fig, ax = plt.subplots(figsize=(10, 12))
+
+                # Prepare data for heatmap
+                gene_names = top_diff_genes['gene_name'].tolist()
+
+                # Create matrix: rows=genes, cols=classes
+                heatmap_data = np.zeros((len(gene_names), 2))
+                for i, gene_name in enumerate(gene_names):
+                    row = top_diff_genes[top_diff_genes['gene_name'] == gene_name].iloc[0]
+                    heatmap_data[i, 0] = row['importance_class0']
+                    heatmap_data[i, 1] = row['importance_class1']
+
+                # Plot heatmap
+                sns.heatmap(
+                    heatmap_data,
+                    annot=True,
+                    fmt=".3f",
+                    yticklabels=gene_names,
+                    xticklabels=classes,
+                    cmap="YlOrRd",
+                    ax=ax
+                )
+
+                # Add labels and title
+                ax.set_title('Top Differential Genes by Class', fontsize=14)
+
+                # Save figure
+                path = os.path.join(output_dir, 'gene_importance_heatmap.png')
+                fig.savefig(path, dpi=300, bbox_inches='tight')
+                figure_paths.append(path)
+                plt.close(fig)
+
+            print(f"Successfully created {len(figure_paths)} visualizations in {output_dir}")
+            return figure_paths
+
+        except Exception as e:
+            print(f"Error generating visualizations: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
 
     def generate_complete_report(self, output_dir="./biomarker_report"):
         """
@@ -650,24 +671,59 @@ def integrate_with_evaluate_model(model, test_loader, config, device, output_dir
             analyzer.patient_data["gene_importance"].append(model.get_gene_importance().cpu().clone())
 
     # Calculate metrics
-    metrics = {
-        'loss': total_loss / len(test_loader),
-        'acc': 100. * correct / total,
-        'all_preds': torch.cat(all_preds, dim=0).numpy(),
-        'all_targets': torch.cat(all_targets, dim=0).numpy(),
-        'all_probs': torch.cat(all_probs, dim=0).numpy(),
-        'patient_ids': all_patient_ids
-    }
+    try:
+        # Convert lists to arrays for proper metrics
+        if all_preds:
+            all_preds = torch.cat(all_preds, dim=0).numpy()
+        else:
+            all_preds = np.array([])
 
-    # Perform biomarker analysis
-    analyzer.analyze_by_group()
-    analyzer.identify_differential_biomarkers()
-    report_paths = analyzer.generate_complete_report(output_dir)
+        if all_targets:
+            all_targets = torch.cat(all_targets, dim=0).numpy()
+        else:
+            all_targets = np.array([])
 
-    # Add biomarker results to metrics
-    metrics['biomarker_analysis'] = {
-        'analyzer': analyzer,
-        'report_paths': report_paths
-    }
+        if all_probs:
+            all_probs = torch.cat(all_probs, dim=0).numpy()
+        else:
+            all_probs = np.array([])
 
-    return metrics
+        metrics = {
+            'loss': total_loss / len(test_loader) if len(test_loader) > 0 else 0,
+            'acc': 100. * correct / total if total > 0 else 0,
+            'all_preds': all_preds,
+            'all_targets': all_targets,
+            'all_probs': all_probs,
+            'patient_ids': all_patient_ids
+        }
+
+        # Perform biomarker analysis
+        print("Analyzing patient groups...")
+        analyzer.analyze_by_group()
+
+        print("Identifying differential biomarkers...")
+        analyzer.identify_differential_biomarkers()
+
+        print(f"Generating biomarker report in {output_dir}...")
+        report_paths = analyzer.generate_complete_report(output_dir)
+
+        # Debugging info
+        print(f"Biomarker report generated at: {report_paths['report']}")
+        print(f"Figure paths: {report_paths['figures']}")
+
+        # Add biomarker results to metrics
+        metrics['biomarker_analysis'] = {
+            'analyzer': analyzer,
+            'report_paths': report_paths
+        }
+
+        return metrics
+    except Exception as e:
+        print(f"Error in evaluate_model: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'loss': 0,
+            'acc': 0,
+            'error': str(e)
+        }

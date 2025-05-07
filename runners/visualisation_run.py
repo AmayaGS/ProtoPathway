@@ -109,7 +109,10 @@ def test_model_with_biomarkers(config, is_continuation=False, experiment_logger=
     sig_genes = analyzer.biomarker_results['gene_biomarkers'][
         analyzer.biomarker_results['gene_biomarkers']['significant']
     ]
+    logger.info("Generating biomarker visualizations...")
+    fig_paths = analyzer.visualize_biomarkers(biomarker_dir + "/figures")
 
+    logger.info(f"Generated {len(fig_paths)} visualization figures")
     logger.info(f"Identified {len(sig_pathways)} significant pathway biomarkers")
     logger.info(f"Identified {len(sig_genes)} significant gene biomarkers")
 
