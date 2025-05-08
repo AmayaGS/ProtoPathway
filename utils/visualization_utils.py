@@ -236,10 +236,10 @@ def plot_learning_curves(
         figsize: Tuple[int, int] = (10, 8)
 ) -> None:
     """
-    Plot learning curves from training history.
+    Plot learning curves from ge_training history.
 
     Args:
-        history: Dictionary containing training history with 'train' and 'val' keys
+        history: Dictionary containing ge_training history with 'train' and 'val' keys
         output_path: Base path to save the plots
         metrics: List of metrics to plot (defaults to ['loss', 'acc'])
         best_epoch: Best epoch number to highlight on the plots
@@ -532,7 +532,7 @@ def create_result_summary(fold_results: pd.DataFrame, config: Dict, output_path:
         f.write("==================================\n\n")
 
         f.write(f"Dataset: {config['dataset_name']}\n")
-        f.write(f"Model: {config['model']['name']}\n")
+        # f.write(f"Model: {config['model']['name']}\n")
 
         if 'fold' in fold_results.columns:
             f.write(f"Number of folds: {len(fold_results)}\n\n")
@@ -552,16 +552,16 @@ def create_result_summary(fold_results: pd.DataFrame, config: Dict, output_path:
             f.write(f"\nAverage best epoch: {fold_results['best_epoch'].mean():.1f}\n")
 
         f.write("\nTraining Configuration:\n")
-        f.write(f"  Learning rate: {config['training']['learning_rate']}\n")
-        f.write(f"  Batch size: {config['training']['batch_size']}\n")
-        f.write(f"  Number of epochs: {config['training']['num_epochs']}\n")
-        f.write(f"  Dropout rate: {config['training']['dropout_rate']}\n")
-        f.write(f"  L1 regularization: {config['training']['L1_norm']}\n")
-        f.write(f"  L2 regularization: {config['training']['L2_norm']}\n")
+        f.write(f"  Learning rate: {config['ge_training']['learning_rate']}\n")
+        f.write(f"  Batch size: {config['ge_training']['batch_size']}\n")
+        f.write(f"  Number of epochs: {config['ge_training']['num_epochs']}\n")
+        f.write(f"  Dropout rate: {config['ge_training']['dropout_rate']}\n")
+        f.write(f"  L1 regularization: {config['ge_training']['L1_norm']}\n")
+        f.write(f"  L2 regularization: {config['ge_training']['L2_norm']}\n")
 
         f.write("\nModel Configuration:\n")
-        if 'hidden_dim' in config['training']:
-            f.write(f"  Hidden dimensions: {config['training']['hidden_dim']}\n")
+        if 'hidden_dim' in config['ge_training']:
+            f.write(f"  Hidden dimensions: {config['ge_training']['hidden_dim']}\n")
         if 'n_classes' in config:
             f.write(f"  Number of classes: {config['n_classes']}\n")
         if 'label_dict' in config:
@@ -584,7 +584,7 @@ def visualize_fold_results(
     Generate comprehensive visualizations for a single fold.
 
     Args:
-        fold_data: Dictionary with fold training history
+        fold_data: Dictionary with fold ge_training history
         fold_idx: Fold index number
         output_dir: Directory to save visualizations
         config: Configuration dictionary
@@ -823,10 +823,10 @@ def visualize_full_training_results(
         mode: str = 'max'
 ) -> None:
     """
-    Generate comprehensive visualizations for full training results.
+    Generate comprehensive visualizations for full ge_training results.
 
     Args:
-        history: Dictionary with training history
+        history: Dictionary with ge_training history
         output_dir: Directory to save visualizations
         config: Configuration dictionary
         metric_for_best: Metric to use for determining best epoch

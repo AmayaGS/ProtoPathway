@@ -1,25 +1,45 @@
-"""
-ProtoPathway: module for gene and pathway preprocessing pipeline.
+# runners/gene_expression_run.py
 
-"""
+import os
+import pandas as pd
+import numpy as np
 
 from utils.helpers import ensure_directory
-
 from utils.expression_utils import extract_gene_annotations, load_expression_data, filter_expression_data
-from utils.pathway_utils import load_reactome_pathways, build_reactome_hierarchy, filter_pathways_by_size, select_pathways_by_depth
-from utils.pathway_utils import plot_pathway_depth_histogram, plot_pathway_size_histograms, plot_filtered_pathway_histogram
-from utils.pathway_similarity_utils import calculate_pathway_similarities, identify_redundant_pathways, generate_removal_report
+from utils.pathway_utils import (
+    load_reactome_pathways, build_reactome_hierarchy, select_pathways_by_depth,
+    filter_pathways_by_size, plot_pathway_depth_histogram,
+    plot_pathway_size_histograms, plot_filtered_pathway_histogram
+)
+from utils.pathway_similarity_utils import (
+    calculate_pathway_similarities, identify_redundant_pathways, generate_removal_report
+)
 from utils.hypergraph_utils import build_pathway_hypergraph, visualize_pathway_hypergraph
 
 
 def gene_expression_preprocessing(config):
-    """Run the complete preprocessing pipeline.
+    """
+    Run the complete gene expression preprocessing pipeline.
+
+    This function performs the following steps:
+    1. Extract gene annotations from GTF file
+    2. Load and filter gene expression data
+    3. Process Reactome pathways and build hierarchy
+    4. Select relevant pathways and filter by size
+    5. Identify and remove redundant pathways
+    6. Build and visualize hypergraph representation
 
     Args:
-        config_path (str): Path to the YAML configuration file
+        config: Configuration dictionary with pipeline parameters
 
+    Returns:
+        Tuple of (filtered_genes, final_pathway_dict)
     """
-    print("Starting Gene Expression and Reactome Pathways preprocessing \n")
+    logger = config.get('logger', None)
+    if logger:
+        logger.logger.info("Starting Gene Expression and Reactome Pathways preprocessing")
+    else:
+        print("Starting Gene Expression and Reactome Pathways preprocessing")
 
     # Create output directories
     ensure_directory(config['output']['data']['dir'])
@@ -27,44 +47,48 @@ def gene_expression_preprocessing(config):
 
     # Step 1: Extract gene annotations from GTF file
     annotations_df, protein_coding_genes = extract_gene_annotations(
-        config['input']['gtf_file'],
+        config['gene_expression']['input']['gtf_file'],
         config['output']['data']['gene_annotations']
     )
 
     # Step 2: Process gene expression data
     gene_df = load_expression_data(
-        config['input']['gene_expression']
+        config['gene_expression']['input']['gene_expression']
     )
 
     filtered_gene_df = filter_expression_data(
         gene_df,
         protein_coding_genes,
-        min_expression=config['parameters']['gene_expression']['threshold'],
-        min_proportion=config['parameters']['gene_expression']['min_proportion'],
-        variance_proportion=config['parameters']['gene_expression']['variance_proportion'],
+        min_expression=config['gene_expression']['parameters']['threshold'],
+        min_proportion=config['gene_expression']['parameters']['min_proportion'],
+        variance_proportion=config['gene_expression']['parameters']['variance_proportion'],
         output_path=config['output']['data']['filtered_genes']
     )
 
     # Get filtered genes as a set for later use
-    filtered_genes = set(filtered_gene_df.index)
-    print(f"Final filtered gene set contains {len(filtered_genes)} genes\n")
+    filtered_genes = set(filtered_gene_df.T.index)
+
+    if logger:
+        logger.logger.info(f"Final filtered gene set contains {len(filtered_genes)} genes")
+    else:
+        print(f"Final filtered gene set contains {len(filtered_genes)} genes")
 
     # Step 3: Process Reactome pathways
     pathway_dict, pathway_df = load_reactome_pathways(
-        config['input']['reactome_gmt'],
+        config['gene_expression']['input']['reactome_gmt'],
         config['output']['data']['reactome_pathways']
     )
 
     # Step 4: Build Reactome hierarchy and select pathways
     hierarchy_graph, depth_df = build_reactome_hierarchy(
-        config['input']['reactome_relations'],
-        config['input']['reactome_pathways']
+        config['gene_expression']['input']['reactome_relations'],
+        config['gene_expression']['input']['reactome_pathways']
     )
 
     # Visualize pathway depths
     plot_pathway_depth_histogram(
         depth_df,
-        config['pathway']['target_depth'],
+        config['gene_expression']['pathway']['target_depth'],
         config['output']['figures']['dir']
     )
 
@@ -72,7 +96,7 @@ def gene_expression_preprocessing(config):
     selected_pathways = select_pathways_by_depth(
         hierarchy_graph,
         depth_df,
-        target_depth=config['pathway']['target_depth']
+        target_depth=config['gene_expression']['pathway']['target_depth']
     )
 
     # Filter pathway DataFrame to selected pathways
@@ -82,20 +106,23 @@ def gene_expression_preprocessing(config):
         depth_df, how='inner', on=['pathway_name', 'pathway_id']
     )
 
-    print(f"\nSelected {len(selected_pathway_df)} pathways based on hierarchy\n")
+    if logger:
+        logger.logger.info(f"Selected {len(selected_pathway_df)} pathways based on hierarchy")
+    else:
+        print(f"Selected {len(selected_pathway_df)} pathways based on hierarchy")
 
     # Step 5: Visualize and filter pathways by min/max size
     plot_pathway_size_histograms(
         selected_pathway_df,
-        config['pathway']['min_genes'],
-        config['pathway']['max_genes'],
+        config['gene_expression']['pathway']['min_genes'],
+        config['gene_expression']['pathway']['max_genes'],
         config['output']['figures']['dir']
     )
 
     filtered_pathway_df = filter_pathways_by_size(
         selected_pathway_df,
-        min_genes=config['pathway']['min_genes'],
-        max_genes=config['pathway']['max_genes']
+        min_genes=config['gene_expression']['pathway']['min_genes'],
+        max_genes=config['gene_expression']['pathway']['max_genes']
     )
 
     # Step 6: Analyze pathway similarity and redundancy
@@ -134,14 +161,19 @@ def gene_expression_preprocessing(config):
 
     plot_filtered_pathway_histogram(
         final_filtered_pathways,
-        config['pathway']['min_genes'],
-        config['pathway']['max_genes'],
+        config['gene_expression']['pathway']['min_genes'],
+        config['gene_expression']['pathway']['max_genes'],
         config['output']['figures']['dir']
     )
 
     # Save final filtered pathways
     final_filtered_pathways.to_csv(config['output']['data']['final_pathways'], index=False)
-    print(f"Saved {len(final_filtered_pathways)} final pathways to {config['output']['data']['final_pathways']}\n")
+
+    if logger:
+        logger.logger.info(
+            f"Saved {len(final_filtered_pathways)} final pathways to {config['output']['data']['final_pathways']}")
+    else:
+        print(f"Saved {len(final_filtered_pathways)} final pathways to {config['output']['data']['final_pathways']}")
 
     # Step 9: Create pathway dictionary for hypergraph
     final_pathway_dict = {}
@@ -154,11 +186,14 @@ def gene_expression_preprocessing(config):
     visualize_pathway_hypergraph(
         hypergraph,
         final_pathway_dict,
-        max_pathways=config['pathway']['max_visualization'],
+        max_pathways=config['gene_expression']['pathway']['max_visualization'],
         output_path=config['output']['figures']['dir']
     )
 
-    print("\nProtoPathway preprocessing pipeline completed successfully!")
+    if logger:
+        logger.logger.info("Gene Expression preprocessing pipeline completed successfully!")
+    else:
+        print("Gene Expression preprocessing pipeline completed successfully!")
 
     # Return processed data for downstream machine learning pipeline
     return filtered_genes, final_pathway_dict

@@ -180,23 +180,88 @@ class ExperimentLogger:
 
     def _generate_experiment_name(self) -> str:
         """
-        Generate a descriptive experiment name based on model type and hyperparameters.
+        Generate a descriptive experiment name based on execution type, mode, model type, and hyperparameters.
 
         Returns:
             A formatted experiment name string
         """
-        # Extract key information from config
         try:
-            # Get model name
-            model_name = self.config.get('model', {}).get('name', 'unknown')
+            # Get execution mode
+            mode = self.config.get('execution', {}).get('mode', 'unknown')
 
-            # Get key hyperparameters
-            training_config = self.config.get('training', {})
+            # Check if this is a preprocessing run
+            is_ge_preprocess = self.config.get('execution', {}).get('ge_preprocess', False)
+            is_wsi_preprocess = self.config.get('execution', {}).get('wsi_preprocess', False)
+            is_create_splits = self.config.get('execution', {}).get('create_splits', False)
+
+            # For preprocessing runs, create a different name format
+            if is_ge_preprocess or is_wsi_preprocess or is_create_splits:
+                components = []
+
+                # Add preprocessing type prefixes
+                if is_ge_preprocess:
+                    components.append("GE_Preprocessing")
+                if is_wsi_preprocess:
+                    components.append("WSI_Preprocessing")
+                if is_create_splits:
+                    components.append("Data_Splits")
+
+                # Add dataset name
+                dataset_name = self.config.get('dataset_name', 'unknown')
+                components.append(f"ds-{dataset_name}")
+
+                # Add preprocessing-specific parameters
+                if is_ge_preprocess:
+                    # Add gene expression preprocessing parameters
+                    ge_params = self.config.get('gene_expression', {}).get('parameters', {})
+                    if ge_params:
+                        min_expression = ge_params.get('threshold', 'na')
+                        min_proportion = ge_params.get('min_proportion', 'na')
+                        variance_proportion = ge_params.get('variance_proportion', 'na')
+                        components.append(f"expr-{min_expression}-{min_proportion:.2f}-{variance_proportion:.2f}")
+
+                    # Add pathway parameters
+                    pathway_params = self.config.get('gene_expression', {}).get('pathway', {})
+                    if pathway_params:
+                        min_genes = pathway_params.get('min_genes', 'na')
+                        max_genes = pathway_params.get('max_genes', 'na')
+                        target_depth = pathway_params.get('target_depth', 'na')
+                        components.append(f"path-{min_genes}-{max_genes}-d{target_depth}")
+
+                if is_wsi_preprocess:
+                    # Add WSI preprocessing parameters
+                    wsi_params = self.config.get('wsi', {}).get('parameters', {})
+                    if wsi_params:
+                        patch_size = wsi_params.get('patch_size', 'na')
+                        coverage = wsi_params.get('coverage', 'na')
+                        slide_level = wsi_params.get('slide_level', 'na')
+                        components.append(f"patch-{patch_size}-{coverage:.2f}-l{slide_level}")
+
+                # Add timestamp
+                components.append(self.timestamp)
+
+                # Join components
+                return "_".join(components)
+
+            # For normal training/testing runs, use the standard format
+            # Get model name based on mode
+            model_name = "unknown"
+            if mode == "gene_expression":
+                model_name = self.config.get('gene_expression', {}).get('model', 'unknown')
+            elif mode == "wsi":
+                model_name = self.config.get('wsi', {}).get('model', 'unknown')
+            elif mode == "multimodal":
+                model_name = f"MM-{self.config.get('multimodal', {}).get('fusion_type', 'unknown')}"
+
+            # Get training hyperparameters
+            training_config = self.config.get('ge_training', {})
             lr = training_config.get('learning_rate', 0)
             batch_size = training_config.get('batch_size', 0)
             dropout = training_config.get('dropout_rate', 0)
             l1_reg = training_config.get('L1_norm', 0)
             l2_reg = training_config.get('L2_norm', 0)
+            num_layers = training_config.get('num_layers', 0)
+            hidden_dim = training_config.get('hidden_dim', 0)
 
             # Get dataset information
             dataset_name = self.config.get('dataset_name', 'unknown')
@@ -204,39 +269,173 @@ class ExperimentLogger:
             # Format learning rate with scientific notation for readability
             lr_str = f"{lr:.1e}".replace('e-0', 'e-')
 
-            if self.config['execution']['cross_validation']:
-                # Create name components
-                components = [
-                    f"{model_name}",
-                    "CV",
-                    f"ds-{dataset_name}",
-                    f"lr-{lr_str}",
-                    f"bs-{batch_size}",
-                    f"dr-{dropout}",
-                    f"l1-{l1_reg}",
-                    f"l2-{l2_reg}",
-                    self.timestamp
-                ]
+            # Create mode prefix
+            if mode == "gene_expression":
+                mode_prefix = "GE"
+            elif mode == "wsi":
+                mode_prefix = "WSI"
+            elif mode == "multimodal":
+                mode_prefix = "MM"
+            else:
+                mode_prefix = mode[:2].upper()
 
-            elif self.config['execution']['full_train']:
-                # Create name components
-                components = [
-                    f"{model_name}",
-                    "FT",
-                    f"ds-{dataset_name}",
-                    f"lr-{lr_str}",
-                    f"bs-{batch_size}",
-                    f"dr-{dropout}",
-                    f"l1-{l1_reg}",
-                    f"l2-{l2_reg}",
-                    self.timestamp
-                ]
+            # Determine run type
+            is_cross_validation = self.config['execution'].get('cross_validation', False)
+            is_full_train = self.config['execution'].get('full_train', False)
+            is_test = self.config['execution'].get('test', False)
+            is_visualize = self.config['execution'].get('visualise', False)
+
+            run_type = "Run"
+            if is_cross_validation:
+                run_type = "CV"
+            elif is_full_train:
+                run_type = "FT"
+            elif is_test and not is_visualize:
+                run_type = "Test"
+            elif is_visualize:
+                run_type = "Viz"
+
+            # Create name components
+            components = [
+                f"{mode_prefix}-{model_name}",
+                run_type,
+                f"ds-{dataset_name}",
+                f"lr-{lr_str}",
+                f"bs-{batch_size}",
+                f"dr-{dropout}",
+                f"l1-{l1_reg}",
+                f"l2-{l2_reg}",
+                f"nl-{num_layers}",
+                f"hd-{hidden_dim}",
+                self.timestamp
+            ]
+
+            # Add any model-specific parameters
+            if mode == "gene_expression" and model_name == "Hypergraph":
+                # Add hypergraph-specific parameters if available
+                pathway_params = self.config.get('gene_expression', {}).get('pathway', {})
+                if pathway_params:
+                    min_genes = pathway_params.get('min_genes', 'na')
+                    max_genes = pathway_params.get('max_genes', 'na')
+                    components.insert(2, f"pg-{min_genes}-{max_genes}")
+
+            elif mode == "wsi" and model_name == "ProtoNet":
+                # Add prototype-specific parameters if available
+                proto_params = self.config.get('wsi', {}).get('prototype', {})
+                if proto_params:
+                    num_protos = proto_params.get('num_prototypes', 'na')
+                    components.insert(2, f"np-{num_protos}")
+
+            elif mode == "multimodal":
+                # Add fusion layer information if available
+                fusion_layers = self.config.get('multimodal', {}).get('fusion_layers', 'na')
+                hidden_dim = self.config.get('multimodal', {}).get('hidden_dim', 'na')
+                components.insert(2, f"fl-{fusion_layers}-{hidden_dim}")
 
             # Join components with underscores
             return "_".join(components)
+
         except Exception as e:
             # Fallback if there's any issue extracting config values
             return f"experiment_{self.timestamp}"
+
+    # def _generate_experiment_name(self) -> str:
+    #     """
+    #     Generate a descriptive experiment name based on execution mode, model type, and hyperparameters.
+    #
+    #     Returns:
+    #         A formatted experiment name string
+    #     """
+    #     try:
+    #         # Get execution mode
+    #         mode = self.config.get('execution', {}).get('mode', 'unknown')
+    #
+    #         # Get model name based on mode
+    #         model_name = "unknown"
+    #         if mode == "gene_expression":
+    #             model_name = self.config.get('gene_expression', {}).get('model', 'unknown')
+    #         elif mode == "wsi":
+    #             model_name = self.config.get('wsi', {}).get('model', 'unknown')
+    #         elif mode == "multimodal":
+    #             model_name = f"MM-{self.config.get('multimodal', {}).get('fusion_type', 'unknown')}"
+    #
+    #         # Get training hyperparameters - check in core training section first
+    #         training_config = self.config.get('ge_training', {})
+    #         lr = training_config.get('learning_rate', 0)
+    #         batch_size = training_config.get('batch_size', 0)
+    #         dropout = training_config.get('dropout_rate', 0)
+    #         l1_reg = training_config.get('L1_norm', 0)
+    #         l2_reg = training_config.get('L2_norm', 0)
+    #         num_layers = training_config.get('num_layers', 0)
+    #         hidden_dim = training_config.get('hidden_dim', 0)
+    #
+    #         # Get dataset information
+    #         dataset_name = self.config.get('dataset_name', 'unknown')
+    #
+    #         # Format learning rate with scientific notation for readability
+    #         lr_str = f"{lr:.1e}".replace('e-0', 'e-')
+    #
+    #         # Create mode prefix
+    #         if mode == "gene_expression":
+    #             mode_prefix = "GE"
+    #         elif mode == "wsi":
+    #             mode_prefix = "WSI"
+    #         elif mode == "multimodal":
+    #             mode_prefix = "MM"
+    #         else:
+    #             mode_prefix = mode[:2].upper()
+    #
+    #         # Determine run type
+    #         if self.config['execution']['cross_validation']:
+    #             run_type = "CV"
+    #         elif self.config['execution']['full_train']:
+    #             run_type = "FT"
+    #         else:
+    #             run_type = "Run"
+    #
+    #         # Create name components
+    #         components = [
+    #             f"{mode_prefix}-{model_name}",
+    #             run_type,
+    #             f"ds-{dataset_name}",
+    #             f"lr-{lr_str}",
+    #             f"bs-{batch_size}",
+    #             f"dr-{dropout}",
+    #             f"l1-{l1_reg}",
+    #             f"l2-{l2_reg}",
+    #             f"nl-{num_layers}",
+    #             f"hd-{hidden_dim}",
+    #             self.timestamp
+    #         ]
+    #
+    #         # Add any model-specific parameters
+    #         if mode == "gene_expression" and model_name == "Hypergraph":
+    #             # Add hypergraph-specific parameters if available
+    #             pathway_params = self.config.get('gene_expression', {}).get('pathway', {})
+    #             if pathway_params:
+    #                 min_genes = pathway_params.get('min_genes', 'na')
+    #                 max_genes = pathway_params.get('max_genes', 'na')
+    #                 components.insert(2, f"pg-{min_genes}-{max_genes}")
+    #
+    #         elif mode == "wsi" and model_name == "ProtoNet":
+    #             # Add prototype-specific parameters if available
+    #             proto_params = self.config.get('wsi', {}).get('prototype', {})
+    #             if proto_params:
+    #                 num_protos = proto_params.get('num_prototypes', 'na')
+    #                 components.insert(2, f"np-{num_protos}")
+    #
+    #         elif mode == "multimodal":
+    #             # Add fusion layer information if available
+    #             fusion_layers = self.config.get('multimodal', {}).get('fusion_layers', 'na')
+    #             hidden_dim = self.config.get('multimodal', {}).get('hidden_dim', 'na')
+    #             components.insert(2, f"fl-{fusion_layers}-{hidden_dim}")
+    #
+    #         # Join components with underscores
+    #         return "_".join(components)
+    #
+    #     except Exception as e:
+    #         # Fallback if there's any issue extracting config values
+    #         return f"experiment_{self.timestamp}"
 
     def _setup_logging(self, capture_console: bool = False) -> logging.Logger:
         """
@@ -252,7 +451,7 @@ class ExperimentLogger:
         log_file = self.console_log_file
 
         # Configure logging
-        logger = logging.getLogger(self.config['model']['name'])
+        logger = logging.getLogger(self.config['gene_expression']['model'])
         logger.setLevel(logging.DEBUG)
 
         # If logger already has handlers, don't add more
@@ -291,7 +490,7 @@ class ExperimentLogger:
         hyperparams = {}
 
         # Extract relevant sections from config
-        sections = ['dataset', 'GNN', 'training', 'model', 'graph', 'parameters']
+        sections = ['dataset', 'GNN', 'ge_training', 'model', 'graph', 'parameters']
         for section in sections:
             if section in config:
                 hyperparams.update({f"{section}.{k}": v for k, v in config[section].items()})

@@ -65,7 +65,7 @@ def filter_expression_data(gene_df, protein_coding_genes,
     # Step 2: Filter genes expressed in >min_proportion of patients
     expression_mask = (gene_df > min_expression).sum(axis=1) > (min_proportion * gene_df.shape[1])
     df_filtered = gene_df[expression_mask]
-    print(f"After expression filter: {df_filtered.shape[1]} genes")
+    print(f"After expression filter: {df_filtered.shape[0]} genes")
 
     # Step 3: Log2 transform
     df_log = np.log2(df_filtered + 1)

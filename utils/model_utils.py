@@ -17,19 +17,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def initialise_model(config, input_dim):
 
-    if config['model']['name'] == 'MLP':
+    if config['gene_expression']['model'] == 'MLP':
         model = MLPBaseline(
             input_size=input_dim,
-            hidden_size=config['training']['hidden_dim'],
+            hidden_size=config['ge_training']['hidden_dim'],
             num_classes=config['n_classes'],
-            dropout_rate=config['training']['dropout_rate']
+            dropout_rate=config['ge_training']['dropout_rate']
         )
 
-    if config['model']['name'] == 'Hypergraph':
+    if config['gene_expression']['model'] == 'Hypergraph':
 
         model = PathwayEmbeddingModel(
             in_channels=1,
-            hidden_channels=100,
+            hidden_channels=config['ge_training']['hidden_dim'],
             out_channels=config['n_classes'],
             num_layers=3,
             dropout=0.2
@@ -47,7 +47,7 @@ def initialise_model(config, input_dim):
 
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=config['training']['learning_rate'], weight_decay=config['training']['L2_norm'])
+    optimizer = optim.AdamW(model.parameters(), lr=config['ge_training']['learning_rate'], weight_decay=config['ge_training']['L2_norm'])
 
     sched_cfg = config.get("scheduler", {})
     if sched_cfg.get("use", False):  # default to False if not specified
@@ -113,7 +113,7 @@ def create_cross_validation_splits(config):
             "CV": {}
         }
 
-        # Create cross-validation splits on the training set
+        # Create cross-validation splits on the ge_training set
         sss_cv = StratifiedShuffleSplit(n_splits=config['dataset']['stratified_splits'], random_state=config['dataset']['split_seed'])
 
         for i, (train_idx, val_idx) in enumerate(
@@ -200,7 +200,7 @@ def load_ge_cv_folds(df, split_dict):
     return training_folds, validation_folds
 
 def load_ge_train_test_folds(df, split_dict):
-    """Load the full training and test sets for final model training."""
+    """Load the full ge_training and test sets for final model ge_training."""
 
     training_folds = []
     validation_folds = []
@@ -214,7 +214,7 @@ def load_ge_train_test_folds(df, split_dict):
 
 
 def load_train_test_split(data_dict, split_dict):
-    """Load the full training and test sets for final model training."""
+    """Load the full ge_training and test sets for final model ge_training."""
     train_dict = {pid: data_dict[pid] for pid in split_dict["Train"]}
     test_dict = {pid: data_dict[pid] for pid in split_dict["Test"]}
     return train_dict, test_dict
