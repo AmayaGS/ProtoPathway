@@ -96,7 +96,7 @@ class GeneExpressionTester(BaseTester):
             model = PathwayEmbeddingModel(
                 in_channels=1,
                 hidden_channels=self.config['ge_training']['hidden_dim'],
-                out_channels=self.config['n_classes'],
+                out_channels=self.config['num_classes'],
                 num_layers=self.config['ge_training']['num_layers'],
                 dropout=self.config['ge_training']['dropout_rate'],
                 gene_names=self.hypergraph_data['gene_names'] if self.hypergraph_data else None,
@@ -115,7 +115,7 @@ class GeneExpressionTester(BaseTester):
             model = MLPBaseline(
                 input_size=input_dim,
                 hidden_size=self.config['ge_training']['hidden_dim'],
-                num_classes=self.config['n_classes'],
+                num_classes=self.config['num_classes'],
                 dropout_rate=self.config['ge_training']['dropout_rate']
             )
 

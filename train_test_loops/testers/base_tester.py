@@ -152,7 +152,7 @@ class BaseTester(ABC):
         Returns:
             Dictionary of metrics
         """
-        n_classes = self.config['n_classes']
+        n_classes = self.config['num_classes']
 
         metrics = {
             'accuracy': accuracy_score(y_true, y_pred) * 100,  # as percentage

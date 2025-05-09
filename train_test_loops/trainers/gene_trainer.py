@@ -110,12 +110,12 @@ class GeneExpressionTrainer(BaseTrainer):
         # if self.model_name == 'MLP':
         #     model = MLPBaselineHG(self.input_dim,
         #                           self.config['ge_training']['hidden_dim'],
-        #                           self.config['n_classes'])
+        #                           self.config['num_classes'])
 
         model = MLPBaseline(
             input_size=self.input_dim,
             hidden_size=self.config['ge_training']['hidden_dim'],
-            num_classes=self.config['n_classes'],
+            num_classes=self.config['num_classes'],
             dropout_rate=self.config['ge_training']['dropout_rate']
             )
 
@@ -123,7 +123,7 @@ class GeneExpressionTrainer(BaseTrainer):
             model = PathwayEmbeddingModel(
                 in_channels=1,
                 hidden_channels=self.config['ge_training']['hidden_dim'],
-                out_channels=self.config['n_classes'],
+                out_channels=self.config['num_classes'],
                 num_layers=self.config['ge_training']['num_layers'],
                 dropout=self.config['ge_training']['dropout_rate'],
             )
@@ -256,7 +256,7 @@ class GeneExpressionTrainer(BaseTrainer):
         if all_probs.shape[1] == 2:
             metrics['auc'] = roc_auc_score(all_targets, all_probs[:, 1])
         else:
-            n_classes = self.config['n_classes']
+            n_classes = self.config['num_classes']
             binary_labels = label_binarize(all_targets, classes=list(range(n_classes)))
             metrics['auc'] = roc_auc_score(binary_labels, all_probs, average='macro', multi_class='ovr')
             metrics['precision'] = average_precision_score(

@@ -562,8 +562,8 @@ def create_result_summary(fold_results: pd.DataFrame, config: Dict, output_path:
         f.write("\nModel Configuration:\n")
         if 'hidden_dim' in config['ge_training']:
             f.write(f"  Hidden dimensions: {config['ge_training']['hidden_dim']}\n")
-        if 'n_classes' in config:
-            f.write(f"  Number of classes: {config['n_classes']}\n")
+        if 'num_classes' in config:
+            f.write(f"  Number of classes: {config['num_classes']}\n")
         if 'label_dict' in config:
             f.write(f"  Class mapping: {config['label_dict']}\n")
 
@@ -602,7 +602,7 @@ def visualize_fold_results(
     best_epoch, best_metrics = get_best_epoch_data(fold_data['history'], metric_for_best, mode)
 
     # Get class names
-    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
+    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['num_classes'])]
 
     # 1. Plot learning curves with best epoch marked
     plot_learning_curves(
@@ -757,7 +757,7 @@ def visualize_aggregated_results(
         std_cm = np.std(all_cms, axis=0)
 
         # Get class names
-        class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
+        class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['num_classes'])]
 
         # Plot average confusion matrices
         plot_confusion_matrix(
@@ -793,7 +793,7 @@ def visualize_aggregated_results(
         y_probs = np.concatenate(all_probs)
 
         # Get class names
-        class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
+        class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['num_classes'])]
 
         # Plot ROC curve
         auc_scores = plot_roc_curves(
@@ -839,7 +839,7 @@ def visualize_full_training_results(
     best_epoch, best_metrics = get_best_epoch_data(history, metric_for_best, mode)
 
     # Get class names
-    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
+    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['num_classes'])]
 
     # 1. Plot learning curves with best epoch marked
     plot_learning_curves(

@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 
 from train_test_loops.trainers.base_trainer import BaseTrainer
-# from models.WSIModels.prototype_model import PrototypeModel
+from models.Prototype import ProtoMIL_V0
 
 
 class WSITrainer(BaseTrainer):
@@ -37,6 +37,8 @@ class WSITrainer(BaseTrainer):
         Returns:
             train_loader, val_loader
         """
+
+        pass
         # labels_df = pd.read_csv(
         #     os.path.join(self.config['output']['data']['dir'],
         #                  f"patient_labels_{self.config['dataset_name']}.csv"))
@@ -81,45 +83,46 @@ class WSITrainer(BaseTrainer):
 
     def create_model(self):
         """Create and initialize the WSI model."""
-        # if self.model_name == 'ProtoNet':
-        #     model = PrototypeModel(
-        #         num_classes=self.config['n_classes'],
-        #         num_prototypes=self.config['wsi']['prototype']['num_prototypes'],
-        #         backbone=self.config['wsi']['prototype']['backbone'],
-        #         pretrained=self.config['wsi']['prototype']['pretrained']
-        #     )
-        #
-        #     # Define criterion, optimizer and scheduler
-        #     criterion = torch.nn.CrossEntropyLoss()
-        #
-        #     optimizer = torch.optim.AdamW(
-        #         model.parameters(),
-        #         lr=self.config['ge_training']['learning_rate'],
-        #         weight_decay=self.config['ge_training']['L2_norm']
-        #     )
-        #
-        #     # Configure scheduler if needed
-        #     lr_scheduler = None
-        #     if self.config['scheduler']['use']:
-        #         if self.config['scheduler']['type'] == 'step':
-        #             lr_scheduler = torch.optim.lr_scheduler.StepLR(
-        #                 optimizer,
-        #                 step_size=self.config['scheduler']['step'],
-        #                 gamma=self.config['scheduler']['gamma']
-        #             )
-        #         elif self.config['scheduler']['type'] == 'plateau':
-        #             lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        #                 optimizer,
-        #                 mode='min' if self.config['ge_training']['weight_type'] == 'loss' else 'max',
-        #                 patience=self.config['scheduler']['patience'],
-        #                 factor=self.config['scheduler']['gamma']
-        #             )
-        #
-        # else:
-        #     raise ValueError(f"Unsupported WSI model: {self.model_name}")
-        #
-        # model = model.to(self.device)
-        # return model, criterion, optimizer, lr_scheduler
+        if self.model_name == 'Prototype':
+            model = ProtoMIL_V0(
+                input_dim = self.config['wsi']['input_dim'],
+                num_prototypes=self.config['wsi']['prototype']['num_prototypes'],
+                tau=self.config['wsi']['prototype']['tau'],
+                num_classes = self.config['num_classes']
+            )
+
+            # Define criterion, optimizer and scheduler
+            criterion = torch.nn.CrossEntropyLoss()
+
+            optimizer = torch.optim.AdamW(
+                model.parameters(),
+                lr=self.config['wsi_training']['learning_rate'],
+                weight_decay=self.config['wsi_training']['L2_norm']
+            )
+
+            # Configure scheduler if needed
+            lr_scheduler = None
+            if self.config['scheduler']['use']:
+                if self.config['scheduler']['type'] == 'step':
+                    lr_scheduler = torch.optim.lr_scheduler.StepLR(
+                        optimizer,
+                        step_size=self.config['scheduler']['step'],
+                        gamma=self.config['scheduler']['gamma']
+                    )
+                elif self.config['scheduler']['type'] == 'plateau':
+                    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                        optimizer,
+                        mode='min' if self.config['wsi_training']['weight_type'] == 'loss' else 'max',
+                        patience=self.config['scheduler']['patience'],
+                        factor=self.config['scheduler']['gamma']
+                    )
+
+        else:
+            raise ValueError(f"Unsupported WSI model: {self.model_name}")
+
+        model = model.to(self.device)
+
+        return model, criterion, optimizer, lr_scheduler
 
     def train_epoch(self, model, train_loader, optimizer, criterion):
         """Run one ge_training epoch for WSI model."""
@@ -227,7 +230,7 @@ class WSITrainer(BaseTrainer):
         if all_probs.shape[1] == 2:
             metrics['auc'] = roc_auc_score(all_targets, all_probs[:, 1])
         else:
-            n_classes = self.config['n_classes']
+            n_classes = self.config['num_classes']
             binary_labels = label_binarize(all_targets, classes=list(range(n_classes)))
             metrics['auc'] = roc_auc_score(binary_labels, all_probs, average='macro', multi_class='ovr')
             metrics['precision'] = average_precision_score(

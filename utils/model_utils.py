@@ -21,7 +21,7 @@ def initialise_model(config, input_dim):
         model = MLPBaseline(
             input_size=input_dim,
             hidden_size=config['ge_training']['hidden_dim'],
-            num_classes=config['n_classes'],
+            num_classes=config['num_classes'],
             dropout_rate=config['ge_training']['dropout_rate']
         )
 
@@ -30,7 +30,7 @@ def initialise_model(config, input_dim):
         model = PathwayEmbeddingModel(
             in_channels=1,
             hidden_channels=config['ge_training']['hidden_dim'],
-            out_channels=config['n_classes'],
+            out_channels=config['num_classes'],
             num_layers=3,
             dropout=0.2
         )
@@ -38,7 +38,7 @@ def initialise_model(config, input_dim):
         # model = BipartiteGAT_MHSA(
         #     in_channels=1,  # Gene expression value
         #     hidden_channels=100,
-        #     out_channels=config['n_classes'],
+        #     out_channels=config['num_classes'],
         #     num_layers=3,
         #     dropout=0.2
         # )

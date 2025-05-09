@@ -74,7 +74,7 @@ class WSITester(BaseTester):
         if self.model_name == 'ProtoNet':
             # Initialize the model
             model = PrototypeModel(
-                num_classes=self.config['n_classes'],
+                num_classes=self.config['num_classes'],
                 num_prototypes=self.config['wsi']['prototype']['num_prototypes'],
                 backbone=self.config['wsi']['prototype']['backbone'],
                 pretrained=False  # No need for pretrained weights when loading checkpoint

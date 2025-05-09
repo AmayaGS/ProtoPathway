@@ -141,7 +141,7 @@ class MultimodalTrainer(BaseTrainer):
         #     gene_expr_dim=self.gene_expr_dim,
         #     wsi_feature_dim=self.wsi_feature_dim,
         #     hypergraph_data=self.hypergraph_data,
-        #     num_classes=self.config['n_classes'],
+        #     num_classes=self.config['num_classes'],
         #     fusion_type=self.fusion_type,
         #     fusion_layers=self.config['multimodal']['fusion_layers'],
         #     hidden_dim=self.config['multimodal']['hidden_dim']
@@ -334,7 +334,7 @@ class MultimodalTrainer(BaseTrainer):
         if all_probs.shape[1] == 2:
             metrics['auc'] = roc_auc_score(all_targets, all_probs[:, 1])
         else:
-            n_classes = self.config['n_classes']
+            n_classes = self.config['num_classes']
             binary_labels = label_binarize(all_targets, classes=list(range(n_classes)))
             metrics['auc'] = roc_auc_score(binary_labels, all_probs, average='macro', multi_class='ovr')
             metrics['precision'] = average_precision_score(
