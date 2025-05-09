@@ -72,7 +72,7 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
 
     # Prepare ge_training folds
     if is_full_train:
-        logger.info("Using train/test split for full ge_training")
+        logger.info("Using train/test split for full training")
         training_folds, validation_folds = load_folds(wsi_features, split_dict, is_cv=False, ignore_missing=True)
         n_folds = 1
     else:
@@ -114,23 +114,23 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
             fold_idx,
             plots_dir,
             config,
-            metric_for_best='acc' if config['ge_training']['weight_type'] == 'accuracy' else 'loss',
-            mode='max' if config['ge_training']['weight_type'] == 'accuracy' else 'min'
+            metric_for_best='acc' if config['training']['weight_type'] == 'accuracy' else 'loss',
+            mode='max' if config['training']['weight_type'] == 'accuracy' else 'min'
         )
 
         fold_summaries.append(fold_summary)
-        logger.info(f"Completed {fold_name} ge_training and visualization")
+        logger.info(f"Completed {fold_name} training and visualization")
 
     # Process results depending on run type
     if is_full_train:
         # For full ge_training, generate comprehensive visualizations
-        logger.info("Generating full ge_training visualizations")
+        logger.info("Generating full training visualizations")
         visualize_full_training_results(
             fold_histories[0]['history'],
             plots_dir,
             config,
-            metric_for_best='acc' if config['ge_training']['weight_type'] == 'accuracy' else 'loss',
-            mode='max' if config['ge_training']['weight_type'] == 'accuracy' else 'min'
+            metric_for_best='acc' if config['training']['weight_type'] == 'accuracy' else 'loss',
+            mode='max' if config['training']['weight_type'] == 'accuracy' else 'min'
         )
     else:
         # For cross-validation, generate aggregated results
@@ -147,7 +147,7 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
     with open(history_path, 'wb') as f:
         pickle.dump(fold_histories, f)
 
-    logger.info(f"Saved complete ge_training histories to {history_path}")
+    logger.info(f"Saved complete training histories to {history_path}")
     logger.info(f"{run_type.capitalize()} completed successfully!")
 
     return {

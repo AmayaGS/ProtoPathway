@@ -38,7 +38,7 @@ class WSITrainer(BaseTrainer):
             train_loader, val_loader
         """
 
-        pass
+        return train_data, val_data
         # labels_df = pd.read_csv(
         #     os.path.join(self.config['output']['data']['dir'],
         #                  f"patient_labels_{self.config['dataset_name']}.csv"))
@@ -85,10 +85,10 @@ class WSITrainer(BaseTrainer):
         """Create and initialize the WSI model."""
         if self.model_name == 'Prototype':
             model = ProtoMIL_V0(
-                input_dim = self.config['wsi']['input_dim'],
-                num_prototypes=self.config['wsi']['prototype']['num_prototypes'],
-                tau=self.config['wsi']['prototype']['tau'],
-                num_classes = self.config['num_classes']
+                input_dim = self.config['wsi_training']['input_dim'],
+                num_prototypes=self.config['wsi_training']['num_prototypes'],
+                tau=self.config['wsi_training']['tau'],
+                num_classes = self.config['n_classes']
             )
 
             # Define criterion, optimizer and scheduler
@@ -132,7 +132,7 @@ class WSITrainer(BaseTrainer):
         total = 0
         start_time = time.time()
 
-        for patient_ids, data_object in train_loader.dataset.items():
+        for patient_ids, data_object in train_loader.items():
             images, targets, _ = data_object
             images, targets = images.to(self.device), targets.to(self.device)
 
@@ -184,7 +184,7 @@ class WSITrainer(BaseTrainer):
         all_patient_ids = []
 
         with torch.no_grad():
-            for patient_ids, data_object in val_loader.dataset.items():
+            for patient_ids, data_object in val_loader.items():
                 images, targets, _ = data_object
                 images, targets = images.to(self.device), targets.to(self.device)
 

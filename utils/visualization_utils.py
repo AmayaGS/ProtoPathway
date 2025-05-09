@@ -8,18 +8,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.ticker import MaxNLocator
-from sklearn.metrics import (
-    confusion_matrix, roc_curve, precision_recall_curve, auc,
-    average_precision_score, roc_auc_score, f1_score, precision_score, recall_score
-)
+from sklearn.metrics import roc_curve, precision_recall_curve, auc, average_precision_score
+
 from sklearn.preprocessing import label_binarize
 import itertools
-import logging
 from typing import Dict, List, Tuple, Any, Optional, Union
 
 from utils.helpers import ensure_directory
-#
-# logger = logging.getLogger('protopathway')
 
 
 # ============================== INDIVIDUAL PLOT FUNCTIONS ==============================
@@ -551,23 +546,22 @@ def create_result_summary(fold_results: pd.DataFrame, config: Dict, output_path:
         if 'best_epoch' in fold_results.columns:
             f.write(f"\nAverage best epoch: {fold_results['best_epoch'].mean():.1f}\n")
 
-        f.write("\nTraining Configuration:\n")
-        f.write(f"  Learning rate: {config['ge_training']['learning_rate']}\n")
-        f.write(f"  Batch size: {config['ge_training']['batch_size']}\n")
-        f.write(f"  Number of epochs: {config['ge_training']['num_epochs']}\n")
-        f.write(f"  Dropout rate: {config['ge_training']['dropout_rate']}\n")
-        f.write(f"  L1 regularization: {config['ge_training']['L1_norm']}\n")
-        f.write(f"  L2 regularization: {config['ge_training']['L2_norm']}\n")
+        # f.write("\nTraining Configuration:\n")
+        # f.write(f"  Learning rate: {config['ge_training']['learning_rate']}\n")
+        # f.write(f"  Batch size: {config['training']['batch_size']}\n")
+        # f.write(f"  Number of epochs: {config['training']['num_epochs']}\n")
+        # f.write(f"  Dropout rate: {config['ge_training']['dropout_rate']}\n")
+        # f.write(f"  L1 regularization: {config['ge_training']['L1_norm']}\n")
+        # f.write(f"  L2 regularization: {config['ge_training']['L2_norm']}\n")
+        #
+        # f.write("\nModel Configuration:\n")
+        # if 'hidden_dim' in config['ge_training']:
+        #     f.write(f"  Hidden dimensions: {config['ge_training']['hidden_dim']}\n")
+        # if 'num_classes' in config:
+        #     f.write(f"  Number of classes: {config['num_classes']}\n")
+        # if 'label_dict' in config:
+        #     f.write(f"  Class mapping: {config['label_dict']}\n")
 
-        f.write("\nModel Configuration:\n")
-        if 'hidden_dim' in config['ge_training']:
-            f.write(f"  Hidden dimensions: {config['ge_training']['hidden_dim']}\n")
-        if 'num_classes' in config:
-            f.write(f"  Number of classes: {config['num_classes']}\n")
-        if 'label_dict' in config:
-            f.write(f"  Class mapping: {config['label_dict']}\n")
-
-    #logger.info(f"Created comprehensive results summary at {output_path}")
 
 
 # ============================== MAIN VISUALIZATION FUNCTIONS ==============================
@@ -602,7 +596,7 @@ def visualize_fold_results(
     best_epoch, best_metrics = get_best_epoch_data(fold_data['history'], metric_for_best, mode)
 
     # Get class names
-    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['num_classes'])]
+    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
 
     # 1. Plot learning curves with best epoch marked
     plot_learning_curves(
@@ -839,7 +833,7 @@ def visualize_full_training_results(
     best_epoch, best_metrics = get_best_epoch_data(history, metric_for_best, mode)
 
     # Get class names
-    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['num_classes'])]
+    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
 
     # 1. Plot learning curves with best epoch marked
     plot_learning_curves(

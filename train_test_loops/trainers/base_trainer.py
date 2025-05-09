@@ -29,9 +29,9 @@ class BaseTrainer(ABC):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Common parameters
-        self.num_epochs = config['ge_training']['num_epochs']
-        self.checkpoint = config['ge_training']['checkpoint']
-        self.weight_type = config['ge_training']['weight_type']
+        self.num_epochs = config['training']['num_epochs']
+        self.checkpoint = config['training']['checkpoint']
+        self.weight_type = config['training']['weight_type']
         self.metric_to_track = 'loss' if self.weight_type == 'loss' else 'acc' if self.weight_type == 'accuracy' else 'auc'
         self.mode = 'min' if self.weight_type == 'loss' else 'max'
 

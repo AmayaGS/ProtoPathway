@@ -37,4 +37,4 @@ class ProtoMIL_V0(nn.Module):
         # 4) classifier
         out = self.classifier(h)
 
-        return out, sim
+        return out.unsqueeze(0), sim
