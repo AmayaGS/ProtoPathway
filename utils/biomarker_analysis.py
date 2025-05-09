@@ -528,6 +528,41 @@ class BiomarkerAnalysis:
         figure_dir = os.path.join(output_dir, "figures")
         figure_paths = self.visualize_biomarkers(figure_dir)
 
+        # Save patient-level results
+        patient_level_path = os.path.join(output_dir, "patient_level_results.csv")
+
+        # Create a basic DataFrame with patient info
+        patient_df = pd.DataFrame({
+            "patient_id": self.patient_data["patient_id"],
+            "true_label": self.patient_data["true_label"],
+            "pred_label": self.patient_data["pred_label"]
+        })
+
+        # Add class names if available
+        if self.label_dict:
+            patient_df["true_class"] = [self.label_dict.get(str(label), f"Class_{label}")
+                                        for label in self.patient_data["true_label"]]
+            patient_df["pred_class"] = [self.label_dict.get(str(label), f"Class_{label}")
+                                        for label in self.patient_data["pred_label"]]
+
+        # Add top pathways for each patient
+        for i, patient_id in enumerate(self.patient_data["patient_id"]):
+            # Get pathway importance for this patient
+            pathway_imp = self.patient_data["pathway_importance"][i].cpu().numpy()
+
+            # Get indices of top 5 pathways
+            top_indices = np.argsort(pathway_imp)[::-1][:5]
+
+            # Add to dataframe
+            for rank, p_idx in enumerate(top_indices):
+                p_name = self.pathway_names[p_idx]
+                p_value = pathway_imp[p_idx]
+                patient_df.at[i, f"top_pathway_{rank + 1}"] = p_name
+                patient_df.at[i, f"top_pathway_{rank + 1}_importance"] = f"{p_value:.4f}"
+
+        # Save to CSV
+        patient_df.to_csv(patient_level_path, index=False)
+
         # Create summary markdown report
         report_path = os.path.join(output_dir, "biomarker_report.md")
 
@@ -602,6 +637,7 @@ class BiomarkerAnalysis:
             "report": report_path,
             "pathway_biomarkers": pathway_csv,
             "gene_biomarkers": gene_csv,
+            "patient_level_results": patient_level_path,
             "figures": figure_paths
         }
 

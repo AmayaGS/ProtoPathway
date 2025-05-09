@@ -13,15 +13,15 @@ patient_id: 'Patient_ID'
 
 # Execution mode
 execution:
-  mode: "gene_expression"  # choices: ["gene_expression", "wsi", "multimodal"]
+  mode: "wsi"  # choices: ["gene_expression", "wsi", "multimodal"]
   ge_preprocess: false
   wsi_preprocess: false
   wsi_segmentation: false
   create_splits: false
   cross_validation: false
-  full_train: false
+  full_train: true
   test: false
-  visualise: true
+  visualise: false
 
 ## Model configuration
 #model:
@@ -29,7 +29,7 @@ execution:
 
 # Gene Expression specific configuration
 gene_expression:
-  enabled: true  # Set to false to disable gene expression branch
+  enabled: false  # Set to false to disable gene expression branch
   model: 'Hypergraph'  # Gene expression model to use - Choices: ['MLP', 'Hypergraph']
   input:
     gtf_file: "${base_dir}/input_files/Homo_sapiens.GRCh38.113.gtf"
@@ -50,7 +50,7 @@ gene_expression:
 
 # WSI specific configuration
 wsi:
-  enabled: false  # Set to true to enable WSI branch
+  enabled: true  # Set to true to enable WSI branch
   model: 'Prototype'  # WSI model to use
   input:
     slides_dir: "${base_dir}/input_files/slides/${dataset_name}"
@@ -89,7 +89,7 @@ output:
     filtered_genes: "${output_dir}/processed_data/gene_expression_filtered_${dataset_name}.csv"
     reactome_pathways: "${output_dir}/processed_data/reactome_pathways_gene_lists.csv"
     final_pathways: "${output_dir}/processed_data/final_filtered_reactome_pathways.csv"
-    wsi_features: "${output_dir}/processed_data/wsi_features_${dataset_name}.h5"
+    wsi_features: "${output_dir}/processed_data/embedding_dict_${dataset_name}_UNI_all.pkl"
     wsi_patches: "${output_dir}/processed_data/wsi_patches_${dataset_name}.csv"
   figures:
     dir: "${output_dir}/figures/"

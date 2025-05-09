@@ -220,6 +220,88 @@ def load_train_test_split(data_dict, split_dict):
     return train_dict, test_dict
 
 
+def load_wsi_folds(data, split_dict, is_cv=True):
+
+    training_folds = []
+    validation_folds = []
+
+    if is_cv:
+        # Handle cross-validation folds
+        for fold_name, splits in split_dict["CV"].items():
+            train_data = {pid: data[pid] for pid in splits["Train"]}
+            val_data = {pid: data[pid] for pid in splits["Val"]}
+            training_folds.append(train_data)
+            validation_folds.append(val_data)
+    else:
+        # Handle train/test split
+        train_data = {k: data[k] for k in split_dict['Train']}
+        test_data = {k: data[k] for k in split_dict['Test']}
+        training_folds.append(train_data)
+        validation_folds.append(test_data)
+
+    return training_folds, validation_folds
+
+
+def load_folds(data, split_dict, is_cv=False, ignore_missing=False):
+    """
+    Load training and validation/test folds from a split dictionary.
+
+    Args:
+        data: Data dictionary or DataFrame to extract folds from
+        split_dict: Dictionary with train/validation/test splits
+        is_cv: Whether to load cross-validation folds (True) or train/test split (False)
+        ignore_missing: If True, skip missing keys; if False, raise an error for missing keys
+
+    Returns:
+        Tuple of (training_folds, validation_folds)
+    """
+    training_folds = []
+    validation_folds = []
+
+    if is_cv:
+        # Handle cross-validation folds
+        for fold_name, splits in split_dict["CV"].items():
+            # Create train and validation dictionaries using dict comprehensions
+            if ignore_missing:
+                train_data = {pid: data[pid] for pid in splits["Train"] if pid in data}
+                val_data = {pid: data[pid] for pid in splits["Val"] if pid in data}
+            else:
+                # Check for missing keys before creating the dictionaries
+                missing_train = [pid for pid in splits["Train"] if pid not in data]
+                missing_val = [pid for pid in splits["Val"] if pid not in data]
+
+                if missing_train or missing_val:
+                    missing = missing_train + missing_val
+                    raise KeyError(f"Keys {missing} from fold {fold_name} are not present in data")
+
+                train_data = {pid: data[pid] for pid in splits["Train"]}
+                val_data = {pid: data[pid] for pid in splits["Val"]}
+
+            training_folds.append(train_data)
+            validation_folds.append(val_data)
+    else:
+        # Handle train/test split
+        if ignore_missing:
+            train_data = {k: data[k] for k in split_dict['Train'] if k in data}
+            test_data = {k: data[k] for k in split_dict['Test'] if k in data}
+        else:
+            # Check for missing keys before creating the dictionaries
+            missing_train = [k for k in split_dict['Train'] if k not in data]
+            missing_test = [k for k in split_dict['Test'] if k not in data]
+
+            if missing_train or missing_test:
+                missing = missing_train + missing_test
+                raise KeyError(f"Keys {missing} are not present in data")
+
+            train_data = {k: data[k] for k in split_dict['Train']}
+            test_data = {k: data[k] for k in split_dict['Test']}
+
+        training_folds.append(train_data)
+        validation_folds.append(test_data)
+
+    return training_folds, validation_folds
+
+
 def minority_sampler(dataset):
 
     # Get labels

@@ -9,13 +9,12 @@ from utils.logging_utils import ExperimentLogger
 from runners.gene_preprocessing import gene_expression_preprocessing
 from runners.gene_training_run import train_gene_expression_model
 from runners.gene_test_run import test_gene_expression_model
-#from runners.ge_visualisation_run import test_ge_model_with_biomarkers
 
 # Import WSI-specific runners
-# from runners.wsi_preprocessing_run import wsi_preprocessing
-# from runners.wsi_training_run import train_wsi_model
+from runners.wsi_preprocessing import wsi_preprocessing
+from runners.wsi_training_run import train_wsi_model
 # from runners.wsi_test_run import test_wsi_model
-#
+
 # # Import multimodal runners
 # from runners.multimodal_run import train_multimodal_model
 # from runners.multimodal_test_run import test_multimodal_model
@@ -72,11 +71,11 @@ def main(config, experiment_logger):
             gene_expression_preprocessing(config)
             logger.info("Gene Expression preprocessing complete")
 
-    # if execution_mode == "wsi" or execution_mode == "multimodal":
-    #     if config['execution']['wsi_preprocess'] and config['wsi']['enabled']:
-    #         logger.info("WSI preprocessing")
-    #         wsi_preprocessing(config)
-    #         logger.info("WSI preprocessing complete")
+    if execution_mode == "wsi" or execution_mode == "multimodal":
+        if config['execution']['wsi_preprocess'] and config['wsi']['enabled']:
+            logger.info("WSI preprocessing")
+            wsi_preprocessing(config)
+            logger.info("WSI preprocessing complete")
 
     # Execute mode-specific ge_training and testing
     training_performed = False
@@ -114,18 +113,18 @@ def main(config, experiment_logger):
         #     logger.info("Visualization complete")
 
     # # WSI mode
-    # elif execution_mode == "wsi":
-    #     if config['execution']['cross_validation']:
-    #         logger.info("Cross-validation of the WSI model")
-    #         train_wsi_model(config, experiment_logger=experiment_logger)
-    #         logger.info("Cross-validation complete")
-    #         training_performed = True
-    #
-    #     if config['execution']['full_train']:
-    #         logger.info("Full ge_training of the WSI model")
-    #         train_wsi_model(config, is_full_train=True, experiment_logger=experiment_logger)
-    #         logger.info("Training complete")
-    #         training_performed = True
+    elif execution_mode == "wsi":
+        if config['execution']['cross_validation']:
+            logger.info("Cross-validation of the WSI model")
+            train_wsi_model(config, experiment_logger=experiment_logger)
+            logger.info("Cross-validation complete")
+            training_performed = True
+
+        if config['execution']['full_train']:
+            logger.info("Full ge_training of the WSI model")
+            train_wsi_model(config, is_full_train=True, experiment_logger=experiment_logger)
+            logger.info("Training complete")
+            training_performed = True
     #
     #     if config['execution']['test']:
     #         logger.info("Testing the WSI model")
