@@ -7,6 +7,8 @@ import pandas as pd
 from utils.helpers import ensure_directory
 from utils.model_utils import load_wsi_folds, load_folds
 
+from utils.kmeans_init import sample_embeddings, init_prototypes
+
 from train_test_loops.trainers.wsi_trainer import WSITrainer
 from utils.visualization_utils import (
     visualize_fold_results,
@@ -80,6 +82,7 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
         training_folds, validation_folds = load_folds(wsi_features, split_dict, is_cv=True, ignore_missing=True)
         n_folds = len(split_dict['CV'])
 
+
     fold_histories = []
     fold_summaries = []
 
@@ -87,6 +90,12 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
     for fold_idx, (train_fold, val_fold) in enumerate(zip(training_folds, validation_folds)):
         fold_name = "Full Training" if is_full_train else f"Fold {fold_idx + 1}/{n_folds}"
         logger.info(f"=== Training {fold_name} ===")
+
+        # load pre-computed centroids to initialize the model
+        sample_wsi_features = sample_embeddings(train_fold)
+        init_centroids = init_prototypes(sample_wsi_features,
+                                         n_proto=config['wsi_training']['num_prototypes'],
+                                         centroid_path=config['output']['data']['wsi_centroids'])
 
         # Create a WSITrainer instance
         trainer = WSITrainer(

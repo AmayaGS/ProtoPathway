@@ -248,20 +248,47 @@ class ExperimentLogger:
             model_name = "unknown"
             if mode == "gene_expression":
                 model_name = self.config.get('gene_expression', {}).get('model', 'unknown')
+                # Get training hyperparameters
+                training_config = self.config.get('ge_training', {})
+                lr = training_config.get('learning_rate', 0)
+                batch_size = training_config.get('batch_size', 0)
+                dropout = training_config.get('dropout_rate', 0)
+                l1_reg = training_config.get('L1_norm', 0)
+                l2_reg = training_config.get('L2_norm', 0)
+                num_layers = training_config.get('num_layers', 0)
+                hidden_dim = training_config.get('hidden_dim', 0)
             elif mode == "wsi":
                 model_name = self.config.get('wsi', {}).get('model', 'unknown')
+                # Get training hyperparameters
+                training_config = self.config.get('wsi_training', {})
+                lr = training_config.get('learning_rate', 0)
+                batch_size = training_config.get('batch_size', 0)
+                dropout = training_config.get('dropout_rate', 0)
+                l1_reg = training_config.get('L1_norm', 0)
+                l2_reg = training_config.get('L2_norm', 0)
+                num_layers = training_config.get('num_layers', 0)
+                hidden_dim = training_config.get('hidden_dim', 0)
             elif mode == "multimodal":
                 model_name = f"MM-{self.config.get('multimodal', {}).get('fusion_type', 'unknown')}"
+                # Get training hyperparameters
+                training_config = self.config.get('mm_training', {})
+                lr = training_config.get('learning_rate', 0)
+                batch_size = training_config.get('batch_size', 0)
+                dropout = training_config.get('dropout_rate', 0)
+                l1_reg = training_config.get('L1_norm', 0)
+                l2_reg = training_config.get('L2_norm', 0)
+                num_layers = training_config.get('num_layers', 0)
+                hidden_dim = training_config.get('hidden_dim', 0)
 
-            # Get training hyperparameters
-            training_config = self.config.get('ge_training', {})
-            lr = training_config.get('learning_rate', 0)
-            batch_size = training_config.get('batch_size', 0)
-            dropout = training_config.get('dropout_rate', 0)
-            l1_reg = training_config.get('L1_norm', 0)
-            l2_reg = training_config.get('L2_norm', 0)
-            num_layers = training_config.get('num_layers', 0)
-            hidden_dim = training_config.get('hidden_dim', 0)
+            # # Get training hyperparameters
+            # training_config = self.config.get('ge_training', {})
+            # lr = training_config.get('learning_rate', 0)
+            # batch_size = training_config.get('batch_size', 0)
+            # dropout = training_config.get('dropout_rate', 0)
+            # l1_reg = training_config.get('L1_norm', 0)
+            # l2_reg = training_config.get('L2_norm', 0)
+            # num_layers = training_config.get('num_layers', 0)
+            # hidden_dim = training_config.get('hidden_dim', 0)
 
             # Get dataset information
             dataset_name = self.config.get('dataset_name', 'unknown')

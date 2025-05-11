@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 
 from train_test_loops.trainers.base_trainer import BaseTrainer
-from models.Prototype import ProtoMIL_V0
+from models.Prototype import ProtoMIL_V0, ProtoMIL_V1
 
 
 class WSITrainer(BaseTrainer):
@@ -39,56 +39,25 @@ class WSITrainer(BaseTrainer):
         """
 
         return train_data, val_data
-        # labels_df = pd.read_csv(
-        #     os.path.join(self.config['output']['data']['dir'],
-        #                  f"patient_labels_{self.config['dataset_name']}.csv"))
-        #
-        # # For WSI data, we need to create patch-based datasets
-        # if self.model_name == 'ProtoNet':
-        #     # Create patch datasets
-        #     train_dataset = WSIPatchDataset(
-        #         self.config,
-        #         train_data,
-        #         labels_df,
-        #         transform=get_transform(self.config, is_training=True)
-        #     )
-        #
-        #     val_dataset = WSIPatchDataset(
-        #         self.config,
-        #         val_data,
-        #         labels_df,
-        #         transform=get_transform(self.config, is_training=False)
-        #     )
-        #
-        #     # Create dataloaders
-        #     train_loader = DataLoader(
-        #         train_dataset,
-        #         batch_size=self.config['ge_training']['batch_size'],
-        #         num_workers=self.config['ge_training']['num_workers'],
-        #         shuffle=True,
-        #         drop_last=False
-        #     )
-        #
-        #     val_loader = DataLoader(
-        #         val_dataset,
-        #         batch_size=self.config['ge_training']['batch_size'],
-        #         num_workers=self.config['ge_training']['num_workers'],
-        #         shuffle=False
-        #     )
-        #
-        # else:
-        #     raise ValueError(f"Unsupported WSI model: {self.model_name}")
-        #
-        # return train_loader, val_loader
+
 
     def create_model(self):
         """Create and initialize the WSI model."""
         if self.model_name == 'Prototype':
-            model = ProtoMIL_V0(
+
+            # Load centroids if provided
+            if self.config['output']['data']['wsi_centroids'] is not None:
+                centroid_path = self.config['output']['data']['wsi_centroids']
+                centroids = torch.load(centroid_path, weights_only=True, map_location=self.device)
+            else:
+                centroids = None
+
+            model = ProtoMIL_V1(
                 input_dim = self.config['wsi_training']['input_dim'],
                 num_prototypes=self.config['wsi_training']['num_prototypes'],
                 tau=self.config['wsi_training']['tau'],
-                num_classes = self.config['n_classes']
+                num_classes = self.config['n_classes'],
+                init_centroids= centroids
             )
 
             # Define criterion, optimizer and scheduler
@@ -230,7 +199,7 @@ class WSITrainer(BaseTrainer):
         if all_probs.shape[1] == 2:
             metrics['auc'] = roc_auc_score(all_targets, all_probs[:, 1])
         else:
-            n_classes = self.config['num_classes']
+            n_classes = self.config['n_classes']
             binary_labels = label_binarize(all_targets, classes=list(range(n_classes)))
             metrics['auc'] = roc_auc_score(binary_labels, all_probs, average='macro', multi_class='ovr')
             metrics['precision'] = average_precision_score(
