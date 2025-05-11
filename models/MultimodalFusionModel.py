@@ -22,7 +22,7 @@ class ProtoPathwayFusion(torch.nn.Module):
                                               hidden_channels=config['ge_training']['hidden_dim'],
                                               out_channels=config['n_classes'],
                                               num_layers=config['ge_training']['num_layers'],
-                                              dropout=config['ge_training']['dropout']).to(device)
+                                              dropout=config['ge_training']['dropout_rate']).to(device)
 
         # Initialize the WSI model
         self.wsi_model = ProtoMIL_V1(config, input_dim=config['wsi_training']['input_dim'],
@@ -31,13 +31,14 @@ class ProtoPathwayFusion(torch.nn.Module):
 
         # Initialize MHSA cross-attention between pathway embeddings and prototypes
         self.proto_pathway_attention = nn.MultiheadAttention(
-                                        embed_dim=config['wsi_training']['input_dim'],
-                                        num_heads=config['wsi_training']['num_heads'],
-                                        dropout=config['wsi_training']['dropout']
-                                        ).to(device)
+                                        embed_dim=config['mm_training']['input_dim'],
+                                        num_heads=config['mm_training']['attention_heads'],
+                                        dropout=config['mm_training']['dropout_rate'],
+                                        batch_first=True
+                                        ).to(device) # change this to the mm_training after setup in config
 
         # Initialize the final classifier
-        self.classifier = nn.Linear(config['wsi_training']['input_dim'], config['n_classes']).to(device)
+        self.classifier = nn.Linear(config['mm_training']['input_dim'], config['n_classes']).to(device)
 
     def forward(self, ge_data, wsi_data):
         """
@@ -57,10 +58,10 @@ class ProtoPathwayFusion(torch.nn.Module):
                                                                         key=pathway_emb,
                                                                         value=pathway_emb,
                                                                         need_weights=True,
-                                                                        average_attn_weights=True,
-                                                                         batch_first=True)
+                                                                        average_attn_weights=True
+                                                                         )
 
         # Classifier on the attention output
-        logits = self.classifier(attention_output.squeeze(1))
+        logits = self.classifier(attended_proto.squeeze(1))
 
         return logits

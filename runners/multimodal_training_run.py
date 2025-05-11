@@ -12,8 +12,6 @@ from utils.model_utils import load_wsi_folds, load_folds
 
 from utils.kmeans_init import sample_embeddings, init_prototypes
 
-from train_test_loops.trainers.gene_trainer import GeneExpressionTrainer
-from train_test_loops.trainers.wsi_trainer import WSITrainer
 from train_test_loops.trainers.multimodal_trainer import MultimodalTrainer
 
 from utils.visualization_utils import (
@@ -117,12 +115,77 @@ def train_multimodal_model(config, is_full_train=False, experiment_logger=None):
             fold_idx=fold_idx
         )
 
-        ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader = mm_trainer.prepare_data(
-            ge_train_fold,
-            wsi_train_fold,
-            ge_val_fold,
-            wsi_val_fold
+        model, history = mm_trainer.train(
+            ge_train_fold,    # Main training data (gene expression)
+            ge_val_fold,      # Main validation data (gene expression)
+            wsi_train_fold,   # Auxiliary training data (WSI)
+            wsi_val_fold      # Auxiliary validation data (WSI)
         )
+
+        # Store fold results
+        fold_data = {
+            'fold': fold_idx,
+            'history': history,
+            'model_path': os.path.join(model_dir, mm_trainer.checkpoint_name)
+        }
+
+        fold_histories.append(fold_data)
+
+        # Generate visualizations for this fold
+        logger.info(f"Generating visualizations for {fold_name}")
+
+        metric_for_best = 'acc' if config['training']['weight_type'] == 'accuracy' else 'loss'
+        mode = 'max' if config['training']['weight_type'] == 'accuracy' else 'min'
+
+        fold_summary = visualize_fold_results(
+            fold_data,
+            fold_idx,
+            plots_dir,
+            config,
+            metric_for_best=metric_for_best,
+            mode=mode
+        )
+
+        fold_summaries.append(fold_summary)
+        logger.info(f"Completed {fold_name} training and visualization")
+
+    # Process results depending on run type
+    if is_full_train:
+        # For full training, generate comprehensive visualizations
+        logger.info("Generating full training visualizations")
+        visualize_full_training_results(
+            fold_histories[0]['history'],
+            plots_dir,
+            config,
+            metric_for_best=metric_for_best,
+            mode=mode
+        )
+    else:
+        # For cross-validation, generate aggregated results
+        logger.info("Generating aggregated cross-validation visualizations")
+        visualize_aggregated_results(
+            fold_summaries,
+            fold_histories,
+            plots_dir,
+            config
+        )
+
+    # Save all fold histories for later use
+    history_path = os.path.join(metrics_dir, f"{run_type}_histories.pkl")
+    with open(history_path, 'wb') as f:
+        pickle.dump(fold_histories, f)
+
+    logger.info(f"Saved complete training histories to {history_path}")
+    logger.info(f"{run_type.capitalize()} completed successfully!")
+
+    return {
+        'fold_histories': fold_histories,
+        'fold_summaries': fold_summaries
+    }
+
+
+
+
 
 
 

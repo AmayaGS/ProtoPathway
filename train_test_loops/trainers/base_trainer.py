@@ -56,17 +56,23 @@ class BaseTrainer(ABC):
             'loss': 0.05
         }
 
+        # Execution mode
+        self.is_multimodal = (config['execution']['mode'] == 'multimodal')
+
     @abstractmethod
-    def prepare_data(self, train_data, val_data):
+    def prepare_data(self, train_data, val_data, aux_train_data=None, aux_val_data=None):
         """
         Prepare data loaders for ge_training and validation.
 
         Args:
             train_data: Training data
             val_data: Validation data
+            aux_train_data: Auxiliary training data (for multimodal)
+            aux_val_data: Auxiliary validation data (for multimodal)
 
         Returns:
-            train_loader, val_loader
+            For single modality: train_loader, val_loader
+            For multimodal: main_train_loader, main_val_loader, aux_train_loader, aux_val_loader
         """
         pass
 
@@ -81,7 +87,7 @@ class BaseTrainer(ABC):
         pass
 
     @abstractmethod
-    def train_epoch(self, model, train_loader, optimizer, criterion):
+    def train_epoch(self, model, train_loader, optimizer, criterion, aux_train_loader=None):
         """
         Run one ge_training epoch.
 
@@ -97,7 +103,7 @@ class BaseTrainer(ABC):
         pass
 
     @abstractmethod
-    def validate(self, model, val_loader, criterion):
+    def validate(self, model, val_loader, criterion, aux_val_loader=None):
         """
         Validate the model.
 
@@ -105,6 +111,7 @@ class BaseTrainer(ABC):
             model: The model to validate
             val_loader: DataLoader for validation data
             criterion: Loss function
+            aux_val_loader: Optional auxiliary validation data loader (for multimodal)
 
         Returns:
             Dictionary of validation metrics
@@ -177,7 +184,7 @@ class BaseTrainer(ABC):
         # Default case - no saving
         return False, save_reason
 
-    def train(self, train_data, val_data, fold_idx=None):
+    def train(self, train_data, val_data, aux_train_data=None, aux_val_data=None, fold_idx=None):
         """
         Main ge_training loop.
 
@@ -189,8 +196,16 @@ class BaseTrainer(ABC):
         Returns:
             Tuple of (trained_model, training_history)
         """
-        # Prepare data
-        train_loader, val_loader = self.prepare_data(train_data, val_data)
+        # Prepare data based on whether we're doing multimodal training
+        if self.is_multimodal and (aux_train_data is not None and aux_val_data is not None):
+            loaders = self.prepare_data(train_data, val_data, aux_train_data, aux_val_data)
+            if len(loaders) == 4:
+                train_loader, val_loader, aux_train_loader, aux_val_loader = loaders
+            else:
+                raise ValueError("Multimodal prepare_data should return 4 data loaders")
+        else:
+            train_loader, val_loader = self.prepare_data(train_data, val_data)
+            aux_train_loader, aux_val_loader = None, None
 
         # Create model and optimization components
         model, criterion, optimizer, lr_scheduler = self.create_model()
@@ -220,11 +235,11 @@ class BaseTrainer(ABC):
             self.logger.start_timer(f"epoch_{epoch}")
 
             # Train for one epoch
-            train_metrics = self.train_epoch(model, train_loader, optimizer, criterion)
+            train_metrics = self.train_epoch(model, train_loader, optimizer, criterion, aux_train_loader)
             self.logger.log_metrics(train_metrics, epoch, 'train')
 
             # Validate
-            val_metrics = self.validate(model, val_loader, criterion)
+            val_metrics = self.validate(model, val_loader, criterion, aux_val_loader)
             self.logger.log_metrics(val_metrics, epoch, 'val')
 
             # Update ge_training history
@@ -273,23 +288,23 @@ class BaseTrainer(ABC):
                         'optimizer_state_dict': optimizer.state_dict(),
                         'best_metrics': self.best_metrics,
                     }, path)
-                    print(f"Saved best model to {path}")
-                    print(f"Reason: {save_reason}")
+                    self.logger.logger.info(f"Saved best model to {path}")
+                    self.logger.logger.info(f"Reason: {save_reason}")
 
             # Stop epoch timer
             epoch_time = self.logger.stop_timer(f"epoch_{epoch}")
 
             # Print epoch summary
-            print(f"\nEpoch {epoch}/{self.num_epochs} completed in {epoch_time:.2f}s")
-            print(f"Train Loss: {train_metrics['loss']:.4f}, Train Acc: {train_metrics['acc']:.2f}%")
-            print(f"Val Loss: {val_metrics['loss']:.4f}, Val Acc: {val_metrics['acc']:.2f}%")
+            self.logger.logger.info(f"\nEpoch {epoch}/{self.num_epochs} completed in {epoch_time:.2f}s")
+            self.logger.logger.info(f"Train Loss: {train_metrics['loss']:.4f}, Train Acc: {train_metrics['acc']:.2f}%")
+            self.logger.logger.info(f"Val Loss: {val_metrics['loss']:.4f}, Val Acc: {val_metrics['acc']:.2f}%")
 
             if 'f1' in val_metrics:
-                print(f"Val F1: {val_metrics['f1']:.4f}, Val Precision: {val_metrics['precision']:.4f}, "
+                self.logger.logger.info(f"Val F1: {val_metrics['f1']:.4f}, Val Precision: {val_metrics['precision']:.4f}, "
                       f"Val Recall: {val_metrics['recall']:.4f}")
             if 'auc' in val_metrics:
-                print(f"Val AUC: {val_metrics['auc']:.4f}")
+                self.logger.logger.info(f"Val AUC: {val_metrics['auc']:.4f}")
 
-            print(f"Best val {self.metric_to_track}: {self.best_metrics[self.metric_to_track]:.4f}\n" + "-" * 50)
+            self.logger.logger.info(f"Best val {self.metric_to_track}: {self.best_metrics[self.metric_to_track]:.4f}\n" + "-" * 50)
 
         return model, history

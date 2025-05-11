@@ -60,54 +60,118 @@ class MultimodalTrainer(BaseTrainer):
         self.wsi_feature_dim = None
         self.hypergraph_data = None
 
-    def prepare_data(self, ge_train_data, wsi_train_data, ge_val_data, wsi_val_data):
+    def prepare_data(self, train_data, val_data, aux_train_data=None, aux_val_data=None):
         """
-        Prepare data loaders for ge_training and validation.
+        Prepare data loaders for training and validation.
 
         Args:
-            train_data: Dictionary with 'gene_expression' and 'wsi' data
-            val_data: Dictionary with 'gene_expression' and 'wsi' data
+            train_data: Gene expression training data
+            val_data: Gene expression validation data
+            aux_train_data: WSI training data
+            aux_val_data: WSI validation data
 
         Returns:
-            train_loader, val_loader
+            Tuple of (ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader)
         """
 
+        # For multimodal training, we need both gene expression and WSI data
+        if aux_train_data is None or aux_val_data is None:
+            self.logger.logger.warning("Multimodal training requires both gene expression and WSI data")
+            # Use the provided data as gene expression, and no WSI data
+            ge_train_data, ge_val_data = train_data, val_data
+            wsi_train_data, wsi_val_data = {}, {}
+        else:
+            # Use the provided data as expected
+            ge_train_data, ge_val_data = train_data, val_data
+            wsi_train_data, wsi_val_data = aux_train_data, aux_val_data
+
+        labels_df = pd.read_csv(
+            os.path.join(self.config['output']['data']['dir'],
+                         f"patient_labels_{self.config['dataset_name']}.csv"))
+
         if self.ge_model_name == 'Hypergraph':
-
-            labels_df = pd.read_csv(
-                os.path.join(self.config['output']['data']['dir'],
-                             f"patient_labels_{self.config['dataset_name']}.csv"))
-
+            # Build hypergraph representation
             data = build_incidence_matrix(
                 self.config['output']['data']['final_pathways'],
                 pd.concat([ge_train_data, ge_val_data])
             )
+            self.hypergraph_data = data
 
+            # Create datasets
             ge_train_dataset = HypergraphDataset(self.config, ge_train_data, labels_df, data)
             ge_val_dataset = HypergraphDataset(self.config, ge_val_data, labels_df, data)
 
             # Create dataloaders
             ge_train_loader = PyGDataLoader(
                 ge_train_dataset,
-                batch_size=self.config['ge_training']['batch_size'],
-                num_workers=self.config['ge_training']['num_workers'],
+                batch_size=self.config['training']['batch_size'],
+                num_workers=self.config['training']['num_workers'],
                 shuffle=True,
                 drop_last=False
             )
 
             ge_val_loader = PyGDataLoader(
                 ge_val_dataset,
-                batch_size=self.config['ge_training']['batch_size'],
-                num_workers=self.config['ge_training']['num_workers'],
+                batch_size=self.config['training']['batch_size'],
+                num_workers=self.config['training']['num_workers'],
                 shuffle=False
             )
 
-            if self.wsi_model_name == 'Prototype':
-                # WSI data is already in the correct format
-                wsi_train_loader = wsi_train_data
-                wsi_val_loader = wsi_val_data
+        # For WSI data, we just use the dictionaries directly
+        wsi_train_loader = wsi_train_data
+        wsi_val_loader = wsi_val_data
 
-            return ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader
+        return ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader
+
+    # def prepare_data(self, ge_train_data, ge_val_data,
+    #                  wsi_train_data, wsi_val_data):
+    #     """
+    #     Prepare data loaders for ge_training and validation.
+    #
+    #     Args:
+    #         train_data: Dictionary with 'gene_expression' and 'wsi' data
+    #         val_data: Dictionary with 'gene_expression' and 'wsi' data
+    #
+    #     Returns:
+    #         train_loader, val_loader
+    #     """
+    #
+    #     if self.ge_model_name == 'Hypergraph':
+    #
+    #         labels_df = pd.read_csv(
+    #             os.path.join(self.config['output']['data']['dir'],
+    #                          f"patient_labels_{self.config['dataset_name']}.csv"))
+    #
+    #         data = build_incidence_matrix(
+    #             self.config['output']['data']['final_pathways'],
+    #             pd.concat([ge_train_data, ge_val_data])
+    #         )
+    #
+    #         ge_train_dataset = HypergraphDataset(self.config, ge_train_data, labels_df, data)
+    #         ge_val_dataset = HypergraphDataset(self.config, ge_val_data, labels_df, data)
+    #
+    #         # Create dataloaders
+    #         ge_train_loader = PyGDataLoader(
+    #             ge_train_dataset,
+    #             batch_size=self.config['ge_training']['batch_size'],
+    #             num_workers=self.config['ge_training']['num_workers'],
+    #             shuffle=True,
+    #             drop_last=False
+    #         )
+    #
+    #         ge_val_loader = PyGDataLoader(
+    #             ge_val_dataset,
+    #             batch_size=self.config['ge_training']['batch_size'],
+    #             num_workers=self.config['ge_training']['num_workers'],
+    #             shuffle=False
+    #         )
+    #
+    #         if self.wsi_model_name == 'Prototype':
+    #             # WSI data is already in the correct format
+    #             wsi_train_loader = wsi_train_data
+    #             wsi_val_loader = wsi_val_data
+    #
+    #         return ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader
 
 
     def create_model(self):
@@ -131,8 +195,8 @@ class MultimodalTrainer(BaseTrainer):
         # Define optimizer
         optimizer = torch.optim.AdamW(
             model.parameters(),
-            lr=self.config['ge_training']['learning_rate'],
-            weight_decay=self.config['ge_training']['L2_norm']
+            lr=self.config['mm_training']['learning_rate'],
+            weight_decay=self.config['mm_training']['L2_norm']
         )
 
         # Configure learning rate scheduler if needed
@@ -158,15 +222,16 @@ class MultimodalTrainer(BaseTrainer):
 
         return model, criterion, optimizer, lr_scheduler
 
-    def train_epoch(self, model, train_loader, optimizer, criterion):
+    def train_epoch(self, model, ge_train_loader, optimizer, criterion, wsi_train_loader=None):
         """
         Run one ge_training epoch.
 
         Args:
             model: The model to train
-            train_loader: DataLoader for ge_training data
+            ge_train_loader: DataLoader for gene expression training data
             optimizer: The optimizer
             criterion: Loss function
+            wsi_train_loader: DataLoader for WSI training data
 
         Returns:
             Dictionary of metrics for this epoch
@@ -177,28 +242,26 @@ class MultimodalTrainer(BaseTrainer):
         total = 0
         start_time = time.time()
 
-        for batch_idx, batch in enumerate(train_loader):
-            # Extract data from multimodal batch
-            gene_expr_data = batch['gene_expression'].to(self.device) if self.gene_expr_enabled else None
-            wsi_data = batch['wsi'].to(self.device) if self.wsi_enabled else None
-            target = batch['target'].to(self.device)
-            patient_id = batch['patient_id']
+        for batch_idx, batch in enumerate(ge_train_loader):
 
-            # Additional data for hypergraph models
-            hypergraph_data = None
-            if self.hypergraph_data is not None and 'hypergraph' in batch:
-                hypergraph_data = batch['hypergraph'].to(self.device)
+            batch.to(self.device)
+            patient_id = batch.patient_id
+            target = batch.y
+            ge_data = batch
 
-            # Forward pass
+            wsi_data = wsi_train_loader[patient_id[0]]
+            wsi_emb = wsi_data[0]
+            wsi_emb = wsi_emb.to(self.device)
+
             optimizer.zero_grad()
-            outputs = model(gene_expr_data, wsi_data, hypergraph_data)
+            outputs = model(ge_data, wsi_emb)
 
             # Calculate loss
             loss = criterion(outputs, target)
 
             # Add L1 regularization if configured
-            if self.config['ge_training']['L1_norm'] > 0:
-                l1_loss = l1_regularization(model, self.config['ge_training']['L1_norm'])
+            if self.config['mm_training']['L1_norm'] > 0:
+                l1_loss = l1_regularization(model, self.config['mm_training']['L1_norm'])
                 loss = loss + l1_loss
 
             # Backward pass and optimization
@@ -216,7 +279,7 @@ class MultimodalTrainer(BaseTrainer):
             total += batch_total
 
         # Calculate epoch metrics
-        avg_loss = total_loss / len(train_loader) if len(train_loader) > 0 else 0
+        avg_loss = total_loss / len(ge_train_loader)
         avg_acc = 100. * correct / total if total > 0 else 0
         epoch_time = time.time() - start_time
 
@@ -227,14 +290,15 @@ class MultimodalTrainer(BaseTrainer):
             'time': epoch_time
         }
 
-    def validate(self, model, val_loader, criterion):
+    def validate(self, model, ge_val_loader, criterion, wsi_val_loader=None):
         """
         Validate the model.
 
         Args:
             model: The model to validate
-            val_loader: DataLoader for validation data
+            ge_val_loader: DataLoader for gene expression validation data
             criterion: Loss function
+            wsi_val_loader: DataLoader for WSI validation data
 
         Returns:
             Dictionary of validation metrics
@@ -251,27 +315,20 @@ class MultimodalTrainer(BaseTrainer):
 
         # Disable gradient calculation for validation
         with torch.no_grad():
-            for batch in val_loader:
-                # Extract data from multimodal batch
-                gene_expr_data = batch['gene_expression'].to(self.device) if self.gene_expr_enabled else None
-                wsi_data = batch['wsi'].to(self.device) if self.wsi_enabled else None
-                target = batch['target'].to(self.device)
-                patient_id = batch['patient_id']
+            for batch_idx, batch in enumerate(ge_val_loader):
+                batch.to(self.device)
+                patient_id = batch.patient_id
+                target = batch.y
+                ge_data = batch
 
-                # Additional data for hypergraph models
-                hypergraph_data = None
-                if self.hypergraph_data is not None and 'hypergraph' in batch:
-                    hypergraph_data = batch['hypergraph'].to(self.device)
+                wsi_data = wsi_val_loader[patient_id]
 
-                # Forward pass
-                outputs = model(gene_expr_data, wsi_data, hypergraph_data)
+                outputs = model(ge_data, wsi_data)
 
                 # Calculate loss
                 loss = criterion(outputs, target)
-
-                # Calculate probabilities and predictions
-                probs = F.softmax(outputs, dim=1)
                 pred = outputs.argmax(dim=1)
+                probs = F.softmax(outputs, dim=1)
 
                 # Update metrics
                 total_loss += loss.item()
@@ -290,7 +347,7 @@ class MultimodalTrainer(BaseTrainer):
         all_probs = torch.cat(all_probs, dim=0).numpy()
 
         # Calculate metrics
-        avg_loss = total_loss / len(val_loader) if len(val_loader) > 0 else 0
+        avg_loss = total_loss / len(ge_val_loader)
         avg_acc = 100. * correct / total if total > 0 else 0
 
         # Compile all metrics

@@ -130,6 +130,7 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
 
         # Generate visualizations for this fold
         logger.info(f"Generating visualizations for {fold_name}")
+
         fold_summary = visualize_fold_results(
             fold_data,
             fold_idx,
