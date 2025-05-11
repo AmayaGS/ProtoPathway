@@ -59,13 +59,10 @@ class WSITrainer(BaseTrainer):
             else:
                 centroids = None
 
-            model = ProtoMIL_V1(
-                input_dim = self.config['wsi_training']['input_dim'],
-                num_prototypes=self.config['wsi_training']['num_prototypes'],
-                tau=self.config['wsi_training']['tau'],
-                num_classes = self.config['n_classes'],
-                init_centroids= centroids
-            )
+            model = ProtoMIL_V1(config, input_dim=self.config['wsi_training']['input_dim'],
+                                num_prototypes=self.config['wsi_training']['num_prototypes'],
+                                tau=self.config['wsi_training']['tau'], num_classes=self.config['n_classes'],
+                                init_centroids=centroids)
 
             # Define criterion, optimizer and scheduler
             criterion = torch.nn.CrossEntropyLoss()

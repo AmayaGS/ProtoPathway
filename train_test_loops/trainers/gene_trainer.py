@@ -86,16 +86,16 @@ class GeneExpressionTrainer(BaseTrainer):
             # Create dataloaders
             train_loader = PyGDataLoader(
                 train_dataset,
-                batch_size=self.config['ge_training']['batch_size'],
-                num_workers=self.config['ge_training']['num_workers'],
+                batch_size=self.config['training']['batch_size'],
+                num_workers=self.config['training']['num_workers'],
                 shuffle=True,
                 drop_last=False
             )
 
             val_loader = PyGDataLoader(
                 val_dataset,
-                batch_size=self.config['ge_training']['batch_size'],
-                num_workers=self.config['ge_training']['num_workers'],
+                batch_size=self.config['training']['batch_size'],
+                num_workers=self.config['training']['num_workers'],
                 shuffle=False
             )
 
@@ -120,13 +120,11 @@ class GeneExpressionTrainer(BaseTrainer):
             )
 
         if self.model_name == 'Hypergraph':
-            model = PathwayEmbeddingModel(
-                in_channels=1,
-                hidden_channels=self.config['ge_training']['hidden_dim'],
-                out_channels=self.config['num_classes'],
-                num_layers=self.config['ge_training']['num_layers'],
-                dropout=self.config['ge_training']['dropout_rate'],
-            )
+            model = PathwayEmbeddingModel(config, in_channels=1,
+                                          hidden_channels=self.config['ge_training']['hidden_dim'],
+                                          out_channels=self.config['num_classes'],
+                                          num_layers=self.config['ge_training']['num_layers'],
+                                          dropout=self.config['ge_training']['dropout_rate'])
 
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.AdamW(model.parameters(), lr=self.config['ge_training']['learning_rate'],

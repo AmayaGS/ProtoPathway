@@ -93,15 +93,15 @@ class GeneExpressionTester(BaseTester):
         """
         if self.model_name == 'Hypergraph':
             # Initialize the model
-            model = PathwayEmbeddingModel(
-                in_channels=1,
-                hidden_channels=self.config['ge_training']['hidden_dim'],
-                out_channels=self.config['num_classes'],
-                num_layers=self.config['ge_training']['num_layers'],
-                dropout=self.config['ge_training']['dropout_rate'],
-                gene_names=self.hypergraph_data['gene_names'] if self.hypergraph_data else None,
-                pathway_names=self.hypergraph_data['pathway_names'] if self.hypergraph_data else None
-            )
+            model = PathwayEmbeddingModel(config, in_channels=1,
+                                          hidden_channels=self.config['ge_training']['hidden_dim'],
+                                          out_channels=self.config['num_classes'],
+                                          num_layers=self.config['ge_training']['num_layers'],
+                                          dropout=self.config['ge_training']['dropout_rate'],
+                                          gene_names=self.hypergraph_data[
+                                              'gene_names'] if self.hypergraph_data else None,
+                                          pathway_names=self.hypergraph_data[
+                                              'pathway_names'] if self.hypergraph_data else None)
 
             # Load state dict
             state_dict = torch.load(checkpoint_path, weights_only=True)

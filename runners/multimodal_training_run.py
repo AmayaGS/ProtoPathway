@@ -14,6 +14,7 @@ from utils.kmeans_init import sample_embeddings, init_prototypes
 
 from train_test_loops.trainers.gene_trainer import GeneExpressionTrainer
 from train_test_loops.trainers.wsi_trainer import WSITrainer
+from train_test_loops.trainers.multimodal_trainer import MultimodalTrainer
 
 from utils.visualization_utils import (
     visualize_fold_results,
@@ -110,21 +111,18 @@ def train_multimodal_model(config, is_full_train=False, experiment_logger=None):
                              n_proto=config['wsi_training']['num_prototypes'],
                              centroid_path=centroid_path)
 
-        # Create data loaders
-        ge_trainer = GeneExpressionTrainer(config, experiment_logger, fold_idx, device=None)
-        wsi_trainer = WSITrainer(config, experiment_logger, fold_idx, device=None)
+        mm_trainer = MultimodalTrainer(
+            config=config,
+            experiment_logger=experiment_logger,
+            fold_idx=fold_idx
+        )
 
-        ge_train_data, ge_val_data = ge_trainer.prepare_data(ge_train_fold, ge_val_fold)
-        wsi_train_data, wsi_val_data = wsi_trainer.prepare_data(wsi_train_fold, wsi_val_fold)
+        ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader = mm_trainer.prepare_data(
+            ge_train_fold,
+            wsi_train_fold,
+            ge_val_fold,
+            wsi_val_fold
+        )
 
-        # Create models
-        ge_model = ge_trainer.create_model()
-        wsi_model = wsi_trainer.create_model()
-
-        # Train models
-        ge_history = ge_trainer.train(ge_train_data, ge_val_data)
-        wsi_history = wsi_trainer.train(wsi_train_data, wsi_val_data)
-
-        fold_histories.append((ge_history, wsi_history))
 
 

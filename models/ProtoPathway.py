@@ -10,11 +10,13 @@ class PathwayEmbeddingModel(torch.nn.Module):
     """
     Bipartite graph representation of HGNN for gene expression data.
     """
-    def __init__(self, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.5, gene_names=None, pathway_names=None):
+    def __init__(self, config, in_channels, hidden_channels, out_channels, num_layers=2, dropout=0.5, gene_names=None,
+                 pathway_names=None):
         super().__init__()
 
         self.num_layers = num_layers
         self.dropout = dropout
+        self.config = config
 
         # GAT layers for the bipartite representation
         self.conv1 = GATv2Conv(in_channels, hidden_channels, concat=False)
@@ -80,11 +82,16 @@ class PathwayEmbeddingModel(torch.nn.Module):
 
         # # Create a graph-level embedding by weighting pathway features
         graph_emb = (path_weights * pathway_x).sum(dim=0)  # [hidden_dim]
+        pooled = torch.mean(pathway_x, dim=0).unsqueeze(0)
 
         # Final prediction
         out = self.lin(graph_emb).unsqueeze(0) # [1, num_classes]
 
-        return out
+        if self.config['execution']['mode'] == 'multimodal':
+            return pathway_x, pooled
+        else:
+            # Return only the output for single modality
+            return out
 
 
     def _process_gene_pathway_attention(self, edge_index, attn_weights, num_genes, num_pathways):

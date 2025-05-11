@@ -18,9 +18,6 @@ from utils.dataset_utils import HypergraphDataset
 from utils.dataset_utils import build_incidence_matrix
 from utils.model_utils import l1_regularization
 
-from models.ProtoPathway import PathwayEmbeddingModel
-from models.Prototype import ProtoMIL_V0, ProtoMIL_V1
-
 
 class MultimodalTrainer(BaseTrainer):
     """
@@ -63,7 +60,7 @@ class MultimodalTrainer(BaseTrainer):
         self.wsi_feature_dim = None
         self.hypergraph_data = None
 
-    def prepare_data(self, train_data, val_data):
+    def prepare_data(self, ge_train_data, wsi_train_data, ge_val_data, wsi_val_data):
         """
         Prepare data loaders for ge_training and validation.
 
@@ -75,44 +72,42 @@ class MultimodalTrainer(BaseTrainer):
             train_loader, val_loader
         """
 
-        pass
+        if self.ge_model_name == 'Hypergraph':
 
-        # if self.ge_model_name == 'Hypergraph':
-        #
-        #     labels_df = pd.read_csv(
-        #         os.path.join(self.config['output']['data']['dir'],
-        #                      f"patient_labels_{self.config['dataset_name']}.csv"))
-        #
-        #     data = build_incidence_matrix(
-        #         self.config['output']['data']['final_pathways'],
-        #         pd.concat([train_data, val_data])
-        #     )
-        #
-        #     train_dataset = HypergraphDataset(self.config, train_data, labels_df, data)
-        #     val_dataset = HypergraphDataset(self.config, val_data, labels_df, data)
-        #
-        #     # Create dataloaders
-        #     ge_train_loader = PyGDataLoader(
-        #         train_dataset,
-        #         batch_size=self.config['ge_training']['batch_size'],
-        #         num_workers=self.config['ge_training']['num_workers'],
-        #         shuffle=True,
-        #         drop_last=False
-        #     )
-        #
-        #     ge_val_loader = PyGDataLoader(
-        #         val_dataset,
-        #         batch_size=self.config['ge_training']['batch_size'],
-        #         num_workers=self.config['ge_training']['num_workers'],
-        #         shuffle=False
-        #     )
-        #
-        #     if self.wsi_model_name == 'Prototype':
-        #         # WSI data is already in the correct format
-        #         wsi_train_loader = train_data
-        #         wsi_val_loader = val_data
-        #
-        #     return ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader
+            labels_df = pd.read_csv(
+                os.path.join(self.config['output']['data']['dir'],
+                             f"patient_labels_{self.config['dataset_name']}.csv"))
+
+            data = build_incidence_matrix(
+                self.config['output']['data']['final_pathways'],
+                pd.concat([ge_train_data, ge_val_data])
+            )
+
+            ge_train_dataset = HypergraphDataset(self.config, ge_train_data, labels_df, data)
+            ge_val_dataset = HypergraphDataset(self.config, ge_val_data, labels_df, data)
+
+            # Create dataloaders
+            ge_train_loader = PyGDataLoader(
+                ge_train_dataset,
+                batch_size=self.config['ge_training']['batch_size'],
+                num_workers=self.config['ge_training']['num_workers'],
+                shuffle=True,
+                drop_last=False
+            )
+
+            ge_val_loader = PyGDataLoader(
+                ge_val_dataset,
+                batch_size=self.config['ge_training']['batch_size'],
+                num_workers=self.config['ge_training']['num_workers'],
+                shuffle=False
+            )
+
+            if self.wsi_model_name == 'Prototype':
+                # WSI data is already in the correct format
+                wsi_train_loader = wsi_train_data
+                wsi_val_loader = wsi_val_data
+
+            return ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader
 
 
     def create_model(self):
@@ -122,52 +117,46 @@ class MultimodalTrainer(BaseTrainer):
         Returns:
             model, criterion, optimizer, lr_scheduler
         """
-        #from models.MultimodalModels.fusion_model import MultimodalFusionModel
+        from models.MultimodalFusionModel import ProtoPathwayFusion
 
-        # # Create multimodal fusion model
-        # model = MultimodalFusionModel(
-        #     config=self.config,
-        #     gene_expr_dim=self.gene_expr_dim,
-        #     wsi_feature_dim=self.wsi_feature_dim,
-        #     hypergraph_data=self.hypergraph_data,
-        #     num_classes=self.config['num_classes'],
-        #     fusion_type=self.fusion_type,
-        #     fusion_layers=self.config['multimodal']['fusion_layers'],
-        #     hidden_dim=self.config['multimodal']['hidden_dim']
-        # )
+        # Create multimodal fusion model
+        model = ProtoPathwayFusion(
+            config=self.config,
+            device=self.device
+        )
 
-        # # Define loss function
-        # criterion = torch.nn.CrossEntropyLoss()
-        #
-        # # Define optimizer
-        # optimizer = torch.optim.AdamW(
-        #     model.parameters(),
-        #     lr=self.config['ge_training']['learning_rate'],
-        #     weight_decay=self.config['ge_training']['L2_norm']
-        # )
+        # Define loss function
+        criterion = torch.nn.CrossEntropyLoss()
 
-        # # Configure learning rate scheduler if needed
-        # lr_scheduler = None
-        # if self.config['scheduler']['use']:
-        #     if self.config['scheduler']['type'] == 'step':
-        #         lr_scheduler = torch.optim.lr_scheduler.StepLR(
-        #             optimizer,
-        #             step_size=self.config['scheduler']['step'],
-        #             gamma=self.config['scheduler']['gamma']
-        #         )
-        #     elif self.config['scheduler']['type'] == 'plateau':
-        #         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        #             optimizer,
-        #             mode='min' if self.weight_type == 'loss' else 'max',
-        #             patience=self.config['scheduler']['patience'],
-        #             factor=self.config['scheduler']['gamma'],
-        #             min_lr=self.config['scheduler']['min_lr']
-        #         )
-        #
-        # # Move model to device
-        # model = model.to(self.device)
-        #
-        # return model, criterion, optimizer, lr_scheduler
+        # Define optimizer
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=self.config['ge_training']['learning_rate'],
+            weight_decay=self.config['ge_training']['L2_norm']
+        )
+
+        # Configure learning rate scheduler if needed
+        lr_scheduler = None
+        if self.config['scheduler']['use']:
+            if self.config['scheduler']['type'] == 'step':
+                lr_scheduler = torch.optim.lr_scheduler.StepLR(
+                    optimizer,
+                    step_size=self.config['scheduler']['step'],
+                    gamma=self.config['scheduler']['gamma']
+                )
+            elif self.config['scheduler']['type'] == 'plateau':
+                lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                    optimizer,
+                    mode='min' if self.weight_type == 'loss' else 'max',
+                    patience=self.config['scheduler']['patience'],
+                    factor=self.config['scheduler']['gamma'],
+                    min_lr=self.config['scheduler']['min_lr']
+                )
+
+        # Move model to device
+        model = model.to(self.device)
+
+        return model, criterion, optimizer, lr_scheduler
 
     def train_epoch(self, model, train_loader, optimizer, criterion):
         """

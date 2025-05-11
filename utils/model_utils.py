@@ -27,13 +27,8 @@ def initialise_model(config, input_dim):
 
     if config['gene_expression']['model'] == 'Hypergraph':
 
-        model = PathwayEmbeddingModel(
-            in_channels=1,
-            hidden_channels=config['ge_training']['hidden_dim'],
-            out_channels=config['num_classes'],
-            num_layers=3,
-            dropout=0.2
-        )
+        model = PathwayEmbeddingModel(config, in_channels=1, hidden_channels=config['ge_training']['hidden_dim'],
+                                      out_channels=config['num_classes'], num_layers=3, dropout=0.2)
 
         # model = BipartiteGAT_MHSA(
         #     in_channels=1,  # Gene expression value
