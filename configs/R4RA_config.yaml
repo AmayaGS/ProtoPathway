@@ -13,7 +13,7 @@ patient_id: 'Patient_ID'
 
 # Execution mode
 execution:
-  mode: "wsi"  # choices: ["gene_expression", "wsi", "multimodal"]
+  mode: "multimodal"  # choices: ["gene_expression", "wsi", "multimodal"]
   ge_preprocess: false
   wsi_preprocess: false
   wsi_segmentation: false
@@ -29,7 +29,7 @@ execution:
 
 # Gene Expression specific configuration
 gene_expression:
-  enabled: false  # Set to false to disable gene expression branch
+  enabled: true  # Set to false to disable gene expression branch
   model: 'Hypergraph'  # Gene expression model to use - Choices: ['MLP', 'Hypergraph']
   input:
     gtf_file: "${base_dir}/input_files/Homo_sapiens.GRCh38.113.gtf"
@@ -71,7 +71,7 @@ wsi:
 
 # Multimodal fusion
 multimodal:
-  enabled: false  # Set to true to enable multimodal fusion
+  enabled: true  # Set to true to enable multimodal fusion
   fusion_type: "attention"  # choices: ["concat", "attention", "weighted"]
   fusion_layers: 2
   hidden_dim: 128

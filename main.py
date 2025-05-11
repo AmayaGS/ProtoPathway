@@ -16,7 +16,7 @@ from runners.wsi_training_run import train_wsi_model
 # from runners.wsi_test_run import test_wsi_model
 
 # # Import multimodal runners
-# from runners.multimodal_run import train_multimodal_model
+from runners.multimodal_training_run import train_multimodal_model
 # from runners.multimodal_test_run import test_multimodal_model
 
 
@@ -132,19 +132,19 @@ def main(config, experiment_logger):
     #         test_wsi_model(config, is_continuation=is_continuation, experiment_logger=experiment_logger)
     #         logger.info("Testing complete")
 
-    # # Multimodal mode
-    # elif execution_mode == "multimodal":
-    #     if config['execution']['cross_validation']:
-    #         logger.info("Cross-validation of the multimodal model")
-    #         train_multimodal_model(config, experiment_logger=experiment_logger)
-    #         logger.info("Cross-validation complete")
-    #         training_performed = True
-    #
-    #     if config['execution']['full_train']:
-    #         logger.info("Full ge_training of the multimodal model")
-    #         train_multimodal_model(config, is_full_train=True, experiment_logger=experiment_logger)
-    #         logger.info("Training complete")
-    #         training_performed = True
+    # Multimodal mode
+    elif execution_mode == "multimodal":
+        if config['execution']['cross_validation']:
+            logger.info("Cross-validation of the multimodal model")
+            train_multimodal_model(config, experiment_logger=experiment_logger)
+            logger.info("Cross-validation complete")
+            training_performed = True
+
+        if config['execution']['full_train']:
+            logger.info("Full ge_training of the multimodal model")
+            train_multimodal_model(config, is_full_train=True, experiment_logger=experiment_logger)
+            logger.info("Training complete")
+            training_performed = True
     #
     #     if config['execution']['test']:
     #         logger.info("Testing the multimodal model")

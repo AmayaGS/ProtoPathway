@@ -4,17 +4,22 @@ import os
 import time
 import torch
 import torch.nn.functional as F
-import numpy as np
+
 import pandas as pd
 from sklearn.preprocessing import label_binarize
 from sklearn.metrics import (roc_auc_score, precision_score, recall_score, f1_score,
                              confusion_matrix, classification_report, average_precision_score)
 
-from torch.utils.data import DataLoader
+from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from train_test_loops.trainers.base_trainer import BaseTrainer
+
+from utils.dataset_utils import HypergraphDataset
 from utils.dataset_utils import build_incidence_matrix
 from utils.model_utils import l1_regularization
+
+from models.ProtoPathway import PathwayEmbeddingModel
+from models.Prototype import ProtoMIL_V0, ProtoMIL_V1
 
 
 class MultimodalTrainer(BaseTrainer):
@@ -42,13 +47,16 @@ class MultimodalTrainer(BaseTrainer):
         self.fold_idx = fold_idx
         self.fusion_type = config['multimodal']['fusion_type']
 
+        self.ge_model_name = config['gene_expression']['model']
+        self.wsi_model_name = config['wsi']['model']
+
         # Modality-specific parameters
         self.gene_expr_enabled = config['gene_expression']['enabled']
         self.wsi_enabled = config['wsi']['enabled']
 
-        # Ensure both modalities are enabled for multimodal ge_training
+        # Ensure both modalities are enabled for multimodal training
         if not (self.gene_expr_enabled and self.wsi_enabled):
-            raise ValueError("Both gene expression and WSI modalities must be enabled for multimodal ge_training")
+            raise ValueError("Both gene expression and WSI modalities must be enabled for multimodal training")
 
         # Track input dimensions for model creation
         self.gene_expr_dim = None
@@ -66,65 +74,46 @@ class MultimodalTrainer(BaseTrainer):
         Returns:
             train_loader, val_loader
         """
-        # from utils.multimodal_dataset import MultimodalDataset
+
+        pass
+
+        # if self.ge_model_name == 'Hypergraph':
         #
-        # # Load patient labels
-        # labels_df = pd.read_csv(
-        #     os.path.join(self.config['output']['data']['dir'],
-        #                  f"patient_labels_{self.config['dataset_name']}.csv"))
+        #     labels_df = pd.read_csv(
+        #         os.path.join(self.config['output']['data']['dir'],
+        #                      f"patient_labels_{self.config['dataset_name']}.csv"))
         #
-        # # Extract gene expression dimensions
-        # if self.gene_expr_enabled:
-        #     self.gene_expr_dim = train_data['gene_expression'].shape[1]
+        #     data = build_incidence_matrix(
+        #         self.config['output']['data']['final_pathways'],
+        #         pd.concat([train_data, val_data])
+        #     )
         #
-        #     # Build hypergraph data if needed
-        #     if self.config['gene_expression']['model'] == 'Hypergraph':
-        #         self.hypergraph_data = build_incidence_matrix(
-        #             self.config['output']['data']['final_pathways'],
-        #             pd.concat([train_data['gene_expression'], val_data['gene_expression']])
-        #         )
+        #     train_dataset = HypergraphDataset(self.config, train_data, labels_df, data)
+        #     val_dataset = HypergraphDataset(self.config, val_data, labels_df, data)
         #
-        # # Extract WSI feature dimensions
-        # if self.wsi_enabled:
-        #     # Typically we'd get this from the WSI feature extraction backbone
-        #     self.wsi_feature_dim = 512  # Default for ResNet-based feature extractors
+        #     # Create dataloaders
+        #     ge_train_loader = PyGDataLoader(
+        #         train_dataset,
+        #         batch_size=self.config['ge_training']['batch_size'],
+        #         num_workers=self.config['ge_training']['num_workers'],
+        #         shuffle=True,
+        #         drop_last=False
+        #     )
         #
-        # # Create multimodal datasets
-        # train_dataset = MultimodalDataset(
-        #     config=self.config,
-        #     gene_expr_data=train_data['gene_expression'],
-        #     wsi_data=train_data['wsi'],
-        #     labels_df=labels_df,
-        #     hypergraph_data=self.hypergraph_data,
-        #     is_training=True
-        # )
+        #     ge_val_loader = PyGDataLoader(
+        #         val_dataset,
+        #         batch_size=self.config['ge_training']['batch_size'],
+        #         num_workers=self.config['ge_training']['num_workers'],
+        #         shuffle=False
+        #     )
         #
-        # val_dataset = MultimodalDataset(
-        #     config=self.config,
-        #     gene_expr_data=val_data['gene_expression'],
-        #     wsi_data=val_data['wsi'],
-        #     labels_df=labels_df,
-        #     hypergraph_data=self.hypergraph_data,
-        #     is_training=False
-        # )
+        #     if self.wsi_model_name == 'Prototype':
+        #         # WSI data is already in the correct format
+        #         wsi_train_loader = train_data
+        #         wsi_val_loader = val_data
         #
-        # # Create data loaders
-        # train_loader = DataLoader(
-        #     train_dataset,
-        #     batch_size=self.config['ge_training']['batch_size'],
-        #     num_workers=self.config['ge_training']['num_workers'],
-        #     shuffle=True,
-        #     drop_last=False
-        # )
-        #
-        # val_loader = DataLoader(
-        #     val_dataset,
-        #     batch_size=self.config['ge_training']['batch_size'],
-        #     num_workers=self.config['ge_training']['num_workers'],
-        #     shuffle=False
-        # )
-        #
-        # return train_loader, val_loader
+        #     return ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader
+
 
     def create_model(self):
         """
@@ -343,63 +332,63 @@ class MultimodalTrainer(BaseTrainer):
 
         return metrics
 
-    def get_embedding_visualizations(self, model, val_loader):
-        """
-        Generate modality-specific embeddings for visualization.
-
-        Args:
-            model: Trained multimodal model
-            val_loader: Validation data loader
-
-        Returns:
-            Dictionary with embeddings and metadata
-        """
-        model.eval()
-
-        patient_ids = []
-        labels = []
-        gene_embeddings = []
-        wsi_embeddings = []
-        fused_embeddings = []
-
-        with torch.no_grad():
-            for batch in val_loader:
-                # Extract data
-                gene_expr_data = batch['gene_expression'].to(self.device) if self.gene_expr_enabled else None
-                wsi_data = batch['wsi'].to(self.device) if self.wsi_enabled else None
-                target = batch['target'].to(self.device)
-                patient_id = batch['patient_id']
-
-                hypergraph_data = None
-                if self.hypergraph_data is not None and 'hypergraph' in batch:
-                    hypergraph_data = batch['hypergraph'].to(self.device)
-
-                # Get embeddings from model
-                if hasattr(model, 'get_embeddings'):
-                    gene_emb, wsi_emb, fused_emb = model.get_embeddings(
-                        gene_expr_data, wsi_data, hypergraph_data
-                    )
-
-                    # Store embeddings and metadata
-                    gene_embeddings.append(gene_emb.cpu())
-                    wsi_embeddings.append(wsi_emb.cpu())
-                    fused_embeddings.append(fused_emb.cpu())
-                    patient_ids.extend(patient_id)
-                    labels.append(target.cpu())
-
-        # Concatenate results
-        if gene_embeddings and wsi_embeddings and fused_embeddings:
-            gene_embeddings = torch.cat(gene_embeddings, dim=0).numpy()
-            wsi_embeddings = torch.cat(wsi_embeddings, dim=0).numpy()
-            fused_embeddings = torch.cat(fused_embeddings, dim=0).numpy()
-            labels = torch.cat(labels, dim=0).numpy()
-
-            return {
-                'patient_ids': patient_ids,
-                'labels': labels,
-                'gene_embeddings': gene_embeddings,
-                'wsi_embeddings': wsi_embeddings,
-                'fused_embeddings': fused_embeddings
-            }
-
-        return None
+    # def get_embedding_visualizations(self, model, val_loader):
+    #     """
+    #     Generate modality-specific embeddings for visualization.
+    #
+    #     Args:
+    #         model: Trained multimodal model
+    #         val_loader: Validation data loader
+    #
+    #     Returns:
+    #         Dictionary with embeddings and metadata
+    #     """
+    #     model.eval()
+    #
+    #     patient_ids = []
+    #     labels = []
+    #     gene_embeddings = []
+    #     wsi_embeddings = []
+    #     fused_embeddings = []
+    #
+    #     with torch.no_grad():
+    #         for batch in val_loader:
+    #             # Extract data
+    #             gene_expr_data = batch['gene_expression'].to(self.device) if self.gene_expr_enabled else None
+    #             wsi_data = batch['wsi'].to(self.device) if self.wsi_enabled else None
+    #             target = batch['target'].to(self.device)
+    #             patient_id = batch['patient_id']
+    #
+    #             hypergraph_data = None
+    #             if self.hypergraph_data is not None and 'hypergraph' in batch:
+    #                 hypergraph_data = batch['hypergraph'].to(self.device)
+    #
+    #             # Get embeddings from model
+    #             if hasattr(model, 'get_embeddings'):
+    #                 gene_emb, wsi_emb, fused_emb = model.get_embeddings(
+    #                     gene_expr_data, wsi_data, hypergraph_data
+    #                 )
+    #
+    #                 # Store embeddings and metadata
+    #                 gene_embeddings.append(gene_emb.cpu())
+    #                 wsi_embeddings.append(wsi_emb.cpu())
+    #                 fused_embeddings.append(fused_emb.cpu())
+    #                 patient_ids.extend(patient_id)
+    #                 labels.append(target.cpu())
+    #
+    #     # Concatenate results
+    #     if gene_embeddings and wsi_embeddings and fused_embeddings:
+    #         gene_embeddings = torch.cat(gene_embeddings, dim=0).numpy()
+    #         wsi_embeddings = torch.cat(wsi_embeddings, dim=0).numpy()
+    #         fused_embeddings = torch.cat(fused_embeddings, dim=0).numpy()
+    #         labels = torch.cat(labels, dim=0).numpy()
+    #
+    #         return {
+    #             'patient_ids': patient_ids,
+    #             'labels': labels,
+    #             'gene_embeddings': gene_embeddings,
+    #             'wsi_embeddings': wsi_embeddings,
+    #             'fused_embeddings': fused_embeddings
+    #         }
+    #
+    #     return None

@@ -1,9 +1,8 @@
 # train_test_loops/wsi_trainer.py
 
-import os
-import numpy as np
-import pandas as pd
 import time
+
+from pathlib import Path
 
 from sklearn.preprocessing import label_binarize
 from sklearn.metrics import (roc_auc_score, precision_score, recall_score, f1_score,
@@ -21,10 +20,11 @@ class WSITrainer(BaseTrainer):
     Trainer for WSI data using prototype-based models.
     """
 
-    def __init__(self, config, experiment_logger, fold_idx=None, device=None):
+    def __init__(self, config, experiment_logger, run_type, fold_idx=None, device=None):
         super().__init__(config, experiment_logger, device)
         self.fold_idx = fold_idx
         self.model_name = config['wsi']['model']
+        self.run_type = run_type
 
     def prepare_data(self, train_data, val_data):
         """
@@ -43,12 +43,19 @@ class WSITrainer(BaseTrainer):
 
     def create_model(self):
         """Create and initialize the WSI model."""
+
         if self.model_name == 'Prototype':
 
-            # Load centroids if provided
-            if self.config['output']['data']['wsi_centroids'] is not None:
-                centroid_path = self.config['output']['data']['wsi_centroids']
-                centroids = torch.load(centroid_path, weights_only=True, map_location=self.device)
+            centroid_dir = self.config['output']['data']['dir']
+            dataset_name = self.config['dataset_name']
+            centroid_fold = f"wsi_centroids_{dataset_name}_{self.run_type}_{self.fold_idx}.pt"
+            centroid_path = Path(centroid_dir, centroid_fold)
+
+            if centroid_path is not None:
+                f = Path(centroid_path).expanduser()
+
+            if f is not None and f.exists():
+                centroids = torch.load(f, weights_only=True, map_location=self.device)
             else:
                 centroids = None
 

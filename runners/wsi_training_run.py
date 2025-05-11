@@ -2,7 +2,7 @@
 
 import os
 import pickle
-import pandas as pd
+from pathlib import Path
 
 from utils.helpers import ensure_directory
 from utils.model_utils import load_wsi_folds, load_folds
@@ -31,7 +31,7 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
         Dictionary with wsi_training results
     """
     logger = experiment_logger.logger
-    run_type = "full_train" if is_full_train else "cross_validation"
+    run_type = "FT" if is_full_train else "CV"
 
     # Set up paths for this specific run
     results_dir = experiment_logger.log_dir
@@ -82,7 +82,6 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
         training_folds, validation_folds = load_folds(wsi_features, split_dict, is_cv=True, ignore_missing=True)
         n_folds = len(split_dict['CV'])
 
-
     fold_histories = []
     fold_summaries = []
 
@@ -91,17 +90,30 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
         fold_name = "Full Training" if is_full_train else f"Fold {fold_idx + 1}/{n_folds}"
         logger.info(f"=== Training {fold_name} ===")
 
-        # load pre-computed centroids to initialize the model
-        sample_wsi_features = sample_embeddings(train_fold)
-        init_centroids = init_prototypes(sample_wsi_features,
-                                         n_proto=config['wsi_training']['num_prototypes'],
-                                         centroid_path=config['output']['data']['wsi_centroids'])
+        centroid_dir = config['output']['data']['dir']
+        dataset_name = config['dataset_name']
+        centroid_fold = f"wsi_centroids_{dataset_name}_{run_type}_{fold_idx}.pt"
+        centroid_path = os.path.join(centroid_dir, centroid_fold)
+
+        if centroid_path is not None:
+            f = Path(centroid_path).expanduser()
+
+        if f is not None and f.exists():
+            logger.info(f"Centroids already calculated")
+        else:
+            # load pre-computed centroids to initialize the model
+            logger.info("Calculating centroids for WSI training")
+            sample_wsi_features = sample_embeddings(train_fold)
+            init_prototypes(sample_wsi_features,
+                             n_proto=config['wsi_training']['num_prototypes'],
+                             centroid_path=centroid_path)
 
         # Create a WSITrainer instance
         trainer = WSITrainer(
             config=config,
             fold_idx=fold_idx,
-            experiment_logger=experiment_logger
+            experiment_logger=experiment_logger,
+            run_type=run_type,
         )
 
         # Train model
