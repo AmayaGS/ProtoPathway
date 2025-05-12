@@ -59,7 +59,8 @@ class WSITrainer(BaseTrainer):
             else:
                 centroids = None
 
-            model = ProtoMIL_V1(config, input_dim=self.config['wsi_training']['input_dim'],
+            model = ProtoMIL_V1(self.config, input_dim=self.config['wsi_training']['input_dim'],
+                                embedding_dim=self.config['wsi_training']['hidden_dim'],
                                 num_prototypes=self.config['wsi_training']['num_prototypes'],
                                 tau=self.config['wsi_training']['tau'], num_classes=self.config['n_classes'],
                                 init_centroids=centroids)
@@ -97,7 +98,7 @@ class WSITrainer(BaseTrainer):
 
         return model, criterion, optimizer, lr_scheduler
 
-    def train_epoch(self, model, train_loader, optimizer, criterion):
+    def train_epoch(self, model, train_loader, optimizer, criterion, aux_train_loader=None):
         """Run one ge_training epoch for WSI model."""
         model.train()
         total_loss = 0.0
@@ -144,7 +145,7 @@ class WSITrainer(BaseTrainer):
             'time': epoch_time
         }
 
-    def validate(self, model, val_loader, criterion):
+    def validate(self, model, val_loader, criterion, wsi_val_loader=None):
         """Validate the WSI model."""
         model.eval()
         total_loss = 0.0

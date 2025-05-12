@@ -115,14 +115,14 @@ class GeneExpressionTrainer(BaseTrainer):
         model = MLPBaseline(
             input_size=self.input_dim,
             hidden_size=self.config['ge_training']['hidden_dim'],
-            num_classes=self.config['num_classes'],
+            num_classes=self.config['n_classes'],
             dropout_rate=self.config['ge_training']['dropout_rate']
             )
 
         if self.model_name == 'Hypergraph':
-            model = PathwayEmbeddingModel(config, in_channels=1,
+            model = PathwayEmbeddingModel(self.config, in_channels=1,
                                           hidden_channels=self.config['ge_training']['hidden_dim'],
-                                          out_channels=self.config['num_classes'],
+                                          out_channels=self.config['n_classes'],
                                           num_layers=self.config['ge_training']['num_layers'],
                                           dropout=self.config['ge_training']['dropout_rate'])
 
@@ -144,7 +144,7 @@ class GeneExpressionTrainer(BaseTrainer):
         return model, criterion, optimizer, lr_scheduler
 
 
-    def train_epoch(self, model, train_loader, optimizer, criterion):
+    def train_epoch(self, model, train_loader, optimizer, criterion, aux_train_loader=None):
         """Run one ge_training epoch."""
         model.train()
         total_loss = 0.0
@@ -194,7 +194,7 @@ class GeneExpressionTrainer(BaseTrainer):
             'time': epoch_time
         }
 
-    def validate(self, model, val_loader, criterion):
+    def validate(self, model, val_loader, criterion, aux_val_loader=None):
         """Validate the model."""
         model.eval()
         total_loss = 0.0

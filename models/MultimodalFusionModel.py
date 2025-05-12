@@ -26,19 +26,20 @@ class ProtoPathwayFusion(torch.nn.Module):
 
         # Initialize the WSI model
         self.wsi_model = ProtoMIL_V1(config, input_dim=config['wsi_training']['input_dim'],
+                                     embedding_dim=config['wsi_training']['hidden_dim'],
                                      num_prototypes=config['wsi_training']['num_prototypes'],
                                      tau=config['wsi_training']['tau'], num_classes=config['n_classes']).to(device)
 
         # Initialize MHSA cross-attention between pathway embeddings and prototypes
         self.proto_pathway_attention = nn.MultiheadAttention(
-                                        embed_dim=config['mm_training']['input_dim'],
+                                        embed_dim=config['mm_training']['hidden_dim'],
                                         num_heads=config['mm_training']['attention_heads'],
                                         dropout=config['mm_training']['dropout_rate'],
                                         batch_first=True
                                         ).to(device) # change this to the mm_training after setup in config
 
         # Initialize the final classifier
-        self.classifier = nn.Linear(config['mm_training']['input_dim'], config['n_classes']).to(device)
+        self.classifier = nn.Linear(config['mm_training']['hidden_dim'] * 3, config['n_classes']).to(device)
 
     def forward(self, ge_data, wsi_data):
         """
@@ -49,6 +50,7 @@ class ProtoPathwayFusion(torch.nn.Module):
         """
         # Get gene expression embeddings
         pathway_emb, pathway_mean = self.ge_model(ge_data)
+        pathway_emb = pathway_emb.unsqueeze(0)  # Add a batch dimension for attention
 
         # Get prototype hist and prototype tokens
         proto_hist, proto_tokens = self.wsi_model(wsi_data)
@@ -61,7 +63,11 @@ class ProtoPathwayFusion(torch.nn.Module):
                                                                         average_attn_weights=True
                                                                          )
 
+        proto_path_mean = attended_proto.mean(dim=1)
+        # Concatenate the mean pooled pathway embeddings and the attended prototypes
+        combined_features = torch.cat((pathway_mean, proto_path_mean, proto_hist), dim=1)
+
         # Classifier on the attention output
-        logits = self.classifier(attended_proto.squeeze(1))
+        logits = self.classifier(combined_features)
 
         return logits

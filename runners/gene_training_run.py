@@ -110,8 +110,8 @@ def train_gene_expression_model(config, is_full_train=False, experiment_logger=N
             fold_idx,
             plots_dir,
             config,
-            metric_for_best='acc' if config['ge_training']['weight_type'] == 'accuracy' else 'loss',
-            mode='max' if config['ge_training']['weight_type'] == 'accuracy' else 'min'
+            metric_for_best='acc' if config['training']['weight_type'] == 'accuracy' else 'loss',
+            mode='max' if config['training']['weight_type'] == 'accuracy' else 'min'
         )
 
         fold_summaries.append(fold_summary)
@@ -125,8 +125,8 @@ def train_gene_expression_model(config, is_full_train=False, experiment_logger=N
             fold_histories[0]['history'],
             plots_dir,
             config,
-            metric_for_best='acc' if config['ge_training']['weight_type'] == 'accuracy' else 'loss',
-            mode='max' if config['ge_training']['weight_type'] == 'accuracy' else 'min'
+            metric_for_best='acc' if config['training']['weight_type'] == 'accuracy' else 'loss',
+            mode='max' if config['training']['weight_type'] == 'accuracy' else 'min'
         )
     else:
         # For cross-validation, generate aggregated results

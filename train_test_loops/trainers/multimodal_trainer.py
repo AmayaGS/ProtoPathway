@@ -321,9 +321,11 @@ class MultimodalTrainer(BaseTrainer):
                 target = batch.y
                 ge_data = batch
 
-                wsi_data = wsi_val_loader[patient_id]
+                wsi_data = wsi_val_loader[patient_id[0]]
+                wsi_emb = wsi_data[0]
+                wsi_emb = wsi_emb.to(self.device)
 
-                outputs = model(ge_data, wsi_data)
+                outputs = model(ge_data, wsi_emb)
 
                 # Calculate loss
                 loss = criterion(outputs, target)
