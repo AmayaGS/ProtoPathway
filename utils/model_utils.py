@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pickle
+import h5py
 from sklearn.model_selection import StratifiedShuffleSplit
 
 import os
@@ -15,47 +16,13 @@ from models.GeneExprHyperGraph import MLPBaseline as MLPBaselineHG
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def initialise_model(config, input_dim):
 
-    if config['gene_expression']['model'] == 'MLP':
-        model = MLPBaseline(
-            input_size=input_dim,
-            hidden_size=config['ge_training']['hidden_dim'],
-            num_classes=config['num_classes'],
-            dropout_rate=config['ge_training']['dropout_rate']
-        )
-
-    if config['gene_expression']['model'] == 'Hypergraph':
-
-        model = PathwayEmbeddingModel(config, in_channels=1, hidden_channels=config['ge_training']['hidden_dim'],
-                                      out_channels=config['num_classes'], num_layers=3, dropout=0.2)
-
-        # model = BipartiteGAT_MHSA(
-        #     in_channels=1,  # Gene expression value
-        #     hidden_channels=100,
-        #     out_channels=config['num_classes'],
-        #     num_layers=3,
-        #     dropout=0.2
-        # )
-
-        #model = MLPBaselineHG(9483, 100, 2)
-
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=config['ge_training']['learning_rate'], weight_decay=config['ge_training']['L2_norm'])
-
-    sched_cfg = config.get("scheduler", {})
-    if sched_cfg.get("use", False):  # default to False if not specified
-        scheduler_type = sched_cfg["type"]
-        # Get other params step, gamma, etc.
-        lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config['step_size'], gamma=config['gamma'])
-    else:
-        lr_scheduler = None  # No scheduler used
-
-    if torch.cuda.is_available():
-        model.cuda()
-
-    return model, criterion, optimizer, lr_scheduler
+def load_h5(h5_path):
+    with h5py.File(h5_path, 'r') as hdf5_file:
+        feats = hdf5_file['features'][:].squeeze()
+    if isinstance(feats, np.ndarray):
+        feats = torch.Tensor(feats)
+    return feats
 
 
 def create_cross_validation_splits(config):
@@ -325,3 +292,60 @@ def minority_sampler(dataset):
 def l1_regularization(model, l1_norm):
     weights = sum(torch.abs(p).sum() for p in model.parameters())
     return weights * l1_norm
+
+
+def _seed_torch(seed=42, device='cuda'):
+
+    import random
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if device.type == 'cuda':
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+
+# def initialise_model(config, input_dim):
+#
+#     if config['gene_expression']['model'] == 'MLP':
+#         model = MLPBaseline(
+#             input_size=input_dim,
+#             hidden_size=config['ge_training']['hidden_dim'],
+#             num_classes=config['num_classes'],
+#             dropout_rate=config['ge_training']['dropout_rate']
+#         )
+#
+#     if config['gene_expression']['model'] == 'Hypergraph':
+#
+#         model = PathwayEmbeddingModel(config, in_channels=1, hidden_channels=config['ge_training']['hidden_dim'],
+#                                       out_channels=config['num_classes'], num_layers=3, dropout=0.2)
+#
+#         # model = BipartiteGAT_MHSA(
+#         #     in_channels=1,  # Gene expression value
+#         #     hidden_channels=100,
+#         #     out_channels=config['num_classes'],
+#         #     num_layers=3,
+#         #     dropout=0.2
+#         # )
+#
+#         #model = MLPBaselineHG(9483, 100, 2)
+#
+#
+#     criterion = nn.CrossEntropyLoss()
+#     optimizer = optim.AdamW(model.parameters(), lr=config['ge_training']['learning_rate'], weight_decay=config['ge_training']['L2_norm'])
+#
+#     sched_cfg = config.get("scheduler", {})
+#     if sched_cfg.get("use", False):  # default to False if not specified
+#         scheduler_type = sched_cfg["type"]
+#         # Get other params step, gamma, etc.
+#         lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config['step_size'], gamma=config['gamma'])
+#     else:
+#         lr_scheduler = None  # No scheduler used
+#
+#     if torch.cuda.is_available():
+#         model.cuda()
+#
+#     return model, criterion, optimizer, lr_scheduler

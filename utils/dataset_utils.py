@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 
 from torch_geometric.data import Data
 
-from PIL import Image
+from utils.survival_utils import discretize_survival_times, get_survival_target
 
 
 class GeneExpressionDataset(Dataset):
@@ -15,6 +15,7 @@ class GeneExpressionDataset(Dataset):
     def __init__(self, config, gene_expr_df, labels_df):
 
         self.config = config
+        self.task = config['execution'].get('task', 'classification')
 
         # Load gene expression data
         self.gene_expr_df = gene_expr_df
@@ -24,9 +25,24 @@ class GeneExpressionDataset(Dataset):
 
         # Double check common patient IDs
         self.patient_ids = list(set(self.gene_expr_df.index) &
-                                set(self.labels_df['Patient_ID']))
+                                set(self.labels_df[self.config['patient_id']]))
 
         print(f"Found {len(self.patient_ids)} patients with both expression data and labels")
+
+        if self.task == 'survival':
+            self.label_col = self.config['survival']['target_column']
+            self.censor_col = self.config['survival']['censorship_column']
+            self.n_bins = self.config['survival']['n_bins']
+
+            # get patient survival information
+            patient_df = self.labels_df.loc[self.labels_df[self.config['patient_id']].isin(self.patient_ids)].copy()
+
+            self.patient_df, self.bins = discretize_survival_times(
+                patient_df,
+                label_col=self.label_col,
+                censor_col=self.censor_col,
+                n_bins=self.n_bins
+            )
 
     def __len__(self):
         return len(self.patient_ids)
@@ -41,14 +57,24 @@ class GeneExpressionDataset(Dataset):
         # Convert to tensor
         gene_expr_tensor = torch.FloatTensor(gene_expr)
 
-        # Get label for this patient
-        label = self.labels_df.loc[self.labels_df[self.config['patient_id']] == patient_id, self.config['label']].iloc[0]
-        label_tensor = torch.tensor(label, dtype=torch.long)
+        patient_row = self.labels_df.loc[self.labels_df[self.config['patient_id']] == patient_id].iloc[0]
+
+        if self.task == 'classification':
+            # For classification task
+            label = patient_row[self.config['label']]
+            target = torch.tensor(label, dtype=torch.long)
+        else:
+            target = get_survival_target(
+                patient_row,
+                self.label_col,
+                self.censor_col,
+                patient_row['label']
+            )
 
         return {
             'data': gene_expr_tensor,
-            'target': label_tensor,
-            'id': patient_id
+            'id': patient_id,
+            **target
         }
 
 
@@ -164,78 +190,3 @@ class HypergraphDataset(Dataset):
         )
 
         return data
-
-
-class ExpressionDataset(Dataset):
-
-    def __init__(self, df, patient_id, label):
-
-        self.labels = df[label].astype(int).tolist()
-        self.gene_names = df.columns[3:]
-        self.gene_expression = df.iloc[0:, 3:]
-        self.patient_ID = df[patient_id].tolist()
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-
-        patient_ID = self.patient_ID[idx]
-        label = torch.tensor(self.labels[idx])
-        gene_expression = torch.as_tensor(self.gene_expression.iloc[idx], dtype=torch.float32)
-        return [patient_ID, gene_expression, label]
-
-
-
-
-class HistoDataset(Dataset):
-
-    def __init__(self, df, transform, label):
-
-        self.transform = transform
-        self.labels = df[label].astype(int).tolist()
-        self.filepaths = df['File_location'].tolist()
-        self.patient_IDs = df['Patient_ID'].tolist()
-        self.filenames = df['Filename'].tolist()
-        self.patch_names = df['Patch_name'].tolist()
-        self.coordinates = df['Patch_coordinates'].tolist()
-        self.stain_types = df['Stain_type'].tolist()
-
-    def __len__(self):
-        return len(self.filepaths)
-
-    def __getitem__(self, idx):
-
-        try:
-            image = Image.open(self.filepaths[idx])
-            # If the image has an alpha channel, remove it
-            if image.mode == 'RGBA':
-                image = image.convert('RGB')
-            patient_id = self.patient_IDs[idx]
-            filename = self.filenames[idx]
-            patch_name = self.patch_names[idx]
-            coordinate = self.coordinates[idx]
-            self.image_tensor = self.transform(image)
-            self.image_label = self.labels[idx]
-            stain_type = self.stain_types[idx]
-
-            return self.image_tensor, self.image_label, patient_id, filename, patch_name, coordinate, stain_type
-
-        except (FileNotFoundError, IndexError):
-            return self.__getitem__(idx)
-
-
-    class Loaders:
-
-        def slides_dataloader(self, df, ids, transform, slide_batch, num_workers, shuffle, collate, label, patient_id):
-            # TRAIN dict
-            patient_subsets = {}
-
-            for i, file in enumerate(ids):
-                new_key = f'{file}'
-                patient_subset = HistoDataset(df[df[patient_id] == file], transform, label)
-                patient_subsets[new_key] = torch.utils.data.DataLoader(patient_subset, batch_size=slide_batch,
-                                                                       shuffle=shuffle, num_workers=num_workers,
-                                                                       drop_last=False, collate_fn=collate)
-
-            return patient_subsets

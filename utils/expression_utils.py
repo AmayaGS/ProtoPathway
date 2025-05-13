@@ -74,12 +74,12 @@ def filter_expression_data(gene_df, protein_coding_genes,
     df_centered = df_log.sub(df_log.mean(axis=1), axis=0)
 
     # # Step 5: Variance filtering - keep top variance_proportion most variable genes
-    # N = int(variance_proportion * df_centered.shape[0])
-    # variances = df_centered.var(axis=1)
-    # top_genes = variances.nlargest(N).index
-    # df_final = df_centered.loc[top_genes]
-    # print(f"After variance filter: {df_final.shape[0]} genes")
-    # df_final = df_final.transpose()
+    N = int(variance_proportion * df_centered.shape[0])
+    variances = df_centered.var(axis=1)
+    top_genes = variances.nlargest(N).index
+    df_final = df_centered.loc[top_genes]
+    print(f"After variance filter: {df_final.shape[0]} genes")
+    df_final = df_final.transpose()
 
     df_final = df_centered.transpose()
 

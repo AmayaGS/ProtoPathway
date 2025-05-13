@@ -56,17 +56,24 @@ def gene_expression_preprocessing(config):
         config['gene_expression']['input']['gene_expression']
     )
 
-    filtered_gene_df = filter_expression_data(
-        gene_df,
-        protein_coding_genes,
-        min_expression=config['gene_expression']['parameters']['threshold'],
-        min_proportion=config['gene_expression']['parameters']['min_proportion'],
-        variance_proportion=config['gene_expression']['parameters']['variance_proportion'],
-        output_path=config['output']['data']['filtered_genes']
-    )
+    if config['execution']['task'] == 'survival':
+        output_path = config['output']['data']['filtered_genes']
+        filtered_genes_df = gene_df.T
+        ensure_directory(os.path.dirname(output_path))
+        filtered_genes_df.to_csv(output_path, sep=",", index=True)
+        print(f"Filtered expression data saved to {output_path}")
+    else:
+        filtered_genes_df = filter_expression_data(
+            gene_df,
+            protein_coding_genes,
+            min_expression=config['gene_expression']['parameters']['threshold'],
+            min_proportion=config['gene_expression']['parameters']['min_proportion'],
+            variance_proportion=config['gene_expression']['parameters']['variance_proportion'],
+            output_path=config['output']['data']['filtered_genes']
+        )
 
     # Get filtered genes as a set for later use
-    filtered_genes = set(filtered_gene_df.T.index)
+    filtered_genes = set(filtered_genes_df.T.index)
 
     if logger:
         logger.logger.info(f"Final filtered gene set contains {len(filtered_genes)} genes")

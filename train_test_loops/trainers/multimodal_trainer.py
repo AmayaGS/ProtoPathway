@@ -17,7 +17,7 @@ from train_test_loops.trainers.base_trainer import BaseTrainer
 from utils.dataset_utils import HypergraphDataset
 from utils.dataset_utils import build_incidence_matrix
 from utils.model_utils import l1_regularization
-
+from utils.loss_utils import NLLSurvLoss
 
 class MultimodalTrainer(BaseTrainer):
     """
@@ -123,56 +123,6 @@ class MultimodalTrainer(BaseTrainer):
 
         return ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader
 
-    # def prepare_data(self, ge_train_data, ge_val_data,
-    #                  wsi_train_data, wsi_val_data):
-    #     """
-    #     Prepare data loaders for ge_training and validation.
-    #
-    #     Args:
-    #         train_data: Dictionary with 'gene_expression' and 'wsi' data
-    #         val_data: Dictionary with 'gene_expression' and 'wsi' data
-    #
-    #     Returns:
-    #         train_loader, val_loader
-    #     """
-    #
-    #     if self.ge_model_name == 'Hypergraph':
-    #
-    #         labels_df = pd.read_csv(
-    #             os.path.join(self.config['output']['data']['dir'],
-    #                          f"patient_labels_{self.config['dataset_name']}.csv"))
-    #
-    #         data = build_incidence_matrix(
-    #             self.config['output']['data']['final_pathways'],
-    #             pd.concat([ge_train_data, ge_val_data])
-    #         )
-    #
-    #         ge_train_dataset = HypergraphDataset(self.config, ge_train_data, labels_df, data)
-    #         ge_val_dataset = HypergraphDataset(self.config, ge_val_data, labels_df, data)
-    #
-    #         # Create dataloaders
-    #         ge_train_loader = PyGDataLoader(
-    #             ge_train_dataset,
-    #             batch_size=self.config['ge_training']['batch_size'],
-    #             num_workers=self.config['ge_training']['num_workers'],
-    #             shuffle=True,
-    #             drop_last=False
-    #         )
-    #
-    #         ge_val_loader = PyGDataLoader(
-    #             ge_val_dataset,
-    #             batch_size=self.config['ge_training']['batch_size'],
-    #             num_workers=self.config['ge_training']['num_workers'],
-    #             shuffle=False
-    #         )
-    #
-    #         if self.wsi_model_name == 'Prototype':
-    #             # WSI data is already in the correct format
-    #             wsi_train_loader = wsi_train_data
-    #             wsi_val_loader = wsi_val_data
-    #
-    #         return ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader
-
 
     def create_model(self):
         """
@@ -189,8 +139,11 @@ class MultimodalTrainer(BaseTrainer):
             device=self.device
         )
 
-        # Define loss function
-        criterion = torch.nn.CrossEntropyLoss()
+        if self.config['classification']:
+            # Define loss function
+            criterion = torch.nn.CrossEntropyLoss()
+        if self.config['survival']:
+            criterion = NLLSurvLoss(alpha=0.5)
 
         # Define optimizer
         optimizer = torch.optim.AdamW(
@@ -238,16 +191,29 @@ class MultimodalTrainer(BaseTrainer):
         """
         model.train()
         total_loss = 0.0
-        correct = 0
-        total = 0
+
+        if self.is_survival:
+            all_risk_scores = []
+            all_survival_times = []
+            all_events = []
+        else:
+            correct = 0
+            total = 0
+
         start_time = time.time()
 
         for batch_idx, batch in enumerate(ge_train_loader):
-
             batch.to(self.device)
             patient_id = batch.patient_id
-            target = batch.y
-            ge_data = batch
+
+            if self.is_survival:
+                target = None # here the time intervals
+                survival_time = batch.survival_time
+                event = batch.event
+                ge_data = batch
+            else:
+                target = batch.y
+                ge_data = batch
 
             wsi_data = wsi_train_loader[patient_id[0]]
             wsi_emb = wsi_data[0]

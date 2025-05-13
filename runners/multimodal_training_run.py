@@ -2,6 +2,7 @@
 
 import os
 import pickle
+import h5py
 import pandas as pd
 
 from pathlib import Path

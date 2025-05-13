@@ -28,6 +28,25 @@ class BaseTrainer(ABC):
         self.logger = experiment_logger
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        self.task = config['execution'].get('task', 'classification')
+        self.is_survival = self.task == 'survival'
+
+        if self.is_survival:
+            # For survival tasks, we track different metrics
+            self.metric_to_track = 'c_index' if self.is_survival else self.metric_to_track
+            self.mode = 'max'  # Higher c-index is better
+
+            # Adjust best metrics tracking for survival
+            self.best_metrics = {
+                'c_index': 0.0,
+                'loss': float('inf'),
+                'epoch': 0
+            }
+
+            # Survival parameters
+            self.survival_time_col = config['survival'].get('time_column', 'survival_months')
+            self.event_col = config['survival'].get('event_column', 'censorship')
+
         # Common parameters
         self.num_epochs = config['training']['num_epochs']
         self.checkpoint = config['training']['checkpoint']
