@@ -312,7 +312,10 @@ def plot_aggregated_learning_curves(
         figsize: Figure size (width, height)
     """
     if metrics is None:
-        metrics = ['loss', 'acc']
+        if 'c-index' in histories[0]['val']:
+            metrics = ['loss', 'c-index']
+        else:
+            metrics = ['loss', 'acc']
 
     # Find maximum number of epochs across all histories
     max_epochs = max([len(h['train'].get(metrics[0], [])) for h in histories])
@@ -578,7 +581,7 @@ def visualize_fold_results(
         fold_idx: int,
         output_dir: str,
         config: Dict[str, Any],
-        metric_for_best: str = 'acc',
+        metric_for_best: str = None,
         mode: str = 'max'
 ) -> Dict[str, Any]:
     """
@@ -743,7 +746,8 @@ def visualize_aggregated_results(
     # Save fold metrics to CSV
     metrics_path = os.path.join(output_dir, 'fold_metrics.csv')
     fold_results_df.to_csv(metrics_path, index=False)
-    #logger.info(f"Saved fold metrics to {metrics_path}")
+    is_survival = config['execution'].get('task', 'classification') == 'survival'
+    metrics = ['loss', 'c_index'] if is_survival else ['loss', 'acc']
 
     # Generate aggregated plots
 
@@ -751,7 +755,7 @@ def visualize_aggregated_results(
     plot_aggregated_learning_curves(
         [h['history'] for h in fold_histories],
         output_dir,
-        metrics=['loss', 'acc'],
+        metrics=metrics,
         best_epochs=fold_results_df['best_epoch'].tolist()
     )
 
