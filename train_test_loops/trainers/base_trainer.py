@@ -31,6 +31,10 @@ class BaseTrainer(ABC):
         self.task = config['execution'].get('task', 'classification')
         self.is_survival = self.task == 'survival'
 
+        # Common parameters
+        self.num_epochs = config['training']['num_epochs']
+        self.checkpoint = config['training']['checkpoint']
+
         if self.is_survival:
             # For survival tasks, we track different metrics
             self.metric_to_track = 'c_index' if self.is_survival else self.metric_to_track
@@ -46,33 +50,32 @@ class BaseTrainer(ABC):
             # Survival parameters
             self.survival_time_col = config['survival'].get('time_column', 'survival_months')
             self.event_col = config['survival'].get('event_column', 'censorship')
+        else:
+            self.weight_type = config['training']['weight_type']
+            self.metric_to_track = 'loss' if self.weight_type == 'loss' else 'acc' if self.weight_type == 'accuracy' else 'auc'
+            self.mode = 'min' if self.weight_type == 'loss' else 'max'
 
-        # Common parameters
-        self.num_epochs = config['training']['num_epochs']
-        self.checkpoint = config['training']['checkpoint']
-        self.weight_type = config['training']['weight_type']
-        self.metric_to_track = 'loss' if self.weight_type == 'loss' else 'acc' if self.weight_type == 'accuracy' else 'auc'
-        self.mode = 'min' if self.weight_type == 'loss' else 'max'
+            # Metrics tracking
+            self.best_metrics = {
+                'acc': 0.0,
+                'auc': 0.0,
+                'c_index': 0.0,
+                'precision': 0.0,
+                'loss': float('inf'),
+                'epoch': 0
+            }
 
         # Paths for saving results
         self.results_dir = experiment_logger.log_dir
         self.checkpoint_dir = experiment_logger.checkpoint_dir
-
-        # Metrics tracking
-        self.best_metrics = {
-            'acc': 0.0,
-            'auc': 0.0,
-            'precision': 0.0,
-            'loss': float('inf'),
-            'epoch': 0
-        }
 
         # Thresholds for significant improvement
         self.thresholds = {
             'acc': 0.,
             'auc': 0.,
             'precision': 0.,
-            'loss': 0.05
+            'loss': 0.05,
+            'c_index': 0.
         }
 
         # Execution mode
@@ -152,18 +155,27 @@ class BaseTrainer(ABC):
         curr_auc = metrics.get('auc', 0.0)
         curr_precision = metrics.get('precision', 0.0)
         curr_loss = metrics['loss']
+        curr_c_index = metrics.get('c_index', 0.0)
 
         # Get best metrics so far
         best_acc = self.best_metrics['acc']
         best_auc = self.best_metrics['auc']
         best_precision = self.best_metrics['precision']
         best_loss = self.best_metrics['loss']
+        best_c_index = self.best_metrics['c_index']
 
         # Get thresholds
         acc_threshold = self.thresholds['acc']
         auc_threshold = self.thresholds['auc']
         precision_threshold = self.thresholds['precision']
         loss_threshold = self.thresholds['loss']
+        c_index_threshold = self.thresholds['c_index']
+
+        if self.config['execution'].get('task', 'classification') == 'survival':
+                c_index_significantly_better = curr_c_index > best_c_index + c_index_threshold
+                if c_index_significantly_better:
+                    save_reason = f"C-index significantly improved: {curr_c_index:.4f} vs {best_c_index:.4f}"
+                    return True, save_reason
 
         # Calculate if metrics are significantly better or approximately equal
         acc_significantly_better = curr_acc > best_acc + acc_threshold
@@ -288,12 +300,18 @@ class BaseTrainer(ABC):
             should_save, save_reason = self.should_save_model(val_metrics)
 
             if should_save:
-                # Update best metrics
-                self.best_metrics['acc'] = val_metrics['acc']
-                self.best_metrics['auc'] = val_metrics.get('auc', 0.0)
-                self.best_metrics['precision'] = val_metrics.get('precision', 0.0)
-                self.best_metrics['loss'] = val_metrics['loss']
-                self.best_metrics['epoch'] = epoch
+                if self.is_survival:
+                    # Update best metrics for survival
+                    self.best_metrics['c_index'] = val_metrics['c_index']
+                    self.best_metrics['loss'] = val_metrics['loss']
+                    self.best_metrics['epoch'] = epoch
+                else:
+                    # Update best metrics
+                    self.best_metrics['acc'] = val_metrics['acc']
+                    self.best_metrics['auc'] = val_metrics.get('auc', 0.0)
+                    self.best_metrics['precision'] = val_metrics.get('precision', 0.0)
+                    self.best_metrics['loss'] = val_metrics['loss']
+                    self.best_metrics['epoch'] = epoch
 
                 # Update history
                 history['best_epoch'] = epoch
@@ -313,10 +331,16 @@ class BaseTrainer(ABC):
             # Stop epoch timer
             epoch_time = self.logger.stop_timer(f"epoch_{epoch}")
 
-            # Print epoch summary
-            self.logger.logger.info(f"\nEpoch {epoch}/{self.num_epochs} completed in {epoch_time:.2f}s")
-            self.logger.logger.info(f"Train Loss: {train_metrics['loss']:.4f}, Train Acc: {train_metrics['acc']:.2f}%")
-            self.logger.logger.info(f"Val Loss: {val_metrics['loss']:.4f}, Val Acc: {val_metrics['acc']:.2f}%")
+            if self.is_survival:
+                # Log survival-specific metrics
+                self.logger.logger.info(f"Epoch {epoch}/{self.num_epochs} completed in {epoch_time:.2f}s")
+                self.logger.logger.info(f"Train Loss: {train_metrics['loss']:.4f}, Train C-index: {train_metrics['c_index']:.4f}")
+                self.logger.logger.info(f"Val Loss: {val_metrics['loss']:.4f}, Val C-index: {val_metrics['c_index']:.4f}")
+            else:
+                # Print epoch summary
+                self.logger.logger.info(f"\nEpoch {epoch}/{self.num_epochs} completed in {epoch_time:.2f}s")
+                self.logger.logger.info(f"Train Loss: {train_metrics['loss']:.4f}, Train Acc: {train_metrics['acc']:.2f}%")
+                self.logger.logger.info(f"Val Loss: {val_metrics['loss']:.4f}, Val Acc: {val_metrics['acc']:.2f}%")
 
             if 'f1' in val_metrics:
                 self.logger.logger.info(f"Val F1: {val_metrics['f1']:.4f}, Val Precision: {val_metrics['precision']:.4f}, "

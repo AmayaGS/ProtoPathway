@@ -18,11 +18,9 @@ class MLPBaseline(nn.Module):
 
         # Define layers
         self.fc1 = nn.Linear(input_size, hidden_size)
-        # self.bn1 = nn.BatchNorm1d(hidden_size)
         self.dropout1 = nn.Dropout(dropout_rate)
 
         self.fc2 = nn.Linear(hidden_size, hidden_size // 2)
-        # self.bn2 = nn.BatchNorm1d(hidden_size // 2)
         self.dropout2 = nn.Dropout(dropout_rate)
 
         self.fc3 = nn.Linear(hidden_size // 2, num_classes)
@@ -30,13 +28,11 @@ class MLPBaseline(nn.Module):
     def forward(self, x):
         # First layer
         x = self.fc1(x)
-        # x = self.bn1(x)
         x = F.relu(x)
         x = self.dropout1(x)
 
         # Second layer
         x = self.fc2(x)
-        # x = self.bn2(x)
         x = F.relu(x)
         x = self.dropout2(x)
 

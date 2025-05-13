@@ -3,6 +3,7 @@ import os
 
 from utils.helpers import load_config, resolve_all_vars, flatten_config
 from utils.model_utils import create_cross_validation_splits
+from utils.survival_utils import load_tcga_splits
 from utils.logging_utils import ExperimentLogger
 
 # Import GE-specific runners
@@ -59,7 +60,11 @@ def main(config, experiment_logger):
     # Common preprocessing steps regardless of mode
     if config['execution']['create_splits']:
         logger.info("Creating cross-validation splits")
-        create_cross_validation_splits(config)
+        if config['execution']['task'] == "classification":
+            create_cross_validation_splits(config)
+        elif config['execution']['task'] == "survival":
+            splits_dir = config['survival']['tcga_splits']
+            load_tcga_splits(config, splits_dir)
         logger.info("Cross-validation splits created")
 
     # Execute mode-specific preprocessing

@@ -6,13 +6,6 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 import os
 import torch
-import torch.nn as nn
-import torch.optim as optim
-
-from models.GeneExpressionMLP import MLPBaseline
-from models.GeneExprHyperGraph import BipartiteGAT_MHSA
-from models.ProtoPathway import PathwayEmbeddingModel
-from models.GeneExprHyperGraph import MLPBaseline as MLPBaselineHG
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -122,89 +115,89 @@ def create_cross_validation_splits(config):
         print(f"Saved patient labels to {label_path}")
 
 
-def load_cv_folds(df, split_dict):
+def load_gene_expression_folds(df, split_dict, is_cv=False, ignore_missing=False):
+    """
+    Load training and validation/test folds from a split dictionary for gene expression data.
 
-    training_folds = []
-    validation_folds = []
+    Args:
+        df: Gene expression DataFrame with patient IDs as index
+        split_dict: Dictionary with train/validation/test splits
+        is_cv: Whether to load cross-validation folds (True) or train/test split (False)
+        ignore_missing: If True, skip missing keys; if False, raise an error for missing keys
 
-    for fold_name, splits in split_dict["CV"].items():
-        train_dict = {pid: df[pid] for pid in splits["Train"]}
-        val_dict = {pid: df[pid] for pid in splits["Val"]}
-        training_folds.append(train_dict)
-        validation_folds.append(val_dict)
-
-    return training_folds, validation_folds
-
-def load_wsi_train_test_folds(data_dict, split_dict):
-
-    training_folds = []
-    validation_folds = []
-
-    train_dict = {k: data_dict[k] for k in split_dict['Train']}
-    test_dict = {k: data_dict[k] for k in split_dict['Test']}
-    training_folds.append(train_dict)
-    validation_folds.append(test_dict)
-
-    return training_folds, validation_folds
-
-
-def load_ge_cv_folds(df, split_dict):
-
-    training_folds = []
-    validation_folds = []
-
-    for fold_name, splits in split_dict["CV"].items():
-        train_df = df.loc[splits["Train"]]
-        val_df = df.loc[splits["Val"]]
-        training_folds.append(train_df)
-        validation_folds.append(val_df)
-
-    return training_folds, validation_folds
-
-def load_ge_train_test_folds(df, split_dict):
-    """Load the full ge_training and test sets for final model ge_training."""
-
-    training_folds = []
-    validation_folds = []
-
-    train_df = df.loc[split_dict["Train"]]
-    test_df = df.loc[split_dict["Test"]]
-    training_folds.append(train_df)
-    validation_folds.append(test_df)
-
-    return training_folds, validation_folds
-
-
-def load_train_test_split(data_dict, split_dict):
-    """Load the full ge_training and test sets for final model ge_training."""
-    train_dict = {pid: data_dict[pid] for pid in split_dict["Train"]}
-    test_dict = {pid: data_dict[pid] for pid in split_dict["Test"]}
-    return train_dict, test_dict
-
-
-def load_wsi_folds(data, split_dict, is_cv=True):
-
+    Returns:
+        Tuple of (training_folds, validation_folds)
+    """
     training_folds = []
     validation_folds = []
 
     if is_cv:
         # Handle cross-validation folds
         for fold_name, splits in split_dict["CV"].items():
-            train_data = {pid: data[pid] for pid in splits["Train"]}
-            val_data = {pid: data[pid] for pid in splits["Val"]}
-            training_folds.append(train_data)
-            validation_folds.append(val_data)
+            if ignore_missing:
+                # Filter out missing patient IDs
+                train_ids = [pid for pid in splits["Train"] if pid in df.index]
+                val_ids = [pid for pid in splits["Val"] if pid in df.index]
+
+                train_df = df.loc[train_ids] if train_ids else pd.DataFrame()
+                val_df = df.loc[val_ids] if val_ids else pd.DataFrame()
+
+                if train_df.empty:
+                    print(f"Warning: No valid training samples for {fold_name}")
+                if val_df.empty:
+                    print(f"Warning: No valid validation samples for {fold_name}")
+            else:
+                # Check for missing keys before creating the dataframes
+                missing_train = [pid for pid in splits["Train"] if pid not in df.index]
+                missing_val = [pid for pid in splits["Val"] if pid not in df.index]
+
+                if missing_train or missing_val:
+                    missing = missing_train + missing_val
+                    raise KeyError(f"Patient IDs {missing} from fold {fold_name} are not present in data")
+
+                train_df = df.loc[splits["Train"]]
+                val_df = df.loc[splits["Val"]]
+
+            training_folds.append(train_df)
+            validation_folds.append(val_df)
     else:
         # Handle train/test split
-        train_data = {k: data[k] for k in split_dict['Train']}
-        test_data = {k: data[k] for k in split_dict['Test']}
-        training_folds.append(train_data)
-        validation_folds.append(test_data)
+        if ignore_missing:
+            # Filter out missing patient IDs
+            train_ids = [pid for pid in split_dict["Train"] if pid in df.index]
+            test_ids = [pid for pid in split_dict["Test"] if pid in df.index]
+
+            train_df = df.loc[train_ids] if train_ids else pd.DataFrame()
+            test_df = df.loc[test_ids] if test_ids else pd.DataFrame()
+
+            if train_df.empty:
+                print(f"Warning: No valid training samples for Train/Test split")
+            if test_df.empty:
+                print(f"Warning: No valid test samples for Train/Test split")
+        else:
+            # Check for missing keys before creating the dataframes
+            missing_train = [pid for pid in split_dict["Train"] if pid not in df.index]
+            missing_test = [pid for pid in split_dict["Test"] if pid not in df.index]
+
+            if missing_train or missing_test:
+                missing = missing_train + missing_test
+                raise KeyError(f"Patient IDs {missing} are not present in data")
+
+            train_df = df.loc[split_dict["Train"]]
+            test_df = df.loc[split_dict["Test"]]
+
+        training_folds.append(train_df)
+        validation_folds.append(test_df)
+
+    # Report fold sizes
+    for i, (train_fold, val_fold) in enumerate(zip(training_folds, validation_folds)):
+        fold_name = f"Fold {i}" if is_cv else "Train/Test"
+        print(f"{fold_name}: {len(train_fold)} train samples, {len(val_fold)} validation/test samples")
 
     return training_folds, validation_folds
 
 
-def load_folds(data, split_dict, is_cv=False, ignore_missing=False):
+def load_wsi_folds(data, split_dict, is_cv=False, ignore_missing=False):
     """
     Load training and validation/test folds from a split dictionary.
 
@@ -307,6 +300,88 @@ def _seed_torch(seed=42, device='cuda'):
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+
+#
+# def load_cv_folds(df, split_dict):
+#
+#     training_folds = []
+#     validation_folds = []
+#
+#     for fold_name, splits in split_dict["CV"].items():
+#         train_dict = {pid: df[pid] for pid in splits["Train"]}
+#         val_dict = {pid: df[pid] for pid in splits["Val"]}
+#         training_folds.append(train_dict)
+#         validation_folds.append(val_dict)
+#
+#     return training_folds, validation_folds
+#
+# def load_wsi_train_test_folds(data_dict, split_dict):
+#
+#     training_folds = []
+#     validation_folds = []
+#
+#     train_dict = {k: data_dict[k] for k in split_dict['Train']}
+#     test_dict = {k: data_dict[k] for k in split_dict['Test']}
+#     training_folds.append(train_dict)
+#     validation_folds.append(test_dict)
+#
+#     return training_folds, validation_folds
+#
+#
+# def load_ge_cv_folds(df, split_dict):
+#
+#     training_folds = []
+#     validation_folds = []
+#
+#     for fold_name, splits in split_dict["CV"].items():
+#         train_df = df.loc[splits["Train"]]
+#         val_df = df.loc[splits["Val"]]
+#         training_folds.append(train_df)
+#         validation_folds.append(val_df)
+#
+#     return training_folds, validation_folds
+#
+# def load_ge_train_test_folds(df, split_dict):
+#     """Load the full ge_training and test sets for final model ge_training."""
+#
+#     training_folds = []
+#     validation_folds = []
+#
+#     train_df = df.loc[split_dict["Train"]]
+#     test_df = df.loc[split_dict["Test"]]
+#     training_folds.append(train_df)
+#     validation_folds.append(test_df)
+#
+#     return training_folds, validation_folds
+#
+#
+# def load_train_test_split(data_dict, split_dict):
+#     """Load the full ge_training and test sets for final model ge_training."""
+#     train_dict = {pid: data_dict[pid] for pid in split_dict["Train"]}
+#     test_dict = {pid: data_dict[pid] for pid in split_dict["Test"]}
+#     return train_dict, test_dict
+
+#
+# def load_wsi_folds(data, split_dict, is_cv=True):
+#
+#     training_folds = []
+#     validation_folds = []
+#
+#     if is_cv:
+#         # Handle cross-validation folds
+#         for fold_name, splits in split_dict["CV"].items():
+#             train_data = {pid: data[pid] for pid in splits["Train"]}
+#             val_data = {pid: data[pid] for pid in splits["Val"]}
+#             training_folds.append(train_data)
+#             validation_folds.append(val_data)
+#     else:
+#         # Handle train/test split
+#         train_data = {k: data[k] for k in split_dict['Train']}
+#         test_data = {k: data[k] for k in split_dict['Test']}
+#         training_folds.append(train_data)
+#         validation_folds.append(test_data)
+#
+#     return training_folds, validation_folds
 
 # def initialise_model(config, input_dim):
 #

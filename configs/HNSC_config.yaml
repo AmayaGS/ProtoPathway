@@ -15,7 +15,7 @@ patient_id: 'case_id'
 execution:
   mode: "gene_expression"  # choices: ["gene_expression", "wsi", "multimodal"]
   task: "survival"  # choices: ["classification", "survival"]
-  ge_preprocess: true
+  ge_preprocess: false
   wsi_preprocess: false
   wsi_segmentation: false
   create_splits: false
@@ -27,9 +27,11 @@ execution:
 # Add survival-specific settings
 survival:
   enabled: true  # Set to true to enable survival analysis
-  time_column: "survival_months"  # Column name for survival time
-  event_column: "censorship"      # Column name for censorship/event (1=event occurred, 0=censored)
+  target_column: "survival_months"  # Column name for survival time
+  censorship_column: "censorship"      # Column name for censorship/event (1=event occurred, 0=censored)
   survival_bins: 4          # Number of risk groups for stratification (optional)
+  tcga_splits: "C:/Users/Amaya/Documents/PhD/Data/TGCA_data/TCGA_HSNC/splits"
+  alpha: 0.5
 
 ## Model configuration
 #model:
@@ -56,7 +58,7 @@ gene_expression:
     target_depth: 5
     max_visualization: 200
 
-# Input files
+# Metadata files
 input:
   dir: "${base_dir}/raw_data"
   patient_labels: "tcga_${dataset_name}.csv"
@@ -65,6 +67,7 @@ input:
 output:
   data:
     dir: "${output_dir}/processed_data"
+    filtered_labels: "${output_dir}/processed_data/tgca_filtered_${dataset_name}.csv"
     gene_annotations: "${output_dir}/processed_data/gene_annotations.csv"
     filtered_genes: "${output_dir}/processed_data/rna_clean_${dataset_name}.csv"
     reactome_pathways: "${output_dir}/processed_data/reactome_pathways_gene_lists.csv"
@@ -84,7 +87,7 @@ testing:
 
 # WSI specific configuration
 wsi:
-  enabled: true  # Set to true to enable WSI branch
+  enabled: false  # Set to true to enable WSI branch
   model: 'Prototype'  # WSI model to use
   input:
     slides_dir: "${output_dir}/raw_data/slides/${dataset_name}"
@@ -105,7 +108,7 @@ wsi:
 
 # Multimodal fusion
 multimodal:
-  enabled: true  # Set to true to enable multimodal fusion
+  enabled: false  # Set to true to enable multimodal fusion
   fusion_type: "attention"  # choices: ["concat", "attention", "weighted"]
   fusion_layers: 2
   hidden_dim: 128

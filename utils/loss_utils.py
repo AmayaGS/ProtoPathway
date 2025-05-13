@@ -1,6 +1,6 @@
+
 import torch.nn as nn
 import torch
-import torch.nn.functional as F
 
 
 class NLLSurvLoss(nn.Module):
@@ -61,39 +61,33 @@ def nll_loss(h, y, c, alpha=0.0, eps=1e-7, reduction='sum'):
     ----------
     Zadeh, S.G. and Schmid, M., 2020. Bias in cross-entropy-based training of deep survival networks. IEEE transactions on pattern analysis and machine intelligence.
     """
-    # print("h shape", h.shape)
 
-    # make sure these are ints
+    # Make sure these are ints
     y = y.type(torch.int64)
     c = c.type(torch.int64)
 
     hazards = torch.sigmoid(h)  # hazard function
-    # print("hazards shape", hazards.shape)
 
+    # Get batch size and number of time bins
+    batch_size, n_time_bins = hazards.shape
+
+    # Calculate survival function S(t) = Π(1-h(t))
     S = torch.cumprod(1 - hazards, dim=1)
-    # print("S.shape", S.shape, S)
 
-    S_padded = torch.cat([torch.ones_like(c), S], 1)
-    # S(-1) = 0, all patients are alive from (-inf, 0) by definition
-    # after padding, S(0) = S[1], S(1) = S[2], etc, h(0) = h[0]
-    # hazards[y] = hazards(1)
-    # S[1] = S(1)
+    # Create the right shape for ones_like(c) to match S
+    # This ensures both tensors have same number of dimensions
+    ones = torch.ones(batch_size, 1, device=c.device)
 
-    # print("S_padded.shape", S_padded.shape, S_padded)
+    # Concatenate properly along dimension 1
+    S_padded = torch.cat([ones, S], dim=1)
 
+    # Rest of the function continues as before...
     s_prev = torch.gather(S_padded, dim=1, index=y).clamp(min=eps)
     h_this = torch.gather(hazards, dim=1, index=y).clamp(min=eps)
     s_this = torch.gather(S_padded, dim=1, index=y + 1).clamp(min=eps)
-    # print('s_prev.s_prev', s_prev.shape, s_prev)
-    # print('h_this.shape', h_this.shape, h_this)
-    # print('s_this.shape', s_this.shape, s_this)
 
-    # c = 1 means censored. Weight 0 in this case
     uncensored_loss = -(1 - c) * (torch.log(s_prev) + torch.log(h_this))
     censored_loss = - c * torch.log(s_this)
-
-    # print('uncensored_loss.shape', uncensored_loss.shape)
-    # print('censored_loss.shape', censored_loss.shape)
 
     neg_l = censored_loss + uncensored_loss
     if alpha is not None:
@@ -103,8 +97,6 @@ def nll_loss(h, y, c, alpha=0.0, eps=1e-7, reduction='sum'):
         loss = loss.mean()
     elif reduction == 'sum':
         loss = loss.sum()
-    else:
-        raise ValueError("Bad input for reduction: {}".format(reduction))
 
     return loss
 
@@ -120,31 +112,3 @@ def loss_reg_l1(coef):
             return coef * sum([torch.abs(W).sum() for W in model_params])
 
     return func
-
-
-##################################################
-# General Loss for Survival Analysis Models,
-# including continuous output and discrete output.
-##################################################
-
-def recon_loss(pred_t, t, e, alpha=0.0, gamma=1.0, norm='l1', cur_alpha=None):
-    """Continuous Survival Model
-
-    Reconstruction loss for pred_t and labels.
-    recon_loss = l2 + l3
-    if e = 0, l2 = max(0, t - pred_t)
-    if e = 1, l3 = |t - pred_t|
-    """
-    pred_t = pred_t.squeeze()
-    t = t.squeeze()
-    e = e.squeeze()
-    loss_obs = e * torch.abs(pred_t - t)
-    loss_cen = (1 - e) * F.relu(gamma - (pred_t - t))
-    if norm == 'l2':
-        loss_obs = loss_obs * loss_obs
-        loss_cen = loss_cen * loss_cen
-    loss_recon = loss_obs + loss_cen
-    _alpha = alpha if cur_alpha is None else cur_alpha
-    loss = (1.0 - _alpha) * loss_recon + _alpha * loss_obs
-    loss = loss.mean()
-    return loss

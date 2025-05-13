@@ -60,6 +60,8 @@ class MultimodalTrainer(BaseTrainer):
         self.wsi_feature_dim = None
         self.hypergraph_data = None
 
+        self.is_survival = config['execution'].get('task', 'classification') == 'survival'
+
     def prepare_data(self, train_data, val_data, aux_train_data=None, aux_val_data=None):
         """
         Prepare data loaders for training and validation.
@@ -143,7 +145,7 @@ class MultimodalTrainer(BaseTrainer):
             # Define loss function
             criterion = torch.nn.CrossEntropyLoss()
         if self.config['survival']:
-            criterion = NLLSurvLoss(alpha=0.5)
+            criterion = NLLSurvLoss(alpha=self.config['survival']['alpha'])
 
         # Define optimizer
         optimizer = torch.optim.AdamW(

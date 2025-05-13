@@ -5,7 +5,7 @@ import pickle
 import pandas as pd
 
 from utils.helpers import ensure_directory
-from utils.model_utils import load_ge_cv_folds, load_ge_train_test_folds
+from utils.model_utils import load_gene_expression_folds
 
 from train_test_loops.trainers.gene_trainer import GeneExpressionTrainer
 from utils.visualization_utils import (
@@ -69,11 +69,11 @@ def train_gene_expression_model(config, is_full_train=False, experiment_logger=N
     # Prepare ge_training folds
     if is_full_train:
         logger.info("Using train/test split for full ge_training")
-        training_folds, validation_folds = load_ge_train_test_folds(gene_expression_df, split_dict)
+        training_folds, validation_folds = load_gene_expression_folds(gene_expression_df, split_dict, is_cv=False, ignore_missing=True)
         n_folds = 1
     else:
         logger.info(f"Using {len(split_dict['CV'])} cross-validation folds")
-        training_folds, validation_folds = load_ge_cv_folds(gene_expression_df, split_dict)
+        training_folds, validation_folds = load_gene_expression_folds(gene_expression_df, split_dict, is_cv=True, ignore_missing=True)
         n_folds = len(split_dict['CV'])
 
     fold_histories = []

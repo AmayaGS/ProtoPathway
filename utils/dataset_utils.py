@@ -30,15 +30,14 @@ class GeneExpressionDataset(Dataset):
         print(f"Found {len(self.patient_ids)} patients with both expression data and labels")
 
         if self.task == 'survival':
+
             self.label_col = self.config['survival']['target_column']
             self.censor_col = self.config['survival']['censorship_column']
-            self.n_bins = self.config['survival']['n_bins']
+            self.n_bins = self.config['survival']['survival_bins']
 
-            # get patient survival information
-            patient_df = self.labels_df.loc[self.labels_df[self.config['patient_id']].isin(self.patient_ids)].copy()
-
+            # we use the full dataset to determine the bins
             self.patient_df, self.bins = discretize_survival_times(
-                patient_df,
+                self.labels_df,
                 label_col=self.label_col,
                 censor_col=self.censor_col,
                 n_bins=self.n_bins
@@ -57,7 +56,7 @@ class GeneExpressionDataset(Dataset):
         # Convert to tensor
         gene_expr_tensor = torch.FloatTensor(gene_expr)
 
-        patient_row = self.labels_df.loc[self.labels_df[self.config['patient_id']] == patient_id].iloc[0]
+        patient_row = self.patient_df.loc[self.patient_df[self.config['patient_id']] == patient_id].iloc[0]
 
         if self.task == 'classification':
             # For classification task
@@ -76,7 +75,6 @@ class GeneExpressionDataset(Dataset):
             'id': patient_id,
             **target
         }
-
 
 
 def build_incidence_matrix(pathway_genes_path, filtered_genes):

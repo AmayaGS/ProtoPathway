@@ -5,7 +5,7 @@ import pickle
 from pathlib import Path
 
 from utils.helpers import ensure_directory
-from utils.model_utils import load_wsi_folds, load_folds
+from utils.model_utils import load_wsi_folds, load_wsi_folds
 
 from utils.kmeans_init import sample_embeddings, init_prototypes
 
@@ -75,11 +75,11 @@ def train_wsi_model(config, is_full_train=False, experiment_logger=None):
     # Prepare ge_training folds
     if is_full_train:
         logger.info("Using train/test split for full training")
-        training_folds, validation_folds = load_folds(wsi_features, split_dict, is_cv=False, ignore_missing=True)
+        training_folds, validation_folds = load_wsi_folds(wsi_features, split_dict, is_cv=False, ignore_missing=True)
         n_folds = 1
     else:
         logger.info(f"Using {len(split_dict['CV'])} cross-validation folds")
-        training_folds, validation_folds = load_folds(wsi_features, split_dict, is_cv=True, ignore_missing=True)
+        training_folds, validation_folds = load_wsi_folds(wsi_features, split_dict, is_cv=True, ignore_missing=True)
         n_folds = len(split_dict['CV'])
 
     fold_histories = []

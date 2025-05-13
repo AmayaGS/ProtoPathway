@@ -1,9 +1,119 @@
 
 # utils/survival_utils.py
 
-import pandas as pd
+import os
 import numpy as np
+import pandas as pd
+import pickle
+
 import torch
+
+from utils.helpers import ensure_directory
+
+def load_tcga_splits(config, splits_dir):
+    """
+    Load TCGA splits from predefined CSV files and create a dictionary with the same
+    structure as create_cross_validation_splits for compatibility.
+
+    Args:
+        config: Configuration dictionary
+        splits_dir: Directory containing the split files (named split_0.csv, split_1.csv, etc.)
+        test_ids: Optional list of test patient IDs (if None, will look for test.csv or generate)
+
+    Returns:
+        Dictionary with CV, Train and Test split IDs
+    """
+
+    # Output path
+    output_path = os.path.join(config['output']['data']['dir'], f"data_splits_{config['dataset_name']}.pkl")
+
+    # load metadata to filter down to available patients
+    metadata_path = os.path.join(config['input']['dir'], config['input']['patient_labels'])
+    metadata_df = pd.read_csv(metadata_path)
+
+    # filtered metadata path
+    filtered_metadata_path = config['output']['data']['filtered_labels']
+
+    all_patient_ids = []
+
+    # Initialize dictionary structure
+    split_dict = {
+        "Train": [],
+        "Test": [],
+        "CV": {}
+    }
+
+    # Get list of split files
+    split_files = [f for f in os.listdir(splits_dir) if f.startswith("splits_") and f.endswith(".csv")]
+    split_files.sort()  # Sort to ensure consistent ordering
+
+    print(f"Found {len(split_files)} split files in {splits_dir}")
+
+    # First process split_0 for the main Train/Test set
+    first_split_file = "splits_0.csv"
+    if first_split_file in split_files:
+        file_path = os.path.join(splits_dir, first_split_file)
+        try:
+            # Read CSV with header
+            split_df = pd.read_csv(file_path)
+
+            # Extract train and val IDs
+            train_ids = split_df['train'].dropna().tolist()
+            val_ids = split_df['val'].dropna().tolist()
+
+            # Set main Train set
+            split_dict["Train"] = train_ids
+
+            # Use val IDs as Test if no test_ids provided
+            if not split_dict["Test"]:
+                split_dict["Test"] = val_ids
+
+            print(f"Main split: {len(train_ids)} train samples, {len(val_ids)} validation/test samples")
+
+        except Exception as e:
+            print(f"Error reading {first_split_file}: {e}")
+    else:
+        print(f"Critical error: {first_split_file} not found in {splits_dir}")
+
+    # Now process all splits for the CV section
+    for split_file in split_files:
+        # Extract fold index from filename
+        fold_idx = int(split_file.split("_")[1].split(".")[0])
+        file_path = os.path.join(splits_dir, split_file)
+
+        try:
+            # Read CSV with header
+            split_df = pd.read_csv(file_path)
+
+            # Extract train and val IDs
+            train_ids = split_df['train'].dropna().tolist()
+            val_ids = split_df['val'].dropna().tolist()
+            all_patient_ids.extend(train_ids + val_ids)
+
+            print(f"Fold {fold_idx}: {len(train_ids)} train samples, {len(val_ids)} validation samples")
+
+            # Add to CV dictionary
+            fold_name = f"Fold {fold_idx}"
+            split_dict["CV"][fold_name] = {
+                "Train": train_ids,
+                "Val": val_ids
+            }
+
+        except Exception as e:
+            print(f"Error reading {split_file}: {e}")
+            continue
+
+    patient_ids_present = np.unique(all_patient_ids)
+    # Filter metadata to only include patients present in the splits
+    metadata_df = metadata_df.drop_duplicates(subset=config['patient_id'])
+    filtered_metadata_df = metadata_df[metadata_df[config['patient_id']].isin(patient_ids_present)]
+    filtered_metadata_df.to_csv(filtered_metadata_path, index=False)
+
+    # Save the dictionary
+    ensure_directory(os.path.dirname(output_path))
+    with open(output_path, "wb") as f:
+        pickle.dump(split_dict, f)
+
 
 
 def discretize_survival_times(patients_df, label_col, censor_col, n_bins=4, eps=0.001):
@@ -88,6 +198,24 @@ def get_survival_target(patient_row, label_col=None, censor_col=None, label_valu
         })
 
     return target_info
+
+
+def calculate_risk(outputs):
+    r"""
+    Take the logits of the model and calculate the risk for the patient
+
+    Args:
+        - outputs : torch.Tensor
+
+    Returns:
+        - risk : torch.Tensor
+
+    """
+    hazards = torch.sigmoid(outputs)
+    survival = torch.cumprod(1 - hazards, dim=1)
+    risk = -torch.sum(survival, dim=1).detach().cpu().numpy()
+
+    return risk, survival.detach().cpu().numpy()
 
 
 def calculate_c_index(survival_times, censorships, risk_scores):
