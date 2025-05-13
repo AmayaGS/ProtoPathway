@@ -150,70 +150,86 @@ class BaseTrainer(ABC):
         Returns:
             Tuple of (should_save, reason)
         """
-        # Extract current metrics
-        curr_acc = metrics['acc']
-        curr_auc = metrics.get('auc', 0.0)
-        curr_precision = metrics.get('precision', 0.0)
-        curr_loss = metrics['loss']
-        curr_c_index = metrics.get('c_index', 0.0)
-
-        # Get best metrics so far
-        best_acc = self.best_metrics['acc']
-        best_auc = self.best_metrics['auc']
-        best_precision = self.best_metrics['precision']
-        best_loss = self.best_metrics['loss']
-        best_c_index = self.best_metrics['c_index']
-
-        # Get thresholds
-        acc_threshold = self.thresholds['acc']
-        auc_threshold = self.thresholds['auc']
-        precision_threshold = self.thresholds['precision']
-        loss_threshold = self.thresholds['loss']
-        c_index_threshold = self.thresholds['c_index']
-
-        if self.config['execution'].get('task', 'classification') == 'survival':
-                c_index_significantly_better = curr_c_index > best_c_index + c_index_threshold
-                if c_index_significantly_better:
-                    save_reason = f"C-index significantly improved: {curr_c_index:.4f} vs {best_c_index:.4f}"
-                    return True, save_reason
-
-        # Calculate if metrics are significantly better or approximately equal
-        acc_significantly_better = curr_acc > best_acc + acc_threshold
-        acc_approximately_same = abs(curr_acc - best_acc) <= acc_threshold
-
-        auc_better = curr_auc > best_auc
-        auc_approximately_same = abs(curr_auc - best_auc) <= auc_threshold
-
-        precision_better = curr_precision > best_precision
-        precision_approximately_same = abs(curr_precision - best_precision) <= precision_threshold
-
-        # For loss, lower is better, and we check for relative improvement
-        loss_significantly_better = curr_loss < best_loss * (1 - loss_threshold)
-
-        # Reason for saving (for logging)
+        # Default save reason - will be updated if we decide to save
         save_reason = None
 
-        # Decision tree
-        if acc_significantly_better:
-            save_reason = f"Accuracy significantly improved: {curr_acc:.2f}% vs {best_acc:.2f}%"
-            return True, save_reason
+        if self.config['execution'].get('task', 'classification') == 'survival':
+            # For survival tasks, we only check c-index
+            curr_loss = metrics['loss']
+            curr_c_index = metrics.get('c_index', 0.0)
 
-        elif acc_approximately_same:
-            if auc_better:
-                save_reason = f"Equal accuracy with better AUC: {curr_auc:.4f} vs {best_auc:.4f}"
+            best_loss = self.best_metrics['loss']
+            best_c_index = self.best_metrics['c_index']
+
+            loss_threshold = self.thresholds['loss']
+            c_index_threshold = self.thresholds['c_index']
+
+            # Check if c-index is significantly better
+            c_index_significantly_better = curr_c_index > best_c_index + c_index_threshold
+
+            # Also consider loss improvements
+            loss_significantly_better = curr_loss < best_loss * (1 - loss_threshold)
+
+            if c_index_significantly_better:
+                save_reason = f"C-index significantly improved: {curr_c_index:.4f} vs {best_c_index:.4f}"
                 return True, save_reason
+            elif loss_significantly_better:
+                save_reason = f"Loss significantly improved: {curr_loss:.4f} vs {best_loss:.4f}"
+                return True, save_reason
+            else:
+                # No improvement - don't save
+                return False, save_reason
 
-            elif auc_approximately_same:
-                if precision_better:
-                    save_reason = f"Equal accuracy & AUC with better precision: {curr_precision:.4f} vs {best_precision:.4f}"
+        else:
+            # Extract current metrics
+            curr_acc = metrics.get('acc', 0.0)
+            curr_auc = metrics.get('auc', 0.0)
+            curr_precision = metrics.get('precision', 0.0)
+            curr_loss = metrics['loss']
+
+            # Get best metrics so far
+            best_acc = self.best_metrics['acc']
+            best_auc = self.best_metrics['auc']
+            best_precision = self.best_metrics['precision']
+            best_loss = self.best_metrics['loss']
+
+            # Get thresholds
+            acc_threshold = self.thresholds['acc']
+            auc_threshold = self.thresholds['auc']
+            precision_threshold = self.thresholds['precision']
+            loss_threshold = self.thresholds['loss']
+
+            # Calculate if metrics are significantly better or approximately equal
+            acc_significantly_better = curr_acc > best_acc + acc_threshold
+            acc_approximately_same = abs(curr_acc - best_acc) <= acc_threshold
+
+            auc_better = curr_auc > best_auc
+            auc_approximately_same = abs(curr_auc - best_auc) <= auc_threshold
+
+            precision_better = curr_precision > best_precision
+            precision_approximately_same = abs(curr_precision - best_precision) <= precision_threshold
+
+            # For loss, lower is better, and we check for relative improvement
+            loss_significantly_better = curr_loss < best_loss * (1 - loss_threshold)
+
+            # Decision tree
+            if acc_significantly_better:
+                save_reason = f"Accuracy significantly improved: {curr_acc:.2f}% vs {best_acc:.2f}%"
+                return True, save_reason
+            elif acc_approximately_same:
+                if auc_better:
+                    save_reason = f"Equal accuracy with better AUC: {curr_auc:.4f} vs {best_auc:.4f}"
                     return True, save_reason
+                elif auc_approximately_same:
+                    if precision_better:
+                        save_reason = f"Equal accuracy & AUC with better precision: {curr_precision:.4f} vs {best_precision:.4f}"
+                        return True, save_reason
+                    elif precision_approximately_same and loss_significantly_better:
+                        save_reason = f"Equal accuracy, AUC & precision with significantly better loss: {curr_loss:.4f} vs {best_loss:.4f}"
+                        return True, save_reason
 
-                elif precision_approximately_same and loss_significantly_better:
-                    save_reason = f"Equal accuracy, AUC & precision with significantly better loss: {curr_loss:.4f} vs {best_loss:.4f}"
-                    return True, save_reason
-
-        # Default case - no saving
-        return False, save_reason
+            # If we reached here, no saving is needed
+            return False, save_reason
 
     def train(self, train_data, val_data, aux_train_data=None, aux_val_data=None, fold_idx=None):
         """

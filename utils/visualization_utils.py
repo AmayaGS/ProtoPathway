@@ -242,7 +242,10 @@ def plot_learning_curves(
         figsize: Figure size (width, height)
     """
     if metrics is None:
-        metrics = ['loss', 'acc']
+        if 'c-index' in history['val']:
+            metrics = ['loss', 'c-index']
+        else:
+            metrics = ['loss', 'acc']
 
     for metric in metrics:
         if metric not in history['train'] or metric not in history['val']:
@@ -268,12 +271,16 @@ def plot_learning_curves(
                          xytext=(best_epoch + 0.5, best_value),
                          fontsize=10)
 
-        title = f'{title_prefix}{metric.capitalize()} vs. Epochs'
+        metric_display = 'C-index' if metric == 'c_index' else metric.capitalize()
+        title = f'{title_prefix}{metric_display} vs. Epochs'
         plt.title(title, fontsize=14)
         plt.xlabel('Epochs', fontsize=12)
-        plt.ylabel(metric.capitalize(), fontsize=12)
+        plt.ylabel(metric_display, fontsize=12)
         plt.legend(loc='best', fontsize=10)
         plt.grid(True, alpha=0.3)
+
+        if metric == 'c_index':
+            plt.ylim([0, 1.05])
 
         # Ensure x-axis shows integers for epochs
         plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
@@ -592,17 +599,26 @@ def visualize_fold_results(
     fold_dir = os.path.join(output_dir, f"fold_{fold_idx}")
     ensure_directory(fold_dir)
 
+    # Determine task type and metrics to use
+    is_survival = config['execution'].get('task', 'classification') == 'survival'
+
+    # Set defaults based on task type if not provided
+    if metric_for_best is None:
+        metric_for_best = 'c_index' if is_survival else 'acc'
+    if mode is None:
+        mode = 'max'  # Both c-index and accuracy are better when higher
+
     # Get best epoch and its metrics
     best_epoch, best_metrics = get_best_epoch_data(fold_data['history'], metric_for_best, mode)
 
-    # Get class names
-    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
+    # Get appropriate metrics list based on task
+    metrics_to_plot = ['loss', 'c_index'] if is_survival else ['loss', 'acc']
 
     # 1. Plot learning curves with best epoch marked
     plot_learning_curves(
         fold_data['history'],
         fold_dir,
-        metrics=['loss', 'acc'],
+        metrics=metrics_to_plot,
         best_epoch=best_epoch,
         title_prefix=f"Fold {fold_idx} "
     )
@@ -612,51 +628,57 @@ def visualize_fold_results(
     ensure_directory(best_dir)
 
     # 2. Get confusion matrix for best epoch
-    if ('confusion_matrix' in fold_data['history']['val'] and
-            isinstance(fold_data['history']['val']['confusion_matrix'], dict) and
-            best_epoch in fold_data['history']['val']['confusion_matrix']):
-        cm = fold_data['history']['val']['confusion_matrix'][best_epoch]
 
-        # Plot confusion matrices
-        plot_confusion_matrix(
-            cm, class_names,
-            os.path.join(best_dir, 'confusion_matrix.png'),
-            title=f"Fold {fold_idx} Confusion Matrix (Epoch {best_epoch})"
-        )
+    # Get class names
 
-        plot_confusion_matrix(
-            cm, class_names,
-            os.path.join(best_dir, 'confusion_matrix_normalized.png'),
-            title=f"Fold {fold_idx} Normalized Confusion Matrix (Epoch {best_epoch})",
-            normalize=True
-        )
+    if not is_survival and 'confusion_matrix' in fold_data['history']['val']:
+        class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
 
-    # 3. Generate ROC and PR curves for best epoch
-    if ('all_labels' in fold_data['history']['val'] and
-            isinstance(fold_data['history']['val']['all_labels'], dict) and
-            best_epoch in fold_data['history']['val']['all_labels'] and
-            'all_probs' in fold_data['history']['val'] and
-            best_epoch in fold_data['history']['val']['all_probs']):
-        y_true = fold_data['history']['val']['all_labels'][best_epoch]
-        y_probs = fold_data['history']['val']['all_probs'][best_epoch]
+        if ('confusion_matrix' in fold_data['history']['val'] and
+                isinstance(fold_data['history']['val']['confusion_matrix'], dict) and
+                best_epoch in fold_data['history']['val']['confusion_matrix']):
+            cm = fold_data['history']['val']['confusion_matrix'][best_epoch]
 
-        # Plot ROC curve
-        auc_scores = plot_roc_curves(
-            y_true, y_probs, class_names,
-            os.path.join(best_dir, 'roc_curve.png'),
-            title=f"Fold {fold_idx} ROC Curve (Epoch {best_epoch})"
-        )
+            # Plot confusion matrices
+            plot_confusion_matrix(
+                cm, class_names,
+                os.path.join(best_dir, 'confusion_matrix.png'),
+                title=f"Fold {fold_idx} Confusion Matrix (Epoch {best_epoch})"
+            )
 
-        # Plot PR curve
-        ap_scores = plot_precision_recall_curves(
-            y_true, y_probs, class_names,
-            os.path.join(best_dir, 'pr_curve.png'),
-            title=f"Fold {fold_idx} Precision-Recall Curve (Epoch {best_epoch})"
-        )
+            plot_confusion_matrix(
+                cm, class_names,
+                os.path.join(best_dir, 'confusion_matrix_normalized.png'),
+                title=f"Fold {fold_idx} Normalized Confusion Matrix (Epoch {best_epoch})",
+                normalize=True
+            )
 
-        # Store scores
-        best_metrics['val']['auc_scores'] = auc_scores
-        best_metrics['val']['ap_scores'] = ap_scores
+        # 3. Generate ROC and PR curves for best epoch
+        if ('all_labels' in fold_data['history']['val'] and
+                isinstance(fold_data['history']['val']['all_labels'], dict) and
+                best_epoch in fold_data['history']['val']['all_labels'] and
+                'all_probs' in fold_data['history']['val'] and
+                best_epoch in fold_data['history']['val']['all_probs']):
+            y_true = fold_data['history']['val']['all_labels'][best_epoch]
+            y_probs = fold_data['history']['val']['all_probs'][best_epoch]
+
+            # Plot ROC curve
+            auc_scores = plot_roc_curves(
+                y_true, y_probs, class_names,
+                os.path.join(best_dir, 'roc_curve.png'),
+                title=f"Fold {fold_idx} ROC Curve (Epoch {best_epoch})"
+            )
+
+            # Plot PR curve
+            ap_scores = plot_precision_recall_curves(
+                y_true, y_probs, class_names,
+                os.path.join(best_dir, 'pr_curve.png'),
+                title=f"Fold {fold_idx} Precision-Recall Curve (Epoch {best_epoch})"
+            )
+
+            # Store scores
+            best_metrics['val']['auc_scores'] = auc_scores
+            best_metrics['val']['ap_scores'] = ap_scores
 
     # 4. Create a summary text file
     with open(os.path.join(best_dir, 'best_epoch_summary.txt'), 'w') as f:
@@ -835,11 +857,15 @@ def visualize_full_training_results(
     # Get class names
     class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
 
+    is_survival = config['execution'].get('task', 'classification') == 'survival'
+    # Get appropriate metrics list based on task
+    metrics_to_plot = ['loss', 'c_index'] if is_survival else ['loss', 'acc']
+
     # 1. Plot learning curves with best epoch marked
     plot_learning_curves(
         history,
         output_dir,
-        metrics=['loss', 'acc'],
+        metrics=metrics_to_plot,
         best_epoch=best_epoch,
         title_prefix="Full Training "
     )

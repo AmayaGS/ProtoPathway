@@ -59,6 +59,10 @@ def gene_expression_preprocessing(config):
     if config['execution']['task'] == 'survival':
         output_path = config['output']['data']['filtered_genes']
         filtered_genes_df = gene_df.T
+        if filtered_genes_df.index.duplicated().any():
+            print(
+                f"Found {sum(filtered_genes_df.index.duplicated())} duplicate patient IDs. Averaging them.")
+            filtered_genes_df = filtered_genes_df.groupby(filtered_genes_df.index).mean()
         ensure_directory(os.path.dirname(output_path))
         filtered_genes_df.to_csv(output_path, sep=",", index=True)
         print(f"Filtered expression data saved to {output_path}")

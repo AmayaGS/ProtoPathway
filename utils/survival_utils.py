@@ -213,9 +213,9 @@ def calculate_risk(outputs):
     """
     hazards = torch.sigmoid(outputs)
     survival = torch.cumprod(1 - hazards, dim=1)
-    risk = -torch.sum(survival, dim=1).detach().cpu().numpy()
+    risk = -torch.sum(survival, dim=1)
 
-    return risk, survival.detach().cpu().numpy()
+    return risk, survival
 
 
 def calculate_c_index(survival_times, censorships, risk_scores):
@@ -236,8 +236,7 @@ def calculate_c_index(survival_times, censorships, risk_scores):
         raise ImportError("sksurv library is required for survival analysis. Please install it.")
 
     # sksurv expects event_indicator as True for uncensored (event occurred)
-    # and False for censored
-    event_indicator = ~censorships.astype(bool)  # Convert 0=uncensored to True
+    # and False for censored# Convert 0=uncensored to True
 
     # Get concordance index and other statistics
     concordance, concordant_pairs, discordant_pairs, tied_risk, tied_time = concordance_index_censored(

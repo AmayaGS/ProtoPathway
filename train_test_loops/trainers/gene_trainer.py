@@ -11,6 +11,8 @@ from sklearn.preprocessing import label_binarize
 from sklearn.metrics import (roc_auc_score, precision_score, recall_score, f1_score,
                              confusion_matrix, classification_report, average_precision_score)
 
+from sksurv.metrics import concordance_index_censored
+
 from torch_geometric.loader import DataLoader as PyGDataLoader
 from torch.utils.data import DataLoader
 
@@ -175,6 +177,7 @@ class GeneExpressionTrainer(BaseTrainer):
         for batch in train_loader:
 
             if self.model_name == 'MLP':
+                patient_id = batch['patient_id']
                 data, target = batch['data'].to(self.device), batch['target'].to(self.device)
                 if self.is_survival:
                     survival_time = batch['survival_time'].to(self.device)
@@ -192,7 +195,21 @@ class GeneExpressionTrainer(BaseTrainer):
                 all_survival_times.append(survival_time)
                 all_censorships.append(censorship)
                 # Calculate loss
-                loss = criterion(outputs, target, survival_time, censorship)
+                try:
+                    loss = criterion(outputs, target, survival_time, censorship)
+                    total_loss += loss.item()
+                except ValueError as e:
+                    print("Error in calculating loss for patient:", patient_id)
+                    print("Model outputs:", outputs)
+                    print("Outputs shape:", outputs.shape)
+                    print("Target:", target)
+                    print("Target shape:", target.shape)
+                    print("Survival time shape:", survival_time.shape)
+                    print("Censorship shape:", censorship.shape)
+                    print("GE data:", data)
+                    print("GE data shape:", data.shape)
+                    raise e
+
             else:
                 loss = criterion(outputs, target)
                 # Calculate batch accuracy
@@ -201,6 +218,7 @@ class GeneExpressionTrainer(BaseTrainer):
                 batch_total = target.size(0)
                 correct += batch_correct
                 total += batch_total
+                total_loss += loss.item()
 
             # Apply L1 regularization if configured
             if self.config['ge_training']['L1_norm'] > 0:
@@ -208,8 +226,6 @@ class GeneExpressionTrainer(BaseTrainer):
                 loss = loss + self.config['ge_training']['L1_norm'] * l1_loss
 
             # Update metrics
-            total_loss += loss.item()
-
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
@@ -218,16 +234,16 @@ class GeneExpressionTrainer(BaseTrainer):
         avg_loss = total_loss / len(train_loader)
 
         if self.is_survival:
-            all_risk_scores = torch.cat(all_risk_scores, dim=0).numpy()
-            all_survival_times = torch.cat(all_survival_times, dim=0).numpy()
-            all_censorships = torch.cat(all_censorships, dim=0).numpy()
+            all_risk_scores = torch.cat(all_risk_scores, dim=0).cpu().detach().numpy()
+            all_survival_times = torch.cat(all_survival_times, dim=0).cpu().detach().numpy()
+            all_censorships = torch.cat(all_censorships, dim=0).cpu().detach().numpy()
             # Calculate c-index
             all_censorships = ~all_censorships.astype(bool)
-            c_index = calculate_c_index(all_censorships, all_survival_times, all_risk_scores)
+            c_index = concordance_index_censored(all_censorships, all_survival_times, all_risk_scores)
             epoch_time = time.time() - start_time
             return {
                 'loss': avg_loss,
-                'c_index': c_index,
+                'c_index': c_index[0],
                 'time': epoch_time
             }
         else:
@@ -257,7 +273,6 @@ class GeneExpressionTrainer(BaseTrainer):
             all_targets = []
             all_probs = []
 
-
         with torch.no_grad():
             for batch in val_loader:
                 if self.model_name == 'MLP':
@@ -278,6 +293,7 @@ class GeneExpressionTrainer(BaseTrainer):
                     all_survival_times.append(survival_time)
                     all_censorships.append(censorship)
                     loss = criterion(outputs, target, survival_time, censorship)
+                    total_loss += loss.item()
                 else:
                     loss = criterion(outputs, target)
                     pred = outputs.argmax(dim=1)
@@ -294,17 +310,16 @@ class GeneExpressionTrainer(BaseTrainer):
         avg_loss = total_loss / len(val_loader)
 
         if self.is_survival:
-            all_risk_scores = torch.cat(all_risk_scores, dim=0).numpy()
-            all_survival_times = torch.cat(all_survival_times, dim=0).numpy()
-            all_censorships = torch.cat(all_censorships, dim=0).numpy()
+            all_risk_scores = torch.cat(all_risk_scores, dim=0).cpu().detach().numpy()
+            all_survival_times = torch.cat(all_survival_times, dim=0).cpu().detach().numpy()
+            all_censorships = torch.cat(all_censorships, dim=0).cpu().detach().numpy()
             # Calculate c-index
             all_censorships = ~all_censorships.astype(bool)
-            c_index = calculate_c_index(all_censorships, all_survival_times, all_risk_scores)
+            c_index = concordance_index_censored(all_censorships, all_survival_times, all_risk_scores)
 
             metrics = {
                 'loss': avg_loss,
-                'c_index': c_index,
-                'time': 0
+                'c_index': c_index[0]
             }
         else:
             # Concatenate results

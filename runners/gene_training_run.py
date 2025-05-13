@@ -105,28 +105,33 @@ def train_gene_expression_model(config, is_full_train=False, experiment_logger=N
 
         # Generate visualizations for this fold
         logger.info(f"Generating visualizations for {fold_name}")
+        is_survival = config['execution'].get('task', 'classification') == 'survival'
+        metric_for_best = 'c_index' if is_survival else (
+            'acc' if config['training']['weight_type'] == 'accuracy' else 'loss')
+        mode = 'max' if metric_for_best in ['acc', 'c_index'] else 'min'
+
         fold_summary = visualize_fold_results(
             fold_data,
             fold_idx,
             plots_dir,
             config,
-            metric_for_best='acc' if config['training']['weight_type'] == 'accuracy' else 'loss',
-            mode='max' if config['training']['weight_type'] == 'accuracy' else 'min'
+            metric_for_best=metric_for_best,
+            mode=mode
         )
 
         fold_summaries.append(fold_summary)
-        logger.info(f"Completed {fold_name} ge_training and visualization")
+        logger.info(f"Completed {fold_name} training and visualization")
 
     # Process results depending on run type
     if is_full_train:
         # For full ge_training, generate comprehensive visualizations
-        logger.info("Generating full ge_training visualizations")
+        logger.info("Generating full training visualizations")
         visualize_full_training_results(
             fold_histories[0]['history'],
             plots_dir,
             config,
-            metric_for_best='acc' if config['training']['weight_type'] == 'accuracy' else 'loss',
-            mode='max' if config['training']['weight_type'] == 'accuracy' else 'min'
+            metric_for_best=metric_for_best,
+            mode=mode
         )
     else:
         # For cross-validation, generate aggregated results

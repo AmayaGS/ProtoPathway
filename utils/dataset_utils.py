@@ -71,6 +71,7 @@ class GeneExpressionDataset(Dataset):
             )
 
         return {
+            'patient_id': patient_id,
             'data': gene_expr_tensor,
             'id': patient_id,
             **target
