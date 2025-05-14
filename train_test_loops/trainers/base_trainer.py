@@ -271,7 +271,11 @@ class BaseTrainer(ABC):
                 'confusion_matrix': {},
                 'all_labels': {},
                 'all_probs': {},
-                'classification_report': {}
+                'classification_report': {},
+                # Add these for survival analysis
+                'all_risk_scores': {},
+                'all_survival_times': {},
+                'all_censorships': {}
             },
             'best_epoch': None,
             'best_metrics': None
@@ -297,9 +301,12 @@ class BaseTrainer(ABC):
 
             for metric, value in val_metrics.items():
                 # Store complex metrics by epoch
-                if metric in ['confusion_matrix', 'all_labels', 'all_probs', 'classification_report']:
+                if metric in ['confusion_matrix', 'all_labels', 'all_probs', 'classification_report',
+                                'all_risk_scores', 'all_survival_times', 'all_censorships']:
+                    # Store these indexed by epoch
+                    if metric not in history['val']:
+                        history['val'][metric] = {}
                     history['val'][metric][epoch] = value
-                # Store scalar metrics as lists across epochs
                 else:
                     if metric not in history['val']:
                         history['val'][metric] = []

@@ -92,7 +92,7 @@ def train_gene_expression_model(config, is_full_train=False, experiment_logger=N
         )
 
         # Train model
-        model, history = trainer.train(train_fold, val_fold)
+        model, history = trainer.train(train_fold, val_fold, fold_idx=fold_idx)
 
         # Store fold results
         fold_data = {

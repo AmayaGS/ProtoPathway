@@ -218,31 +218,56 @@ def calculate_risk(outputs):
     return risk, survival
 
 
-def calculate_c_index(survival_times, censorships, risk_scores):
+def stratify_risk_groups(risk_scores, num_groups=2):
     """
-    Calculate the concordance index (c-index) for survival analysis.
+    Stratify patients into risk groups based on predicted risk scores.
+
+    Args:
+        risk_scores: numpy array of risk scores
+        num_groups: number of risk groups (2 or 4)
+
+    Returns:
+        risk_groups: numpy array of risk group assignments (0 to num_groups-1)
+    """
+    if num_groups == 2:
+        # Simple median split for 2 groups
+        median_risk = np.median(risk_scores)
+        risk_groups = (risk_scores > median_risk).astype(int)
+    elif num_groups == 4:
+        # Quartile split for 4 groups
+        quartiles = np.percentile(risk_scores, [25, 50, 75])
+        risk_groups = np.zeros_like(risk_scores, dtype=int)
+        for i in range(1, 4):
+            risk_groups[risk_scores > quartiles[i - 1]] = i
+    else:
+        raise ValueError("num_groups must be either 2 or 4")
+
+    return risk_groups
+
+
+def prepare_km_data(survival_times, censorships, risk_groups):
+    """
+    Prepare data for Kaplan-Meier analysis.
 
     Args:
         survival_times: numpy array of survival times
-        censorships: numpy array of censorship status (0=uncensored, 1=censored)
-        risk_scores: numpy array of risk scores (higher score = higher risk)
+        censorships: numpy array of censorship status (0=censored, 1=event)
+        risk_groups: numpy array of risk group assignments
 
     Returns:
-        concordance index (float)
+        km_data: dictionary with data for each risk group
     """
-    try:
-        from sksurv.metrics import concordance_index_censored
-    except ImportError:
-        raise ImportError("sksurv library is required for survival analysis. Please install it.")
+    # lifelines expects event indicator as True for event occurred (opposite of your censorship)
+    event_indicator = (censorships == 1)
 
-    # sksurv expects event_indicator as True for uncensored (event occurred)
-    # and False for censored# Convert 0=uncensored to True
+    unique_groups = np.unique(risk_groups)
+    km_data = {}
 
-    # Get concordance index and other statistics
-    concordance, concordant_pairs, discordant_pairs, tied_risk, tied_time = concordance_index_censored(
-        event_indicator,
-        survival_times,
-        risk_scores
-    )
+    for group in unique_groups:
+        mask = (risk_groups == group)
+        km_data[group] = {
+            'durations': survival_times[mask],
+            'event_observed': event_indicator[mask]
+        }
 
-    return concordance
+    return km_data

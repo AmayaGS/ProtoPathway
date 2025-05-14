@@ -15,9 +15,178 @@ import itertools
 from typing import Dict, List, Tuple, Any, Optional, Union
 
 from utils.helpers import ensure_directory
-
+from utils.survival_utils import stratify_risk_groups, prepare_km_data
 
 # ============================== INDIVIDUAL PLOT FUNCTIONS ==============================
+
+def plot_kaplan_meier_curves(
+        survival_times,
+        censorships,
+        risk_scores,
+        output_path,
+        num_groups=2,
+        figsize=(10, 8)
+):
+    """
+    Plot Kaplan-Meier survival curves for different risk groups.
+
+    Args:
+        survival_times: numpy array of survival times
+        censorships: numpy array of censorship status (0=censored, 1=event)
+        risk_scores: numpy array of risk scores or predicted risks
+        output_path: path to save the plot
+        num_groups: number of risk groups (2 or 4)
+        figsize: figure size (width, height)
+
+    Returns:
+        Dictionary with log-rank test p-value and mean survival times
+    """
+    try:
+        from lifelines import KaplanMeierFitter
+        from lifelines.statistics import logrank_test, multivariate_logrank_test
+        from matplotlib.lines import Line2D
+    except ImportError:
+        print("lifelines package is required for survival analysis. Please install it.")
+        return {}
+
+    # Get risk group assignments
+    risk_groups = stratify_risk_groups(risk_scores, num_groups=num_groups)
+
+    # Prepare data for KM curves
+    km_data = prepare_km_data(survival_times, censorships, risk_groups)
+
+    # Create the plot
+    plt.figure(figsize=figsize)
+
+    # Define group labels and colors - low risk is now green
+    if num_groups == 2:
+        group_names = ['Low Risk', 'High Risk']
+        colors = ['green', 'red']
+    else:  # num_groups == 4
+        group_names = ['Very Low Risk', 'Low Risk', 'Medium Risk', 'High Risk']
+        colors = ['darkgreen', 'lightgreen', 'orange', 'red']
+
+    # Calculate mean survival times and standard deviations
+    mean_survivals = {}
+
+    # Fit and plot KM curves for each risk group
+    kmf = KaplanMeierFitter()
+    for i, group in enumerate(sorted(km_data.keys())):
+        data = km_data[group]
+        label = group_names[group]
+        kmf.fit(data['durations'], data['event_observed'], label=label)
+
+        # Plot with markers for patients
+        ax = kmf.plot(ci_show=True, color=colors[group], show_censors=True,
+                      censor_styles={'ms': 6, 'marker': '|'})
+
+        # Calculate mean survival time and std
+        # For observed cases (excluding censored data)
+        observed_times = data['durations'][data['event_observed']]
+        if len(observed_times) > 0:
+            mean_survival = np.mean(observed_times)
+            std_survival = np.std(observed_times)
+        else:
+            # If no events were observed, use restricted mean survival time
+            survival_curve = kmf.survival_function_
+            times = survival_curve.index.values
+            probabilities = survival_curve.values.flatten()
+
+            # Calculate RMST (area under the curve)
+            rmst = 0
+            for j in range(1, len(times)):
+                rmst += (times[j] - times[j - 1]) * probabilities[j - 1]
+
+            mean_survival = rmst
+            std_survival = None
+
+        mean_survivals[label] = {
+            'mean': mean_survival,
+            'std': std_survival
+        }
+
+    # Calculate log-rank test p-value
+    if num_groups == 2:
+        # Perform log-rank test for 2 groups
+        low_risk = km_data[0]
+        high_risk = km_data[1]
+
+        results = logrank_test(
+            low_risk['durations'], high_risk['durations'],
+            low_risk['event_observed'], high_risk['event_observed']
+        )
+
+        p_value = results.p_value
+    else:
+        # For multiple groups, use multivariate log-rank test
+        durations = []
+        event_observed = []
+        groups = []
+
+        for group, data in km_data.items():
+            durations.extend(data['durations'])
+            event_observed.extend(data['event_observed'])
+            groups.extend([group] * len(data['durations']))
+
+        results = multivariate_logrank_test(
+            np.array(durations),
+            np.array(event_observed),
+            np.array(groups)
+        )
+        p_value = results.p_value
+
+    # Create custom legend with horizontal lines
+    legend_elements = []
+    for i, group in enumerate(sorted(km_data.keys())):
+        label = group_names[i]
+        mean_data = mean_survivals.get(label, {})
+
+        # if mean_data.get('mean') is not None:
+        #     if mean_data.get('std') is not None:
+        #         label_text = f"{label}: mean {mean_data['mean']:.1f} ± {mean_data['std']:.1f} months"
+        #     else:
+        #         label_text = f"{label}: mean {mean_data['mean']:.1f} months"
+        # else:
+        #     label_text = f"{label}: mean N/A"
+
+        # Create a horizontal line for legend
+        line = Line2D([0], [0], color=colors[i], lw=2, label=label)
+        legend_elements.append(line)
+
+    plt.legend(handles=legend_elements, loc='best', fontsize=10)
+
+    # Add p-value as scientific notation in title with asterisk if significant
+    title = f"log-rank p-value = {p_value:.2e}"
+    if p_value < 0.05:
+        title += "*"  # Add asterisk for significant p-values
+
+    plt.title(title, fontsize=14)
+
+    # Update axis labels
+    plt.xlabel('Time [months]', fontsize=12)
+    plt.ylabel('Proportion Surviving', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.ylim(0, 1.05)
+
+    file_format = 'pdf'
+    if not output_path.lower().endswith(f'.{file_format}'):
+        output_path = f"{os.path.splitext(output_path)[0]}.{file_format}"
+
+    # Save the plot
+    ensure_directory(os.path.dirname(output_path))
+    plt.savefig(
+        output_path,
+        bbox_inches='tight',
+        transparent=True,  # Optional: transparent background
+        metadata={'Creator': 'ProtoPathway'},  # Optional: add metadata
+        dpi=300  # Still helpful for embedded rasters if any
+    )
+    plt.close()
+
+    return {
+        'p_value': p_value,
+        'mean_survivals': mean_survivals
+    }
 
 def plot_confusion_matrix(
         cm: np.ndarray,
@@ -576,6 +745,62 @@ def create_result_summary(fold_results: pd.DataFrame, config: Dict, output_path:
 
 # ============================== MAIN VISUALIZATION FUNCTIONS ==============================
 
+
+def visualize_survival_results(
+        y_time,
+        y_event,
+        risk_scores,
+        output_dir,
+        title_prefix="",
+        num_groups=2
+):
+    """
+    Generate survival-specific visualizations.
+
+    Args:
+        y_time: numpy array of survival times
+        y_event: numpy array of event indicators
+        risk_scores: numpy array of predicted risk scores
+        output_dir: directory to save visualizations
+        title_prefix: prefix to add to plot titles
+        num_groups: number of risk groups for stratification (2 or 4)
+
+    Returns:
+        Dictionary with statistics and plot paths
+    """
+    # Create directory
+    survival_dir = os.path.join(output_dir, "survival_analysis")
+    ensure_directory(survival_dir)
+
+    # Plot KM curves
+    km_path = os.path.join(survival_dir, f"kaplan_meier_{num_groups}_groups.png")
+    km_stats = plot_kaplan_meier_curves(
+        y_time,
+        y_event,
+        risk_scores,
+        km_path,
+        num_groups=num_groups
+    )
+
+    # If you want to show both 2-group and 4-group stratifications
+    if num_groups != 4:
+        km_path_4 = os.path.join(survival_dir, "kaplan_meier_4_groups.png")
+        km_stats_4 = plot_kaplan_meier_curves(
+            y_time,
+            y_event,
+            risk_scores,
+            km_path_4,
+            num_groups=4
+        )
+
+    # You could also add other survival-specific visualizations here
+
+    return {
+        'km_path': km_path,
+        'km_stats': km_stats
+    }
+
+
 def visualize_fold_results(
         fold_data: Dict[str, Any],
         fold_idx: int,
@@ -721,6 +946,35 @@ def visualize_fold_results(
         for metric, value in best_metrics.get(phase, {}).items():
             if isinstance(value, (int, float)):
                 fold_summary[f"{phase}_{metric}"] = value
+
+    # Add survival-specific visualizations for the best epoch
+    if is_survival:
+        history_val = fold_data['history']['val']
+        if ('all_survival_times' in history_val and
+            isinstance(history_val['all_survival_times'], dict) and
+            best_epoch in history_val['all_survival_times']):
+
+            survival_times = history_val['all_survival_times'][best_epoch]
+            censorships = history_val['all_censorships'][best_epoch]
+            risk_scores = history_val['all_risk_scores'][best_epoch]
+
+        survival_dir = os.path.join(fold_dir, f"best_epoch_{best_epoch}", "survival_analysis")
+        ensure_directory(survival_dir)
+
+        # Generate survival visualizations
+        survival_results = visualize_survival_results(
+            survival_times,
+            censorships,
+            risk_scores,
+            survival_dir,
+            title_prefix=f"Fold {fold_idx} - ",
+            num_groups=2  # Use 2 groups for clearer visualization
+        )
+
+        # Add to fold summary
+        if 'survival_results' not in fold_summary:
+            fold_summary['survival_results'] = {}
+        fold_summary['survival_results'] = survival_results
 
     return fold_summary
 

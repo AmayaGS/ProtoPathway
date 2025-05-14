@@ -19,8 +19,8 @@ execution:
   wsi_preprocess: false
   wsi_segmentation: false
   create_splits: false
-  cross_validation: false
-  full_train: true
+  cross_validation: true
+  full_train: false
   test: false
   visualise: false
 
@@ -131,7 +131,7 @@ training:
   batch_size: 1
   slide_batch: 1
   num_workers: 0
-  num_epochs: 2
+  num_epochs: 100
   checkpoint: true
   weight_type: 'accuracy'  # choices: ['accuracy', 'loss', 'auc']
   seed: 42

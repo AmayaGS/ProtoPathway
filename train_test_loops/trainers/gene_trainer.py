@@ -20,7 +20,7 @@ from train_test_loops.trainers.base_trainer import BaseTrainer
 from utils.dataset_utils import GeneExpressionDataset, HypergraphDataset
 from utils.dataset_utils import build_incidence_matrix
 from utils.loss_utils import NLLSurvLoss
-from utils.survival_utils import calculate_risk, calculate_c_index
+from utils.survival_utils import calculate_risk
 
 from models.GeneExpressionMLP import MLPBaseline
 from models.ProtoPathway import PathwayEmbeddingModel
@@ -319,7 +319,10 @@ class GeneExpressionTrainer(BaseTrainer):
 
             metrics = {
                 'loss': avg_loss,
-                'c_index': c_index[0]
+                'c_index': c_index[0],
+                'all_risk_scores': all_risk_scores,
+                'all_survival_times': all_survival_times,
+                'all_censorships': all_censorships
             }
         else:
             # Concatenate results
