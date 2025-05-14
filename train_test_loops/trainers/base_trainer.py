@@ -166,6 +166,7 @@ class BaseTrainer(ABC):
 
             # Check if c-index is significantly better
             c_index_significantly_better = curr_c_index > best_c_index + c_index_threshold
+            c_index_approximately_same = abs(curr_c_index - best_c_index) <= c_index_threshold
 
             # Also consider loss improvements
             loss_significantly_better = curr_loss < best_loss * (1 - loss_threshold)
@@ -173,12 +174,12 @@ class BaseTrainer(ABC):
             if c_index_significantly_better:
                 save_reason = f"C-index significantly improved: {curr_c_index:.4f} vs {best_c_index:.4f}"
                 return True, save_reason
-            elif loss_significantly_better:
-                save_reason = f"Loss significantly improved: {curr_loss:.4f} vs {best_loss:.4f}"
-                return True, save_reason
-            else:
-                # No improvement - don't save
-                return False, save_reason
+            elif c_index_approximately_same:
+                # Check if loss is significantly better
+                if loss_significantly_better:
+                    save_reason = f"Loss significantly improved: {curr_loss:.4f} vs {best_loss:.4f}"
+                    return True, save_reason
+            return False, save_reason
 
         else:
             # Extract current metrics

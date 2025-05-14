@@ -134,6 +134,7 @@ def build_incidence_matrix(pathway_genes_path, filtered_genes):
 class HypergraphDataset(Dataset):
     def __init__(self, config, gene_expr_df, labels_df, hypergraph_data):
         self.config = config
+        self.task = config['execution'].get('task', 'classification')
 
         # Hypergraph structure (shared across all samples)
         self.edge_index = hypergraph_data['edge_index']
