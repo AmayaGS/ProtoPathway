@@ -133,6 +133,7 @@ def build_incidence_matrix(pathway_genes_path, filtered_genes):
 
 class HypergraphDataset(Dataset):
     def __init__(self, config, gene_expr_df, labels_df, hypergraph_data):
+
         self.config = config
         self.task = config['execution'].get('task', 'classification')
 
@@ -146,16 +147,30 @@ class HypergraphDataset(Dataset):
 
         # Only keep patients that exist in both dataframes
         self.patient_ids = list(set(gene_expr_df.index) &
-                                set(labels_df['Patient_ID']))
+                                set(labels_df[self.config['patient_id']]))
 
         # Filter gene_expr_df to only include genes in the hypergraph
         self.gene_expr_df = gene_expr_df[self.gene_names].loc[self.patient_ids]
 
         # Get labels
-        self.labels_df = labels_df[labels_df['Patient_ID'].isin(self.patient_ids)]
+        self.labels_df = labels_df[labels_df[self.config['patient_id']].isin(self.patient_ids)]
 
         print(f"Found {len(self.patient_ids)} patients with both expression data and labels")
         print(f"Hypergraph includes {self.num_genes} genes and {self.num_pathways} pathways")
+
+        if self.task == 'survival':
+
+            self.label_col = self.config['survival']['target_column']
+            self.censor_col = self.config['survival']['censorship_column']
+            self.n_bins = self.config['survival']['survival_bins']
+
+            # we use the full dataset to determine the bins
+            self.patient_df, self.bins = discretize_survival_times(
+                labels_df,
+                label_col=self.label_col,
+                censor_col=self.censor_col,
+                n_bins=self.n_bins
+            )
 
     def __len__(self):
         return len(self.patient_ids)
@@ -165,28 +180,46 @@ class HypergraphDataset(Dataset):
 
         # Gene expression features [num_genes, 1]
         gene_expr = self.gene_expr_df.loc[patient_id].values
-        x_gene = torch.FloatTensor(gene_expr).view(-1, 1)
+        gene_expr_tensor = torch.FloatTensor(gene_expr).view(-1, 1)
 
-        # Label
-        label = self.labels_df.loc[
-            self.labels_df[self.config['patient_id']] == patient_id,
-            self.config['label']
-        ].iloc[0]
-        y = torch.tensor(label, dtype=torch.long)
+        patient_row = self.patient_df.loc[self.patient_df[self.config['patient_id']] == patient_id].iloc[0]
 
-        # # Create bipartite node features
-        # # Gene nodes get expression values, pathway nodes get zeros
-        x = torch.zeros((self.num_genes + self.num_pathways, 1), dtype=torch.float)
-        x[:self.num_genes] = x_gene
-
-        # Wrap in a PyG Data object
-        data = Data(
-            x=x,
-            edge_index=self.edge_index,
-            y=y,
-            patient_id=patient_id,
-            num_genes=self.num_genes,
-            num_pathways=self.num_pathways
-        )
+        if self.task == 'classification':
+            # For classification task
+            label = patient_row[self.config['label']]
+            target = torch.tensor(label, dtype=torch.long)
+            # # Create bipartite node features
+            # # Gene nodes get expression values, pathway nodes get zeros
+            x = torch.zeros((self.num_genes + self.num_pathways, 1), dtype=torch.float)
+            x[:self.num_genes] = gene_expr_tensor
+            # Wrap in a PyG Data object
+            data = Data(
+                x=x,
+                edge_index=self.edge_index,
+                y=target,
+                patient_id=patient_id,
+                num_genes=self.num_genes,
+                num_pathways=self.num_pathways
+            )
+        else:
+            target = get_survival_target(
+                patient_row,
+                self.label_col,
+                self.censor_col,
+                patient_row['label']
+            )
+            # # Create bipartite node features
+            # # Gene nodes get expression values, pathway nodes get zeros
+            x = torch.zeros((self.num_genes + self.num_pathways, 1), dtype=torch.float)
+            x[:self.num_genes] = gene_expr_tensor
+            # Wrap in a PyG Data object
+            data = Data(
+                x=x,
+                edge_index=self.edge_index,
+                y=target,
+                patient_id=patient_id,
+                num_genes=self.num_genes,
+                num_pathways=self.num_pathways
+            )
 
         return data

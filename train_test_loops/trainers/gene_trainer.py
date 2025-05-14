@@ -130,11 +130,18 @@ class GeneExpressionTrainer(BaseTrainer):
                     )
 
         if self.model_name == 'Hypergraph':
-            model = PathwayEmbeddingModel(self.config, in_channels=1,
-                                          hidden_channels=self.config['ge_training']['hidden_dim'],
-                                          out_channels=self.config['n_classes'],
-                                          num_layers=self.config['ge_training']['num_layers'],
-                                          dropout=self.config['ge_training']['dropout_rate'])
+            if self.is_survival:
+                model = PathwayEmbeddingModel(self.config, in_channels=1,
+                                                hidden_channels=self.config['ge_training']['hidden_dim'],
+                                                out_channels=self.config['survival']['survival_bins'],
+                                                num_layers=self.config['ge_training']['num_layers'],
+                                                dropout=self.config['ge_training']['dropout_rate'])
+            else:
+                model = PathwayEmbeddingModel(self.config, in_channels=1,
+                                              hidden_channels=self.config['ge_training']['hidden_dim'],
+                                              out_channels=self.config['n_classes'],
+                                              num_layers=self.config['ge_training']['num_layers'],
+                                              dropout=self.config['ge_training']['dropout_rate'])
 
         if self.is_survival:
             # Create survival loss function
@@ -186,7 +193,14 @@ class GeneExpressionTrainer(BaseTrainer):
 
             elif self.model_name == 'Hypergraph':
                 batch.to(self.device)
-                target = batch.y
+                patient_id = batch.patient_id
+                if self.is_survival:
+                    target = batch.y['target']
+                    survival_time = batch.y['survival_time']
+                    censorship = batch.y['censorship']
+                else:
+                    target = batch.y
+
                 outputs = model(batch)
 
             if self.is_survival:
@@ -275,6 +289,7 @@ class GeneExpressionTrainer(BaseTrainer):
 
         with torch.no_grad():
             for batch in val_loader:
+
                 if self.model_name == 'MLP':
                     data, target = batch['data'].to(self.device), batch['target'].to(self.device)
                     if self.is_survival:
@@ -284,7 +299,13 @@ class GeneExpressionTrainer(BaseTrainer):
 
                 elif self.model_name == 'Hypergraph':
                     batch.to(self.device)
-                    target = batch.y
+                    if self.is_survival:
+                        target = batch.y['target']
+                        survival_time = batch.y['survival_time']
+                        censorship = batch.y['censorship']
+                    else:
+                        target = batch.y
+
                     outputs = model(batch)
 
                 if self.is_survival:

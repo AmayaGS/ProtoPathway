@@ -194,7 +194,7 @@ def get_survival_target(patient_row, label_col=None, censor_col=None, label_valu
     if label_col is not None and censor_col is not None:
         target_info.update({
             'survival_time': patient_row[label_col],
-            'censorship': patient_row[censor_col]
+            'censorship': torch.tensor(patient_row[censor_col], dtype=torch.long)
         })
 
     return target_info

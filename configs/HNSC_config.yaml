@@ -19,8 +19,8 @@ execution:
   wsi_preprocess: false
   wsi_segmentation: false
   create_splits: false
-  cross_validation: true
-  full_train: false
+  cross_validation: false
+  full_train: true
   test: false
   visualise: false
 
@@ -40,7 +40,7 @@ survival:
 # Gene Expression specific configuration
 gene_expression:
   enabled: true  # Set to false to disable gene expression branch
-  model: 'MLP'  # Gene expression model to use - Choices: ['MLP', 'Hypergraph']
+  model: 'Hypergraph'  # Gene expression model to use - Choices: ['MLP', 'Hypergraph']
   input:
     gtf_file: "${base_dir}/raw_data/Homo_sapiens.GRCh38.113.gtf"
     gene_expression: "${base_dir}/raw_data/rna_clean_${dataset_name}.csv"
@@ -141,8 +141,8 @@ ge_training:
   input_dim: 1
   hidden_dim: 128
   num_layers: 3
-  learning_rate: 0.0001
-  dropout_rate: 0.2
+  learning_rate: 0.001
+  dropout_rate: 0.1
   L2_norm: 0
   L1_norm: 0
   num_workers: 0
