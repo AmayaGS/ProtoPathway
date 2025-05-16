@@ -1,14 +1,15 @@
 # train_test_loops/trainers/multimodal_trainer.py
 
-import os
 import time
-import torch
-import torch.nn.functional as F
-
+from pathlib import Path
 import pandas as pd
 from sklearn.preprocessing import label_binarize
 from sklearn.metrics import (roc_auc_score, precision_score, recall_score, f1_score,
                              confusion_matrix, classification_report, average_precision_score)
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
@@ -18,6 +19,12 @@ from utils.dataset_utils import HypergraphDataset
 from utils.dataset_utils import build_incidence_matrix
 from utils.model_utils import l1_regularization
 from utils.loss_utils import NLLSurvLoss
+from utils.survival_utils import calculate_risk
+from sksurv.metrics import concordance_index_censored
+
+from models.MultimodalFusionModel import ProtoPathwayFusion
+from utils.kmeans_init import sample_embeddings, init_prototypes
+
 
 class MultimodalTrainer(BaseTrainer):
     """
@@ -61,6 +68,12 @@ class MultimodalTrainer(BaseTrainer):
         self.hypergraph_data = None
 
         self.is_survival = config['execution'].get('task', 'classification') == 'survival'
+        if config['execution']['cross_validation']:
+            self.run_type = 'CV'
+        else:
+            self.run_type = 'FT'
+        self.dataset_name = config['dataset_name']
+
 
     def prepare_data(self, train_data, val_data, aux_train_data=None, aux_val_data=None):
         """
@@ -87,9 +100,7 @@ class MultimodalTrainer(BaseTrainer):
             ge_train_data, ge_val_data = train_data, val_data
             wsi_train_data, wsi_val_data = aux_train_data, aux_val_data
 
-        labels_df = pd.read_csv(
-            os.path.join(self.config['output']['data']['dir'],
-                         f"patient_labels_{self.config['dataset_name']}.csv"))
+        labels_df = pd.read_csv(self.config['output']['data']['filtered_labels'])
 
         if self.ge_model_name == 'Hypergraph':
             # Build hypergraph representation
@@ -133,19 +144,31 @@ class MultimodalTrainer(BaseTrainer):
         Returns:
             model, criterion, optimizer, lr_scheduler
         """
-        from models.MultimodalFusionModel import ProtoPathwayFusion
+
+        centroid_dir = self.config['output']['data']['dir']
+        centroid_fold = f"wsi_centroids_{self.dataset_name}_{self.run_type}_{self.fold_idx}.pt"
+        centroid_path = Path(centroid_dir, centroid_fold)
+
+        if centroid_path is not None:
+            f = Path(centroid_path).expanduser()
+
+        if f is not None and f.exists():
+            centroids = torch.load(f, weights_only=True, map_location=self.device)
+        else:
+            centroids = None
 
         # Create multimodal fusion model
         model = ProtoPathwayFusion(
             config=self.config,
+            centroids=centroids,
             device=self.device
         )
 
-        if self.config['classification']:
-            # Define loss function
-            criterion = torch.nn.CrossEntropyLoss()
-        if self.config['survival']:
-            criterion = NLLSurvLoss(alpha=self.config['survival']['alpha'])
+        if self.is_survival:
+            # Create survival loss function
+            criterion = NLLSurvLoss(self.config['survival']['alpha'])
+        else:
+            criterion = nn.CrossEntropyLoss()
 
         # Define optimizer
         optimizer = torch.optim.AdamW(
@@ -193,14 +216,14 @@ class MultimodalTrainer(BaseTrainer):
         """
         model.train()
         total_loss = 0.0
+        correct = 0
+        total = 0
 
         if self.is_survival:
             all_risk_scores = []
             all_survival_times = []
-            all_events = []
-        else:
-            correct = 0
-            total = 0
+            all_censorships = []
+
 
         start_time = time.time()
 
@@ -209,9 +232,9 @@ class MultimodalTrainer(BaseTrainer):
             patient_id = batch.patient_id
 
             if self.is_survival:
-                target = None # here the time intervals
-                survival_time = batch.survival_time
-                event = batch.event
+                target = batch.y['target']
+                survival_time = batch.y['survival_time']
+                censorship = batch.y['censorship']
                 ge_data = batch
             else:
                 target = batch.y
@@ -221,11 +244,24 @@ class MultimodalTrainer(BaseTrainer):
             wsi_emb = wsi_data[0]
             wsi_emb = wsi_emb.to(self.device)
 
-            optimizer.zero_grad()
             outputs = model(ge_data, wsi_emb)
 
-            # Calculate loss
-            loss = criterion(outputs, target)
+            if self.is_survival:
+                risk_scores, _ = calculate_risk(outputs)
+                all_risk_scores.append(risk_scores)
+                all_survival_times.append(survival_time)
+                all_censorships.append(censorship)
+                loss = criterion(outputs, target, survival_time, censorship)
+                total_loss += loss.item()
+            else:
+                # Calculate loss
+                loss = criterion(outputs, target)
+                pred = outputs.argmax(dim=1)
+                batch_correct = (pred == target).sum().item()
+                batch_total = target.size(0)
+                correct += batch_correct
+                total += batch_total
+                total_loss += loss.item()
 
             # Add L1 regularization if configured
             if self.config['mm_training']['L1_norm'] > 0:
@@ -235,6 +271,7 @@ class MultimodalTrainer(BaseTrainer):
             # Backward pass and optimization
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
 
             # Calculate batch accuracy
             pred = outputs.argmax(dim=1)
@@ -248,15 +285,29 @@ class MultimodalTrainer(BaseTrainer):
 
         # Calculate epoch metrics
         avg_loss = total_loss / len(ge_train_loader)
-        avg_acc = 100. * correct / total if total > 0 else 0
-        epoch_time = time.time() - start_time
 
-        # Return metrics
-        return {
-            'loss': avg_loss,
-            'acc': avg_acc,
-            'time': epoch_time
-        }
+        if self.is_survival:
+            all_risk_scores = torch.cat(all_risk_scores, dim=0).cpu().detach().numpy()
+            all_survival_times = torch.cat(all_survival_times, dim=0).cpu().detach().numpy()
+            all_censorships = torch.cat(all_censorships, dim=0).cpu().detach().numpy()
+            # Calculate c-index
+            all_censorships = ~all_censorships.astype(bool)
+            c_index = concordance_index_censored(all_censorships, all_survival_times, all_risk_scores)
+            epoch_time = time.time() - start_time
+            return {
+                'loss': avg_loss,
+                'c_index': c_index[0],
+                'time': epoch_time
+            }
+        else:
+            avg_acc = 100. * correct / total
+            epoch_time = time.time() - start_time
+            return {
+                'loss': avg_loss,
+                'acc': avg_acc,
+                'time': epoch_time
+            }
+
 
     def validate(self, model, ge_val_loader, criterion, wsi_val_loader=None):
         """
@@ -275,19 +326,31 @@ class MultimodalTrainer(BaseTrainer):
         total_loss = 0.0
         correct = 0
         total = 0
-
-        all_preds = []
-        all_targets = []
-        all_probs = []
         all_patient_ids = []
 
-        # Disable gradient calculation for validation
+        if self.is_survival:
+            all_risk_scores = []
+            all_survival_times = []
+            all_censorships = []
+        else:
+            all_preds = []
+            all_targets = []
+            all_probs = []
+
         with torch.no_grad():
             for batch_idx, batch in enumerate(ge_val_loader):
                 batch.to(self.device)
                 patient_id = batch.patient_id
-                target = batch.y
-                ge_data = batch
+
+                if self.is_survival:
+                    target = batch.y['target']
+                    survival_time = batch.y['survival_time']
+                    censorship = batch.y['censorship']
+                    ge_data = batch
+                else:
+                    # For classification task
+                    target = batch.y
+                    ge_data = batch
 
                 wsi_data = wsi_val_loader[patient_id[0]]
                 wsi_emb = wsi_data[0]
@@ -295,56 +358,75 @@ class MultimodalTrainer(BaseTrainer):
 
                 outputs = model(ge_data, wsi_emb)
 
-                # Calculate loss
-                loss = criterion(outputs, target)
-                pred = outputs.argmax(dim=1)
-                probs = F.softmax(outputs, dim=1)
+                if self.is_survival:
+                    risk_scores, _ = calculate_risk(outputs)
+                    all_risk_scores.append(risk_scores)
+                    all_survival_times.append(survival_time)
+                    all_censorships.append(censorship)
+                    loss = criterion(outputs, target, survival_time, censorship)
+                    total_loss += loss.item()
+                else:
+                    loss = criterion(outputs, target)
+                    pred = outputs.argmax(dim=1)
+                    probs = F.softmax(outputs, dim=1)
 
-                # Update metrics
-                total_loss += loss.item()
-                correct += (pred == target).sum().item()
-                total += target.size(0)
+                    total_loss += loss.item()
+                    correct += (pred == target).sum().item()
+                    total += target.size(0)
 
-                # Store predictions and targets
-                all_preds.append(pred.cpu())
-                all_targets.append(target.cpu())
-                all_probs.append(probs.cpu())
-                all_patient_ids.extend(patient_id)
+                    all_preds.append(pred.cpu())
+                    all_targets.append(target.cpu())
+                    all_probs.append(probs.cpu())
 
-        # Concatenate results
-        all_preds = torch.cat(all_preds, dim=0).numpy()
-        all_targets = torch.cat(all_targets, dim=0).numpy()
-        all_probs = torch.cat(all_probs, dim=0).numpy()
-
-        # Calculate metrics
         avg_loss = total_loss / len(ge_val_loader)
-        avg_acc = 100. * correct / total if total > 0 else 0
 
-        # Compile all metrics
-        metrics = {
-            'loss': avg_loss,
-            'acc': avg_acc,
-            'precision': precision_score(all_targets, all_preds, average='weighted', zero_division=0),
-            'recall': recall_score(all_targets, all_preds, average='weighted', zero_division=0),
-            'f1': f1_score(all_targets, all_preds, average='weighted', zero_division=0),
-            'confusion_matrix': confusion_matrix(all_targets, all_preds),
-            'classification_report': classification_report(all_targets, all_preds, zero_division=0),
-            'all_labels': all_targets,
-            'all_preds': all_preds,
-            'all_probs': all_probs,
-            'patient_ids': all_patient_ids
-        }
+        if self.is_survival:
+            all_risk_scores = torch.cat(all_risk_scores, dim=0).cpu().detach().numpy()
+            all_survival_times = torch.cat(all_survival_times, dim=0).cpu().detach().numpy()
+            all_censorships = torch.cat(all_censorships, dim=0).cpu().detach().numpy()
+            # Calculate c-index
+            all_censorships = ~all_censorships.astype(bool)
+            c_index = concordance_index_censored(all_censorships, all_survival_times, all_risk_scores)
 
-        # Calculate AUC if binary classification
-        if all_probs.shape[1] == 2:
-            metrics['auc'] = roc_auc_score(all_targets, all_probs[:, 1])
+            metrics = {
+                'loss': avg_loss,
+                'c_index': c_index[0],
+                'all_risk_scores': all_risk_scores,
+                'all_survival_times': all_survival_times,
+                'all_censorships': all_censorships
+            }
         else:
-            n_classes = self.config['num_classes']
-            binary_labels = label_binarize(all_targets, classes=list(range(n_classes)))
-            metrics['auc'] = roc_auc_score(binary_labels, all_probs, average='macro', multi_class='ovr')
-            metrics['precision'] = average_precision_score(
-                binary_labels, all_probs, average='macro'
-            )
+            # Concatenate results
+            all_preds = torch.cat(all_preds, dim=0).numpy()
+            all_targets = torch.cat(all_targets, dim=0).numpy()
+            all_probs = torch.cat(all_probs, dim=0).numpy()
+
+            # Calculate metrics
+            avg_acc = 100. * correct / total
+
+            metrics = {
+                'loss': avg_loss,
+                'acc': avg_acc,
+                'precision': precision_score(all_targets, all_preds, average='weighted', zero_division=0),
+                'recall': recall_score(all_targets, all_preds, average='weighted', zero_division=0),
+                'f1': f1_score(all_targets, all_preds, average='weighted', zero_division=0),
+                'confusion_matrix': confusion_matrix(all_targets, all_preds),
+                'classification_report': classification_report(all_targets, all_preds, zero_division=0),
+                'all_labels': all_targets,
+                'all_preds': all_preds,
+                'all_probs': all_probs
+            }
+
+            # Calculate AUC if binary classification
+            if all_probs.shape[1] == 2:
+                metrics['auc'] = roc_auc_score(all_targets, all_probs[:, 1])
+            else:
+                n_classes = self.config['num_classes']
+                binary_labels = label_binarize(all_targets, classes=list(range(n_classes)))
+                metrics['auc'] = roc_auc_score(binary_labels, all_probs, average='macro', multi_class='ovr')
+                metrics['precision'] = average_precision_score(
+                    binary_labels, all_probs, average='macro'
+                )
 
         return metrics
 

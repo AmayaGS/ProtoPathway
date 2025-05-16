@@ -2,25 +2,31 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from models.ProtoPathway import PathwayEmbeddingModel
-from models.Prototype import ProtoMIL_V0, ProtoMIL_V1
+from models.Prototype import ProtoMIL_V1
 
 
 class ProtoPathwayFusion(torch.nn.Module):
     """
     Multimodal model for gene expression and WSI data using ProtoPathway and ProtoMIL.
     """
-    def __init__(self, config, device):
+    def __init__(self, config, centroids, device):
         super().__init__()
         self.config = config
         self.device = device
+        self.is_survival = config['execution'].get('task', 'classification') == 'survival'
+
+        if self.is_survival:
+            n_classes = config['survival']['survival_bins']
+        else:
+            n_classes = config['n_classes']
+
 
         # Initialize the gene expression model
         self.ge_model = PathwayEmbeddingModel(config, in_channels=config['ge_training']['input_dim'],
                                               hidden_channels=config['ge_training']['hidden_dim'],
-                                              out_channels=config['n_classes'],
+                                              out_channels=n_classes,
                                               num_layers=config['ge_training']['num_layers'],
                                               dropout=config['ge_training']['dropout_rate']).to(device)
 
@@ -28,7 +34,9 @@ class ProtoPathwayFusion(torch.nn.Module):
         self.wsi_model = ProtoMIL_V1(config, input_dim=config['wsi_training']['input_dim'],
                                      embedding_dim=config['wsi_training']['hidden_dim'],
                                      num_prototypes=config['wsi_training']['num_prototypes'],
-                                     tau=config['wsi_training']['tau'], num_classes=config['n_classes']).to(device)
+                                     tau=config['wsi_training']['tau'],
+                                     num_classes=n_classes,
+                                     init_centroids=centroids).to(device)
 
         # Initialize MHSA cross-attention between pathway embeddings and prototypes
         self.proto_pathway_attention = nn.MultiheadAttention(
@@ -39,7 +47,7 @@ class ProtoPathwayFusion(torch.nn.Module):
                                         ).to(device) # change this to the mm_training after setup in config
 
         # Initialize the final classifier
-        self.classifier = nn.Linear(config['mm_training']['hidden_dim'] * 3, config['n_classes']).to(device)
+        self.classifier = nn.Linear(config['mm_training']['hidden_dim'] * 3, n_classes).to(device)
 
     def forward(self, ge_data, wsi_data):
         """

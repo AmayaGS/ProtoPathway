@@ -18,6 +18,39 @@ def load_h5(h5_path):
     return feats
 
 
+def load_wsi_h5_embeddings(h5_path, patient_id_mapping):
+    """
+    Load WSI embeddings from H5 format and structure them as a dictionary.
+
+    Args:
+        h5_path: Path to the H5 file containing WSI embeddings
+        patient_id_mapping: Dictionary mapping slide IDs to patient IDs
+
+    Returns:
+        Dictionary mapping patient IDs to (embeddings, targets) tuples
+    """
+    wsi_features = {}
+
+    with h5py.File(h5_path, 'r') as hdf5_file:
+        slide_ids = list(hdf5_file.keys())
+
+        for slide_id in slide_ids:
+            # Get embeddings for this slide
+            embeddings = hdf5_file[slide_id]['features'][:].squeeze()
+
+            # Convert to tensor if needed
+            if isinstance(embeddings, np.ndarray):
+                embeddings = torch.Tensor(embeddings)
+
+            # Get patient ID from slide ID using mapping
+            patient_id = patient_id_mapping.get(slide_id, slide_id)
+
+            # Store with dummy target (will be replaced later)
+            wsi_features[patient_id] = (embeddings, torch.tensor(0))
+
+    return wsi_features
+
+
 def create_cross_validation_splits(config):
 
     # Save everything

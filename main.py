@@ -79,7 +79,7 @@ def main(config, experiment_logger):
     if execution_mode == "wsi" or execution_mode == "multimodal":
         if config['execution']['wsi_preprocess'] and config['wsi']['enabled']:
             logger.info("WSI preprocessing")
-            wsi_preprocessing(config)
+            wsi_preprocessing(config, experiment_logger=experiment_logger)
             logger.info("WSI preprocessing complete")
 
     # Execute mode-specific ge_training and testing

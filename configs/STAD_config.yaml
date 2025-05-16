@@ -2,13 +2,13 @@
 
 # Base paths
 base_dir: "C:/Users/Amaya/Documents/PhD/ProtoPathway_benchmarks"
-output_dir: "C:/Users/Amaya/Documents/PhD/ProtoPathway_benchmarks/HNSC"
+output_dir: "C:/Users/Amaya/Documents/PhD/ProtoPathway_benchmarks/STAD"
 
 # Dataset name
-dataset_name: "HNSC" # choices: ['R4RA', 'Sjogren']
-label: 'label'
-label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
-n_classes: 2
+dataset_name: "STAD" # choices: ['HNSC', 'STAD', 'COADREAD']
+#label: 'label'
+#label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
+#n_classes: 2
 patient_id: 'case_id'
 
 # Execution mode
@@ -16,9 +16,9 @@ execution:
   mode: "multimodal"  # choices: ["gene_expression", "wsi", "multimodal"]
   task: "survival"  # choices: ["classification", "survival"]
   ge_preprocess: false
+  create_splits: false
   wsi_preprocess: false
   wsi_segmentation: false
-  create_splits: false
   cross_validation: true
   full_train: false
   test: false
@@ -30,7 +30,7 @@ survival:
   target_column: "survival_months"  # Column name for survival time
   censorship_column: "censorship"      # Column name for censorship/event (1=event occurred, 0=censored)
   survival_bins: 4          # Number of risk groups for stratification (optional)
-  tcga_splits: "C:/Users/Amaya/Documents/PhD/Data/TGCA_data/TCGA_HSNC/splits"
+  tcga_splits: "C:/Users/Amaya/Documents/PhD/Data/TGCA_data/TCGA_${dataset_name}/splits"
   alpha: 0.5
 
 ## Model configuration
@@ -90,7 +90,7 @@ wsi:
   enabled: true  # Set to true to enable WSI branch
   model: 'Prototype'  # WSI model to use
   input:
-    slides_dir: "C:/Users/Amaya/Documents/PhD/Data/TGCA_data/TCGA_HSNC/TCGA/TCGA-HNSC"
+    slides_dir: "C:/Users/Amaya/Documents/PhD/Data/TGCA_data/TCGA_${dataset_name}/TCGA-${dataset_name}"
     masks_dir: "${output_dir}/raw_data/masks/${dataset_name}"
   parameters:
     patch_size: 224

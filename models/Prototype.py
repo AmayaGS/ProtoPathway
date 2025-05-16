@@ -15,8 +15,10 @@ class ProtoMIL_V1(nn.Module):
         self.config = config
 
         if init_centroids is None:
+            print("Randomly initializing centroids")
             self.proto = nn.Parameter(torch.randn(num_prototypes, input_dim))
         else:
+            print("Using pre-computed centroids for initialization")
             self.proto = nn.Parameter(init_centroids)          # k-means seeds
 
         # Add dimension reduction layer
