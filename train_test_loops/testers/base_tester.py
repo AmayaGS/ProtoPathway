@@ -1,14 +1,18 @@
 # train_test_loops/testers/base_tester.py
 
 import os
+import pandas as pd
+
 import torch
 
-import pandas as pd
+from abc import ABC, abstractmethod
+
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     roc_auc_score, confusion_matrix, classification_report
 )
-from abc import ABC, abstractmethod
+from sksurv.metrics import concordance_index_censored
+from utils.survival_utils import calculate_risk
 
 
 class BaseTester(ABC):
@@ -54,8 +58,11 @@ class BaseTester(ABC):
         # Label mapping
         self.label_dict = config.get('label_dict', {})
 
+        # Check if the task is survival
+        self.is_survival = config.get('execution', {}).get('task', 'classification') == 'survival'
+
     @abstractmethod
-    def prepare_test_data(self, test_data):
+    def prepare_test_data(self, test_data, aux_test_data=None):
         """
         Prepare test data loader.
 
@@ -80,7 +87,8 @@ class BaseTester(ABC):
         """
         pass
 
-    def evaluate(self, model, test_loader):
+    @abstractmethod
+    def evaluate(self, model, test_loader, aux_test_loader=None):
         """
         Evaluate model on test data.
 
@@ -97,37 +105,89 @@ class BaseTester(ABC):
         all_probs = []
         all_patient_ids = []
 
+        # Survival-specific collections
+        if self.is_survival:
+            all_risk_scores = []
+            all_survival_times = []
+            all_censorships = []
+        else:
+            # Classification-specific
+            correct = 0
+            total = 0
+
+        # Determine if this is multimodal
+        is_multimodal = aux_test_loader is not None
+
         with torch.no_grad():
             for batch in test_loader:
-                # Process batch (implementation differs by modality)
-                outputs, targets, patient_ids = self._process_batch(model, batch)
+                if is_multimodal:
+                    # Process batch with auxiliary data
+                    result = self._process_batch(model, batch, aux_test_loader)
+                else:
+                    # Process batch without auxiliary data
+                    result = self._process_batch(model, batch)
 
-                # Calculate probabilities and predictions
-                probs = torch.nn.functional.softmax(outputs, dim=1)
-                preds = outputs.argmax(dim=1)
+                if self.is_survival:
+                    outputs, targets, patient_ids, survival_times, censorships = result
 
-                # Store results
-                all_preds.append(preds.cpu())
-                all_targets.append(targets.cpu())
-                all_probs.append(probs.cpu())
+                    # Calculate risk scores
+                    risk_scores, _ = calculate_risk(outputs)
+                    all_risk_scores.append(risk_scores)
+                    all_survival_times.append(survival_times)
+                    all_censorships.append(censorships)
+                else:
+                    outputs, targets, patient_ids = result
+
+                    # Calculate probabilities and predictions
+                    probs = torch.nn.functional.softmax(outputs, dim=1)
+                    preds = outputs.argmax(dim=1)
+
+                    # Store results
+                    all_preds.append(preds.cpu())
+                    all_targets.append(targets.cpu())
+                    all_probs.append(probs.cpu())
+
+                    # Calculate accuracy
+                    correct += (preds == targets).sum().item()
+                    total += targets.size(0)
+
                 all_patient_ids.extend(patient_ids)
 
-        # Concatenate results
-        all_preds = torch.cat(all_preds, dim=0).numpy()
-        all_targets = torch.cat(all_targets, dim=0).numpy()
-        all_probs = torch.cat(all_probs, dim=0).numpy()
+        # Calculate final metrics
+        if self.is_survival:
+            # Concatenate survival results
+            all_risk_scores = torch.cat(all_risk_scores, dim=0).cpu().detach().numpy()
+            all_survival_times = torch.cat(all_survival_times, dim=0).cpu().detach().numpy()
+            all_censorships = torch.cat(all_censorships, dim=0).cpu().detach().numpy()
 
-        # Calculate metrics
-        metrics = self._calculate_metrics(all_targets, all_preds, all_probs)
-        metrics['patient_ids'] = all_patient_ids
-        metrics['all_preds'] = all_preds
-        metrics['all_targets'] = all_targets
-        metrics['all_probs'] = all_probs
+            # Calculate c-index (convert censorship: 0=censored becomes True=event_occurred)
+            event_occurred = ~all_censorships.astype(bool)
+            c_index = concordance_index_censored(event_occurred, all_survival_times, all_risk_scores)
+
+            metrics = {
+                'c_index': c_index[0],
+                'all_risk_scores': all_risk_scores,
+                'all_survival_times': all_survival_times,
+                'all_censorships': all_censorships,
+                'patient_ids': all_patient_ids
+            }
+        else:
+            # Concatenate classification results
+            all_preds = torch.cat(all_preds, dim=0).numpy()
+            all_targets = torch.cat(all_targets, dim=0).numpy()
+            all_probs = torch.cat(all_probs, dim=0).numpy()
+
+            # Calculate metrics
+            metrics = self._calculate_metrics(all_targets, all_preds, all_probs)
+            metrics['patient_ids'] = all_patient_ids
+            metrics['all_preds'] = all_preds
+            metrics['all_targets'] = all_targets
+            metrics['all_probs'] = all_probs
 
         return metrics
 
     @abstractmethod
-    def _process_batch(self, model, batch):
+    def _process_batch(self, model, batch, wsi_data=None):
         """
         Process a batch of data for evaluation.
 
@@ -192,30 +252,40 @@ class BaseTester(ABC):
 
         # Create prediction dataframe
         predictions_df = pd.DataFrame({
-            'patient_id': metrics['patient_ids'],
-            'true_label': metrics['all_targets'],
-            'predicted_label': metrics['all_preds']
+            'patient_id': metrics['patient_ids']
         })
 
-        # Add class names if available
-        if self.label_dict:
-            predictions_df['true_class'] = predictions_df['true_label'].apply(
-                lambda x: self.label_dict.get(str(x), f"Class_{x}")
-            )
-            predictions_df['predicted_class'] = predictions_df['predicted_label'].apply(
-                lambda x: self.label_dict.get(str(x), f"Class_{x}")
-            )
+        if self.is_survival:
+            # Add survival-specific columns
+            predictions_df['risk_score'] = metrics['all_risk_scores']
+            predictions_df['survival_time'] = metrics['all_survival_times']
+            predictions_df['censorship'] = metrics['all_censorships']
+        else:
+            # Add classification-specific columns
+            predictions_df['true_label'] = metrics['all_targets']
+            predictions_df['predicted_label'] = metrics['all_preds']
 
-        # Add probability columns
-        for i in range(metrics['all_probs'].shape[1]):
-            class_name = self.label_dict.get(str(i), f"Class_{i}")
-            predictions_df[f'prob_{class_name}'] = metrics['all_probs'][:, i]
+            # Add class names if available
+            if self.label_dict:
+                predictions_df['true_class'] = predictions_df['true_label'].apply(
+                    lambda x: self.label_dict.get(str(x), f"Class_{x}")
+                )
+                predictions_df['predicted_class'] = predictions_df['predicted_label'].apply(
+                    lambda x: self.label_dict.get(str(x), f"Class_{x}")
+                )
+
+            # Add probability columns
+            for i in range(metrics['all_probs'].shape[1]):
+                class_name = self.label_dict.get(str(i), f"Class_{i}")
+                predictions_df[f'prob_{class_name}'] = metrics['all_probs'][:, i]
 
         # Save to CSV
         predictions_df.to_csv(output_path, index=False)
         self.logger.logger.info(f"Saved predictions to {output_path}")
 
         return output_path
+
+
 
     def save_metrics_report(self, metrics, output_path=None):
         """
@@ -234,30 +304,44 @@ class BaseTester(ABC):
         with open(output_path, 'w') as f:
             f.write("=== ProtoPathway Test Results ===\n\n")
             f.write(f"Dataset: {self.config['dataset_name']}\n")
-            #f.write(f"Model: {self.config['model']['name']}\n")
+            f.write(f"Task: {self.config['execution']['task']}\n")
             f.write(f"Mode: {self.config['execution']['mode']}\n\n")
 
-            f.write("=== Performance Metrics ===\n")
-            f.write(f"Accuracy: {metrics['accuracy']:.2f}%\n")
-            f.write(f"Precision: {metrics['precision']:.4f}\n")
-            f.write(f"Recall: {metrics['recall']:.4f}\n")
-            f.write(f"F1 Score: {metrics['f1']:.4f}\n")
-            f.write(f"AUC: {metrics['auc']:.4f}\n\n")
+            if self.is_survival:
+                f.write("=== Survival Analysis Metrics ===\n")
+                f.write(f"C-index: {metrics['c_index']:.4f}\n")
+                f.write(f"Number of patients: {len(metrics['patient_ids'])}\n")
 
-            f.write("=== Confusion Matrix ===\n")
-            f.write(f"{metrics['confusion_matrix']}\n\n")
+                if 'all_censorships' in metrics:
+                    n_events = sum(~metrics['all_censorships'].astype(bool))
+                    n_censored = sum(metrics['all_censorships'].astype(bool))
+                    f.write(f"Events: {n_events}\n")
+                    f.write(f"Censored: {n_censored}\n")
+                    f.write(f"Event rate: {n_events / (n_events + n_censored) * 100:.1f}%\n")
+            else:
+                f.write("=== Classification Metrics ===\n")
+                f.write(f"Accuracy: {metrics['accuracy']:.2f}%\n")
+                f.write(f"Precision: {metrics['precision']:.4f}\n")
+                f.write(f"Recall: {metrics['recall']:.4f}\n")
+                f.write(f"F1 Score: {metrics['f1']:.4f}\n")
+                f.write(f"AUC: {metrics['auc']:.4f}\n\n")
 
-            f.write("=== Classification Report ===\n")
-            class_report = metrics['classification_report']
-            for class_name, values in class_report.items():
-                if isinstance(values, dict):
-                    f.write(f"Class {class_name}:\n")
-                    for metric_name, value in values.items():
-                        f.write(f"  {metric_name}: {value:.4f}\n")
-                    f.write("\n")
+                f.write("=== Confusion Matrix ===\n")
+                f.write(f"{metrics['confusion_matrix']}\n\n")
+
+                f.write("=== Classification Report ===\n")
+                class_report = metrics['classification_report']
+                for class_name, values in class_report.items():
+                    if isinstance(values, dict):
+                        f.write(f"Class {class_name}:\n")
+                        for metric_name, value in values.items():
+                            f.write(f"  {metric_name}: {value:.4f}\n")
+                        f.write("\n")
 
         self.logger.logger.info(f"Saved metrics report to {output_path}")
+
         return output_path
+
 
     def visualize_results(self, metrics):
         """
@@ -273,7 +357,8 @@ class BaseTester(ABC):
         # as visualization needs differ by modality
         pass
 
-    def run_testing(self, test_data, checkpoint_path=None):
+
+    def run_testing(self, test_data, aux_test_data=None, checkpoint_path=None):
         """
         Run complete testing process.
 
@@ -285,11 +370,22 @@ class BaseTester(ABC):
             Dictionary of test results and paths to outputs
         """
         # Prepare test data
-        test_loader = self.prepare_test_data(test_data)
+        if aux_test_data is not None:
+            # Multimodal case
+            test_loaders = self.prepare_test_data(test_data, aux_test_data)
+            if not isinstance(test_loaders, tuple):
+                raise ValueError("Multimodal prepare_test_data should return a tuple of loaders")
+        else:
+            # Single-modality case
+            test_loader = self.prepare_test_data(test_data)
+            test_loaders = (test_loader,)
 
         # Find best checkpoint if not specified
         if checkpoint_path is None:
-            raise FileNotFoundError(f"No checkpoint found in {checkpoint_path}")
+            checkpoint_files = [f for f in os.listdir(self.checkpoint_dir) if f.endswith('.pt')]
+            if not checkpoint_files:
+                raise FileNotFoundError(f"No checkpoint found in {self.checkpoint_dir}")
+            checkpoint_path = os.path.join(self.checkpoint_dir, checkpoint_files[0])
 
         self.logger.logger.info(f"Loading model from {checkpoint_path}")
 
@@ -297,7 +393,7 @@ class BaseTester(ABC):
         model = self.load_model(checkpoint_path)
 
         # Evaluate model
-        metrics = self.evaluate(model, test_loader)
+        metrics = self.evaluate(model, *test_loaders)
 
         # Save predictions and metrics
         predictions_path = self.save_predictions(metrics)
@@ -307,9 +403,12 @@ class BaseTester(ABC):
         visualization_paths = self.visualize_results(metrics)
 
         # Log summary
-        self.logger.logger.info(f"Test Accuracy: {metrics['accuracy']:.2f}%")
-        self.logger.logger.info(f"Test F1 Score: {metrics['f1']:.4f}")
-        self.logger.logger.info(f"Test AUC: {metrics['auc']:.4f}")
+        if self.is_survival:
+            self.logger.logger.info(f"Test C-index: {metrics.get('c_index', 0):.4f}")
+        else:
+            self.logger.logger.info(f"Test Accuracy: {metrics.get('accuracy', 0):.2f}%")
+            self.logger.logger.info(f"Test F1 Score: {metrics.get('f1', 0):.4f}")
+            self.logger.logger.info(f"Test AUC: {metrics.get('auc', 0):.4f}")
 
         # Return results
         return {

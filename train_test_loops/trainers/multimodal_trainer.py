@@ -62,10 +62,10 @@ class MultimodalTrainer(BaseTrainer):
         if not (self.gene_expr_enabled and self.wsi_enabled):
             raise ValueError("Both gene expression and WSI modalities must be enabled for multimodal training")
 
-        # Track input dimensions for model creation
-        self.gene_expr_dim = None
-        self.wsi_feature_dim = None
-        self.hypergraph_data = None
+        # # Track input dimensions for model creation
+        # self.gene_expr_dim = None
+        # self.wsi_feature_dim = None
+        # self.hypergraph_data = None
 
         self.is_survival = config['execution'].get('task', 'classification') == 'survival'
         if config['execution']['cross_validation']:
@@ -146,6 +146,7 @@ class MultimodalTrainer(BaseTrainer):
 
         # For WSI data, we just use the dictionaries directly
         wsi_train_loader = wsi_train_data
+
         wsi_val_loader = wsi_val_data
 
         return ge_train_loader, ge_val_loader, wsi_train_loader, wsi_val_loader
