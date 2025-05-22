@@ -114,6 +114,13 @@ class MultimodalTrainer(BaseTrainer):
             ge_train_dataset = HypergraphDataset(self.config, ge_train_data, labels_df, data)
             ge_val_dataset = HypergraphDataset(self.config, ge_val_data, labels_df, data)
 
+            ge_train_patients = set(ge_train_dataset.patient_ids)
+            wsi_train_patients = set(wsi_train_data.keys())
+            common_train_patients = ge_train_patients.intersection(wsi_train_patients)
+
+            # Filter gene expression dataset to only include common patients
+            ge_train_dataset.patient_ids = [pid for pid in ge_train_dataset.patient_ids if pid in common_train_patients]
+
             # Create dataloaders
             ge_train_loader = PyGDataLoader(
                 ge_train_dataset,
@@ -122,6 +129,13 @@ class MultimodalTrainer(BaseTrainer):
                 shuffle=True,
                 drop_last=False
             )
+
+            ge_val_patients = set(ge_val_dataset.patient_ids)
+            wsi_val_patients = set(wsi_val_data.keys())
+            common_val_patients = ge_val_patients.intersection(wsi_val_patients)
+
+            # Filter gene expression dataset to only include common patients
+            ge_val_dataset.patient_ids = [pid for pid in ge_val_dataset.patient_ids if pid in common_val_patients]
 
             ge_val_loader = PyGDataLoader(
                 ge_val_dataset,
@@ -240,6 +254,11 @@ class MultimodalTrainer(BaseTrainer):
                 target = batch.y
                 ge_data = batch
 
+            # # Skip this batch if WSI data is not available
+            # if patient_id[0] not in wsi_train_loader:
+            #     #self.logger.logger.warning(f"Skipping patient {patient_id[0]} - no WSI data available")
+            #     continue
+
             wsi_data = wsi_train_loader[patient_id[0]]
             wsi_emb = wsi_data[0]
             wsi_emb = wsi_emb.to(self.device)
@@ -351,6 +370,11 @@ class MultimodalTrainer(BaseTrainer):
                     # For classification task
                     target = batch.y
                     ge_data = batch
+
+                # # Skip this batch if WSI data is not available
+                # if patient_id[0] not in wsi_val_loader:
+                #     #self.logger.logger.warning(f"Skipping patient {patient_id[0]} - no WSI data available")
+                #     continue
 
                 wsi_data = wsi_val_loader[patient_id[0]]
                 wsi_emb = wsi_data[0]

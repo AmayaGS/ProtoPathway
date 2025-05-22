@@ -2,10 +2,10 @@
 
 # Base paths
 base_dir: "C:/Users/Amaya/Documents/PhD/ProtoPathway_benchmarks"
-output_dir: "C:/Users/Amaya/Documents/PhD/ProtoPathway_benchmarks/COADREAD"
+output_dir: "C:/Users/Amaya/Documents/PhD/ProtoPathway_benchmarks/BLCA"
 
 # Dataset name
-dataset_name: "COADREAD" # choices: ['HNSC', 'STAD', 'COADREAD']
+dataset_name: "BLCA" # choices: ['HNSC', 'STAD', 'COADREAD','BLCA']
 #label: 'label'
 #label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
 #n_classes: 2
@@ -141,7 +141,7 @@ ge_training:
   input_dim: 1
   hidden_dim: 128
   num_layers: 3
-  learning_rate: 0.0001
+  learning_rate: 0.001
   dropout_rate: 0.1
   L2_norm: 0
   L1_norm: 0
