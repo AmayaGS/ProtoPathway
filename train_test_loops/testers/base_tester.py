@@ -382,10 +382,7 @@ class BaseTester(ABC):
 
         # Find best checkpoint if not specified
         if checkpoint_path is None:
-            checkpoint_files = [f for f in os.listdir(self.checkpoint_dir) if f.endswith('.pt')]
-            if not checkpoint_files:
-                raise FileNotFoundError(f"No checkpoint found in {self.checkpoint_dir}")
-            checkpoint_path = os.path.join(self.checkpoint_dir, checkpoint_files[0])
+            raise FileNotFoundError(f"No checkpoint found in {self.checkpoint_dir}")
 
         self.logger.logger.info(f"Loading model from {checkpoint_path}")
 

@@ -120,7 +120,8 @@ def train_multimodal_model(config, is_full_train=False, experiment_logger=None):
             ge_train_fold,    # Main training data (gene expression)
             ge_val_fold,      # Main validation data (gene expression)
             wsi_train_fold,   # Auxiliary training data (WSI)
-            wsi_val_fold      # Auxiliary validation data (WSI)
+            wsi_val_fold,      # Auxiliary validation data (WSI)
+            fold_idx=fold_idx
         )
 
         # Store fold results
