@@ -140,6 +140,13 @@ class MultimodalTester(BaseTester):
         # Placeholder - no visualizations implemented yet
         return {}
 
+
+    def evaluate_with_importance(self, model, ge_test_loader, wsi_test_loader):
+
+
+        pass
+
+
     def run_testing(self, ge_test_data, wsi_test_data=None, checkpoint_path=None):
         """
         Run complete testing process for multimodal models.
