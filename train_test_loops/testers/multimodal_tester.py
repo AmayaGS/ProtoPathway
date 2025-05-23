@@ -1,4 +1,5 @@
 # train_test_loops/testers/multimodal_tester.py
+from email.policy import strict
 
 import pandas as pd
 
@@ -93,11 +94,11 @@ class MultimodalTester(BaseTester):
             criterion = nn.CrossEntropyLoss()
 
         # Load state dict
-        state_dict = torch.load(model_path, weights_only=True)
+        state_dict = torch.load(model_path, weights_only=False)
         if isinstance(state_dict, dict) and 'model_state_dict' in state_dict:
-            model.load_state_dict(state_dict['model_state_dict'])
+            model.load_state_dict(state_dict['model_state_dict'], strict=True)
         else:
-            model.load_state_dict(state_dict)
+            model.load_state_dict(state_dict, strict=True)
 
         return model, criterion
 

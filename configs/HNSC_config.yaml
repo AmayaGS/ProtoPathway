@@ -19,9 +19,9 @@ execution:
   wsi_preprocess: false
   wsi_segmentation: false
   create_splits: false
-  cross_validation: true
+  cross_validation: false
   full_train: false
-  test: false
+  test: true
   visualise: false
 
 # Add survival-specific settings
@@ -83,7 +83,7 @@ output:
     removed_pathways_md: "${output_dir}/reports/removed_pathways_report.md"
 
 testing:
-  experiment_path: "${output_dir}/experiments/Hypergraph_FT_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_20250430_184419"
+  experiment_path: "${output_dir}/experiments/MM-MM-attention_CV_fl-2-128_ds-HNSC_lr-1.0e-3_bs-1_dr-0.1_l1-0_l2-0_nl-0_hd-128_20250522_181403"
 
 # WSI specific configuration
 wsi:
@@ -109,7 +109,7 @@ wsi:
 # Multimodal fusion
 multimodal:
   enabled: true  # Set to true to enable multimodal fusion
-  fusion_type: "attention"  # choices: ["concat", "attention", "weighted"]
+  fusion_type: "ProtoPathway"  # choices: ["concat", "attention", "weighted"]
   fusion_layers: 2
   hidden_dim: 128
 

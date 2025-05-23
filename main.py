@@ -18,7 +18,7 @@ from runners.wsi_training_run import train_wsi_model
 
 # # Import multimodal runners
 from runners.multimodal_training_run import train_multimodal_model
-# from runners.multimodal_test_run import test_multimodal_model
+from runners.multimodal_testing_run import test_multimodal_model
 
 
 def parser():
@@ -56,6 +56,8 @@ def main(config, experiment_logger):
     # Ensure output directories exist
     os.makedirs(config['output']['data']['dir'], exist_ok=True)
     os.makedirs(config['output']['figures']['dir'], exist_ok=True)
+
+    is_full_train = config['execution']['full_train']
 
     # Common preprocessing steps regardless of mode
     if config['execution']['create_splits']:
@@ -150,12 +152,15 @@ def main(config, experiment_logger):
             train_multimodal_model(config, is_full_train=True, experiment_logger=experiment_logger)
             logger.info("Training complete")
             training_performed = True
-    #
-    #     if config['execution']['test']:
-    #         logger.info("Testing the multimodal model")
-    #         is_continuation = training_performed
-    #         test_multimodal_model(config, is_continuation=is_continuation, experiment_logger=experiment_logger)
-    #         logger.info("Testing complete")
+
+        if config['execution']['test']:
+            logger.info("Testing the multimodal model")
+            is_continuation = training_performed
+            test_multimodal_model(config,
+                                  is_continuation=is_continuation,
+                                  is_full_train=is_full_train,
+                                  experiment_logger=experiment_logger)
+            logger.info("Testing complete")
     #
     # else:
     #     logger.error(f"Unknown execution mode: {execution_mode}")

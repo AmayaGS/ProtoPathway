@@ -84,7 +84,7 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
         model = tester.load_model(model_path)
 
         # Test the model
-        test_results = tester.test_model(model, ge_val_loader, wsi_val_loader)
+        test_results = tester.run_testing(ge_val_loader, wsi_val_loader, model_path)
 
         fold_histories.append(test_results['history'])
         fold_summaries.append(test_results['summary'])

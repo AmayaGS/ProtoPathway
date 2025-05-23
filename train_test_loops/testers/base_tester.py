@@ -87,7 +87,7 @@ class BaseTester(ABC):
         """
         pass
 
-    @abstractmethod
+
     def evaluate(self, model, test_loader, aux_test_loader=None):
         """
         Evaluate model on test data.
