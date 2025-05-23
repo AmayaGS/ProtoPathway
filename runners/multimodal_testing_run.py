@@ -75,16 +75,12 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
             fold_idx=fold_idx
         )
 
-        # Prepare test data
-        ge_val_loader, wsi_val_loader = tester.prepare_test_data(ge_test_data, wsi_test_data)
-
         # Load the model
         checkpoint_name = f"best_fold_{fold_idx}.pt"
         model_path = os.path.join(model_dir, checkpoint_name)
-        model = tester.load_model(model_path)
 
         # Test the model
-        test_results = tester.run_testing(ge_val_loader, wsi_val_loader, model_path)
+        test_results = tester.run_testing(ge_test_data, wsi_test_data, model_path)
 
-        fold_histories.append(test_results['history'])
-        fold_summaries.append(test_results['summary'])
+        # fold_histories.append(test_results['history'])
+        # fold_summaries.append(test_results['summary'])

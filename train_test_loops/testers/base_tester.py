@@ -387,10 +387,13 @@ class BaseTester(ABC):
         self.logger.logger.info(f"Loading model from {checkpoint_path}")
 
         # Load model
-        model = self.load_model(checkpoint_path)
+        model, criterion = self.load_model(checkpoint_path)
 
-        # Evaluate model
-        metrics = self.evaluate(model, *test_loaders)
+        if aux_test_data is not None:
+            ge_test_loader, wsi_test_loader = test_loaders
+            metrics = self.evaluate(model, ge_test_loader, wsi_test_loader)
+        else:
+            metrics = self.evaluate(model, test_loaders)
 
         # Save predictions and metrics
         predictions_path = self.save_predictions(metrics)
