@@ -62,8 +62,7 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
         _, wsi_test_folds = load_wsi_folds(wsi_features, split_dict, is_cv=True, ignore_missing=True)
         n_folds = len(split_dict['CV'])
 
-    fold_histories = []
-    fold_summaries = []
+
 
     for fold_idx, (ge_test_data, wsi_test_data) in enumerate(zip(ge_test_folds, wsi_test_folds)):
         logger.info(f"Testing fold {fold_idx + 1}/{n_folds}")
@@ -83,11 +82,22 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
         test_results = tester.run_testing(ge_test_data, wsi_test_data, model_path)
 
         if config['execution']['visualise']:
-            attention_dict = ['metrics']['atention_dict']
-            patient_ids = test_results['metrics']['attention_dict'].keys()
+            attention_dict = test_results['metrics']['attention_dict']
+            patient_ids = list(test_results['metrics']['attention_dict'].keys())[-2]
+            gene_idx = attention_dict['gene_idx']
+            pathway_idx = attention_dict['pathway_idx']
+
+            gene_idx_inv = {v.item(): k for k, v in gene_idx.items()}
+            pathway_idx_inv = {v.item(): k for k, v in pathway_idx.items()}
 
             for patient_id in patient_ids:
-                attention_dict[patient_id]
+                patient_info = attention_dict[patient_id]
+                wsi_patch_names = wsi_features[patient_id][2]['filenames']
+                patch_asssignment = patient_info['hard_assignments'].squeeze(0)
+                patch_asssignment = [p.item() for p in patch_asssignment]
+                gene_imp = patient_info['gene_pathway_attn']
 
-        # fold_histories.append(test_results['history'])
-        # fold_summaries.append(test_results['summary'])
+
+
+
+

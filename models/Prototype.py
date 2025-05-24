@@ -63,12 +63,16 @@ class ProtoMIL_V1(nn.Module):
         denom = alpha_g.sum(dim=1, keepdim=False).clamp(min=1e-6)  # [B, N]
         proto_tok = numer / denom.unsqueeze(2)  # [B, N, D]
 
+        gate_prob = gates / gates.sum()
+        proto_tok_weighted = proto_tok * gate_prob.view(1, N, 1)
+
         # 5) slide-level representation for the unimodal baseline
         #    (simple mean over prototype tokens)
-        bag_repr = proto_tok.mean(dim=1)  # [B, D]
+        # bag_repr = proto_tok.mean(dim=1)  # [B, D]
+        bag_repr = (proto_tok_weighted).sum(dim=1)
         logits = self.classifier(bag_repr)  # [B, C]
 
         if self.config['execution']['mode'] == 'multimodal':
-            return bag_repr, proto_tok
+            return bag_repr, proto_tok_weighted
         else:
             return logits, sim

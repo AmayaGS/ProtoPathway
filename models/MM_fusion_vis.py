@@ -56,23 +56,20 @@ class ProtoPathwayFusion(torch.nn.Module):
         self.classifier = nn.Linear(config['mm_training']['hidden_dim'] * 3, n_classes).to(device)
 
 
-    def forward(self, ge_data, wsi_data):
+    def forward(self, ge_data, wsi_features, wsi_coordinates):
         """
         Forward pass through the model.
         :param ge_data: Gene expression data
-        :param wsi_data: WSI data
+        :param wsi_features: WSI data
         :return: Model predictions
         """
-
-        patient_id = ge_data['patient_id']
-        attention_dict = {}
 
         # Get gene expression embeddings
         pathway_emb, pathway_mean, gene_pathway_attention = self.ge_model(ge_data)
         pathway_emb = pathway_emb.unsqueeze(0)  # Add a batch dimension for attention
 
         # Get prototype hist and prototype tokens
-        proto_hist, proto_tokens, prototype_assignments, patch_similarities = self.wsi_model(wsi_data)
+        proto_hist, proto_tokens, patch_assignments = self.wsi_model(wsi_features, wsi_coordinates)
 
         # Cross-attention between prototypes and gene expression embeddings
         attended_proto, attention_weights = self.proto_pathway_attention(query=proto_tokens,
@@ -88,14 +85,10 @@ class ProtoPathwayFusion(torch.nn.Module):
 
         # Classifier on the attention output
         logits = self.classifier(combined_features)
-        attention_dict = {
-                        'gene_pathway_attn': gene_pathway_attention,
-                        'prototype_assignments': prototype_assignments,
-                        'patch_similarities': patch_similarities,
-                        'cross_modal_attn': attention_weights
-                        }
+        patch_assignments['gene_pathway_attn'] = gene_pathway_attention
+        patch_assignments['cross_modal_attn'] = attention_weights
 
-        return logits, attention_dict
+        return logits, patch_assignments
 
 class ProtoMIL_V1(nn.Module):
     """
@@ -125,15 +118,14 @@ class ProtoMIL_V1(nn.Module):
         self.tau = tau                                         # softmax temp
         self.classifier = nn.Linear(embedding_dim, num_classes)
 
-        self.prototype_assignments = None
-        self.patch_similarities = None
 
-
-    def forward(self, x):
+    def forward(self, x, wsi_coords):
         """
         x  – patch-level embeddings for a batch of slides
              shape: [B_slide , P_patch , D]    (NOT [B, D])
         """
+        self.patch_assignments = {}
+
         x = x.unsqueeze(0)  # [B, P, D]  (batch size = 1)
         B, P, D = x.shape
         N = self.proto.shape[0]
@@ -162,17 +154,26 @@ class ProtoMIL_V1(nn.Module):
         denom = alpha_g.sum(dim=1, keepdim=False).clamp(min=1e-6)  # [B, N]
         proto_tok = numer / denom.unsqueeze(2)  # [B, N, D]
 
+        gate_prob = gates / gates.sum()
+        proto_tok_weighted = proto_tok * gate_prob.view(1, N, 1)
+
         # 5) slide-level representation for the unimodal baseline
         #    (simple mean over prototype tokens)
-        bag_repr = proto_tok.mean(dim=1)  # [B, D]
+        # bag_repr = proto_tok.mean(dim=1)  # [B, D]
+        bag_repr = (proto_tok_weighted).sum(dim=1)
         logits = self.classifier(bag_repr)  # [B, C]
 
         if self.is_visualise:
-            self.prototype_assignments = alpha
-            self.patch_similarities = sim
+            patch_to_prototype = torch.argmax(alpha, dim=2)
+            self.patch_assignments = {
+                'soft_assignments': alpha,
+                'hard_assignments': patch_to_prototype,
+                'similarities': sim,
+                'patch_coords': wsi_coords
+            }
 
         if self.config['execution']['mode'] == 'multimodal':
-            return bag_repr, proto_tok, self.prototype_assignments, self.patch_similarities
+            return bag_repr, proto_tok_weighted, self.patch_assignments
         else:
             return logits, sim
 
@@ -197,6 +198,13 @@ class PathwayEmbeddingModel(torch.nn.Module):
             self.convs = nn.ModuleList()
             for _ in range(num_layers - 1):
                 self.convs.append(GATv2Conv(hidden_channels, hidden_channels, concat=False))
+
+        # pathway-level attention gate 𝑔(·)
+        self.gate_nn = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_channels // 2, 1)
+        )
 
         # Output layer
         self.lin = nn.Linear(hidden_channels, out_channels)
@@ -237,14 +245,23 @@ class PathwayEmbeddingModel(torch.nn.Module):
             final_attn = attn_weights_list[-1]
             self.gene_pathway_attention = self._process_gene_pathway_attention(edge_index, final_attn, num_genes, num_pathways)
 
+        # # Pathway-level attention
+        path_attn_scores = self.gate_nn(pathway_x) # [num_pathways]
+        path_weights = F.softmax(path_attn_scores, dim=0)  # [num_pathways]
+
+        # # # Create a graph-level embedding by weighting pathway features
+        # graph_emb = (path_weights * pathway_x).sum(dim=0).unsqueeze(0)  # [hidden_dim]
+        # pooled = torch.mean(pathway_x, dim=0).unsqueeze(0)
+
         # # Create a graph-level embedding by weighting pathway features
-        pooled = torch.mean(pathway_x, dim=0).unsqueeze(0)
+        weighted_pathway = path_weights * pathway_x
+        graph_emb = (weighted_pathway).sum(dim=0).unsqueeze(0)  # [hidden_dim]
 
         # Final prediction
-        out = self.lin(pooled).unsqueeze(0) # [1, num_classes]
+        out = self.lin(graph_emb).unsqueeze(0) # [1, num_classes]
 
         if self.config['execution']['mode'] == 'multimodal':
-            return pathway_x, pooled, self.gene_pathway_attention
+            return weighted_pathway, graph_emb, self.gene_pathway_attention
         else:
             # Return only the output for single modality
             return out

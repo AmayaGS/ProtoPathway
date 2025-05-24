@@ -102,7 +102,8 @@ output:
     removed_pathways_md: "${output_dir}/reports/removed_pathways_report.md"
 
 testing:
-  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-1e-05_l2-1e-05_nl-0_hd-128_20250524_175749"
+  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-4_bs-1_dr-0.2_l1-0.01_l2-0_nl-0_hd-128_20250525_002737"
+#  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_000618"
 #  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250523_205531"
 #  experiment_path: "${output_dir}/experiments/Hypergraph_FT_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_20250430_184419"
 
@@ -156,9 +157,9 @@ wsi_training:
 mm_training:
   input_dim: 1024
   hidden_dim: 128
-  learning_rate: 0.00001
+  learning_rate: 0.0001
   L2_norm: 0
-  L1_norm: 0.00001
+  L1_norm: 0.01
   num_prototypes: 64
   tau: 10.0
   dropout_rate: 0.2

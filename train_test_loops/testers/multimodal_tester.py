@@ -36,6 +36,7 @@ class MultimodalTester(BaseTester):
 
         self.hypergraph_data = None
         self.is_survival = config['execution'].get('task', 'classification') == 'survival'
+        self.is_visualise = config['execution']['visualise']
 
         # Check if both modalities are enabled
         if not (config['gene_expression']['enabled'] and config['wsi']['enabled']):
@@ -106,7 +107,8 @@ class MultimodalTester(BaseTester):
     def _process_batch(self, model, ge_batch, wsi_data=None):
 
         ge_batch.to(self.device)
-        patient_id = ge_batch.patient_id[0]  # Assuming batch size 1
+        patient_id = ge_batch.patient_id[0]
+        wsi_coordinates = None
 
         if self.is_survival:
             target = ge_batch.y['target']
@@ -117,9 +119,11 @@ class MultimodalTester(BaseTester):
 
         # Get WSI data for this patient
         wsi_features = wsi_data[patient_id][0].to(self.device)
+        if self.is_visualise:
+            wsi_coordinates = wsi_data[patient_id][2]['coordinates']
 
         # Forward pass
-        outputs, attention_dict = model(ge_batch, wsi_features)
+        outputs, attention_dict = model(ge_batch, wsi_features, wsi_coordinates)
 
         if self.is_survival:
             return outputs, target, [patient_id], survival_time, censorship, attention_dict

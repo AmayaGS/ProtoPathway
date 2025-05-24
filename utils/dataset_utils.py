@@ -3,7 +3,6 @@ import numpy as np
 import ast
 
 import torch
-from mpmath import hyper
 from torch.utils.data import Dataset
 
 from torch_geometric.data import Data
@@ -137,15 +136,18 @@ class HypergraphDataset(Dataset):
 
         self.config = config
         self.task = config['execution'].get('task', 'classification')
+        self.is_visualise = config['execution']['visualise']
 
         # Hypergraph structure (shared across all samples)
         self.edge_index = hypergraph_data['edge_index']
         self.gene_names = hypergraph_data['gene_names']
         self.pathway_names = hypergraph_data['pathway_names']
-        self.gene_idx = hypergraph_data['gene_idx']
-        # self.pathway_idx = hypergraph_data['pathway_idx']
         self.num_genes = hypergraph_data['num_genes']
         self.num_pathways = hypergraph_data['num_pathways']
+
+        if self.is_visualise:
+            self.pathway_idx = hypergraph_data['pathway_idx']
+            self.gene_idx = hypergraph_data['gene_idx']
 
         # Only keep patients that exist in both dataframes
         self.patient_ids = list(set(gene_expr_df.index) &
@@ -196,15 +198,27 @@ class HypergraphDataset(Dataset):
             # # Gene nodes get expression values, pathway nodes get zeros
             x = torch.zeros((self.num_genes + self.num_pathways, 1), dtype=torch.float)
             x[:self.num_genes] = gene_expr_tensor
-            # Wrap in a PyG Data object
-            data = Data(
-                x=x,
-                edge_index=self.edge_index,
-                y=target,
-                patient_id=patient_id,
-                num_genes=self.num_genes,
-                num_pathways=self.num_pathways
-            )
+
+            if self.is_visualise:
+                data = Data(
+                    x=x,
+                    edge_index=self.edge_index,
+                    y=target,
+                    patient_id=patient_id,
+                    num_genes=self.num_genes,
+                    num_pathways=self.num_pathways,
+                    pathway_idx=self.pathway_idx,
+                    gene_idx=self.gene_idx
+                )
+            else:
+                data = Data(
+                    x=x,
+                    edge_index=self.edge_index,
+                    y=target,
+                    patient_id=patient_id,
+                    num_genes=self.num_genes,
+                    num_pathways=self.num_pathways
+                )
         else:
             target = get_survival_target(
                 patient_row,
@@ -216,14 +230,26 @@ class HypergraphDataset(Dataset):
             # # Gene nodes get expression values, pathway nodes get zeros
             x = torch.zeros((self.num_genes + self.num_pathways, 1), dtype=torch.float)
             x[:self.num_genes] = gene_expr_tensor
-            # Wrap in a PyG Data object
-            data = Data(
-                x=x,
-                edge_index=self.edge_index,
-                y=target,
-                patient_id=patient_id,
-                num_genes=self.num_genes,
-                num_pathways=self.num_pathways
-            )
+
+            if self.is_visualise:
+                data = Data(
+                    x=x,
+                    edge_index=self.edge_index,
+                    y=target,
+                    patient_id=patient_id,
+                    num_genes=self.num_genes,
+                    num_pathways=self.num_pathways,
+                    pathway_idx = self.pathway_idx,
+                    gene_idx = self.gene_idx
+                )
+            else:
+                data = Data(
+                    x=x,
+                    edge_index=self.edge_index,
+                    y=target,
+                    patient_id=patient_id,
+                    num_genes=self.num_genes,
+                    num_pathways=self.num_pathways
+                )
 
         return data

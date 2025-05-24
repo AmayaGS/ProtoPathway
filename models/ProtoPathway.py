@@ -33,6 +33,13 @@ class PathwayEmbeddingModel(torch.nn.Module):
             for _ in range(num_layers - 1):
                 self.convs.append(GATv2Conv(hidden_channels, hidden_channels, concat=False))
 
+        # pathway-level attention gate 𝑔(·)
+        self.gate_nn = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_channels // 2, 1)
+        )
+
         # Output layer
         self.lin = nn.Linear(hidden_channels, out_channels)
 
@@ -72,14 +79,21 @@ class PathwayEmbeddingModel(torch.nn.Module):
             final_attn = attn_weights_list[-1]
             self.gene_pathway_attention = self._process_gene_pathway_attention(edge_index, final_attn, num_genes, num_pathways)
 
+        # # Pathway-level attention
+        path_attn_scores = self.gate_nn(pathway_x) # [num_pathways]
+        path_weights = F.softmax(path_attn_scores, dim=0)  # [num_pathways]
+
         # # Create a graph-level embedding by weighting pathway features
-        pooled = torch.mean(pathway_x, dim=0).unsqueeze(0)
+        weighted_pathway = path_weights * pathway_x
+        graph_emb = (weighted_pathway).sum(dim=0).unsqueeze(0)  # [hidden_dim]
+
+        #pooled = torch.mean(pathway_x, dim=0).unsqueeze(0)
 
         # Final prediction
-        out = self.lin(pooled).unsqueeze(0) # [1, num_classes]
+        out = self.lin(graph_emb).unsqueeze(0) # [1, num_classes]
 
         if self.config['execution']['mode'] == 'multimodal':
-            return pathway_x, pooled
+            return weighted_pathway, graph_emb
         else:
             return out
 

@@ -60,6 +60,7 @@ class BaseTester(ABC):
 
         # Check if the task is survival
         self.is_survival = config.get('execution', {}).get('task', 'classification') == 'survival'
+        self.is_visualise = config['execution']['visualise']
 
     @abstractmethod
     def prepare_test_data(self, test_data, aux_test_data=None):
@@ -155,6 +156,10 @@ class BaseTester(ABC):
                     total += targets.size(0)
 
                 all_patient_ids.extend(patient_id)
+
+        if self.is_visualise:
+            attention_dict['pathway_idx'] = batch['pathway_idx']
+            attention_dict['gene_idx'] = batch['gene_idx']
 
         # Calculate final metrics
         if self.is_survival:
