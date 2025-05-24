@@ -12,7 +12,7 @@ from train_test_loops.testers.base_tester import BaseTester
 
 from utils.dataset_utils import HypergraphDataset, build_incidence_matrix
 from utils.loss_utils import NLLSurvLoss
-from models.MultimodalFusionModel import ProtoPathwayFusion
+from models.MM_fusion_vis import ProtoPathwayFusion
 
 
 
@@ -62,6 +62,7 @@ class MultimodalTester(BaseTester):
 
         # Filter the test data to only include common patients
         ge_test_dataset.patient_ids = [pid for pid in ge_test_dataset.patient_ids if pid in common_test_patients]
+        ge_test_dataset.patient_ids.sort()
 
         ge_val_loader = PyGDataLoader(
             ge_test_dataset,
@@ -118,12 +119,12 @@ class MultimodalTester(BaseTester):
         wsi_features = wsi_data[patient_id][0].to(self.device)
 
         # Forward pass
-        outputs = model(ge_batch, wsi_features)
+        outputs, attention_dict = model(ge_batch, wsi_features)
 
         if self.is_survival:
-            return outputs, target, [patient_id], survival_time, censorship
+            return outputs, target, [patient_id], survival_time, censorship, attention_dict
         else:
-            return outputs, target, [patient_id]
+            return outputs, target, [patient_id], attention_dict
 
 
     def visualize_results(self, metrics):
@@ -139,12 +140,6 @@ class MultimodalTester(BaseTester):
         """
         # Placeholder - no visualizations implemented yet
         return {}
-
-
-    def evaluate_with_importance(self, model, ge_test_loader, wsi_test_loader):
-
-
-        pass
 
 
     def run_testing(self, ge_test_data, wsi_test_data=None, checkpoint_path=None):

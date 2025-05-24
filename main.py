@@ -5,6 +5,7 @@ from utils.helpers import load_config, resolve_all_vars, flatten_config
 from utils.model_utils import create_cross_validation_splits
 from utils.survival_utils import load_tcga_splits
 from utils.logging_utils import ExperimentLogger
+from utils.model_utils import seed_torch, seed_all
 
 # Import GE-specific runners
 from runners.gene_preprocessing import gene_expression_preprocessing
@@ -49,6 +50,9 @@ def parser():
 
 
 def main(config, experiment_logger):
+
+    # seed_torch(42)
+
     logger = experiment_logger.logger
     logger.info(f"Using dataset: {config['dataset_name']}")
     logger.info(f"Execution mode: {config['execution']['mode']}")
@@ -56,8 +60,6 @@ def main(config, experiment_logger):
     # Ensure output directories exist
     os.makedirs(config['output']['data']['dir'], exist_ok=True)
     os.makedirs(config['output']['figures']['dir'], exist_ok=True)
-
-    is_full_train = config['execution']['full_train']
 
     # Common preprocessing steps regardless of mode
     if config['execution']['create_splits']:
@@ -158,13 +160,9 @@ def main(config, experiment_logger):
             is_continuation = training_performed
             test_multimodal_model(config,
                                   is_continuation=is_continuation,
-                                  is_full_train=is_full_train,
+                                  is_full_train=True,
                                   experiment_logger=experiment_logger)
             logger.info("Testing complete")
-    #
-    # else:
-    #     logger.error(f"Unknown execution mode: {execution_mode}")
-    #     return
 
 
 if __name__ == "__main__":

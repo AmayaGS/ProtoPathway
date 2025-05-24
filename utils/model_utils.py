@@ -320,20 +320,41 @@ def l1_regularization(model, l1_norm):
     return weights * l1_norm
 
 
-def _seed_torch(seed=42, device='cuda'):
+def seed_torch(seed=42):
 
     import random
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if device.type == 'cuda':
+    if torch.device == 'cuda':
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+def seed_all(SEED):
 
+    import random
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+
+    # 2 – tell cuDNN & cuBLAS to pick deterministic kernels
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    # 3 – force PyTorch to error out if it would call a nondeterministic op
+    torch.use_deterministic_algorithms(True)
+
+    # 4 – disable the new Flash/Mem-Efficient attention kernels (pytorch >= 2.0)
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
+    torch.backends.cuda.enable_math_sdp(True)  # falls back to matmul-softmax-matmul
+
+    # 5 – (only needed for CUDA 11) — cuBLAS workspace configuration
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 #
 # def load_cv_folds(df, split_dict):
 #

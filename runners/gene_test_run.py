@@ -67,7 +67,7 @@ def test_gene_expression_model(config, is_continuation=False, experiment_logger=
     model_path = os.path.join(model_dir, checkpoint_name)
 
     # Run testing
-    test_results = tester.run_testing(test_data, model_path)
+    test_results = tester.run_testing(test_data, checkpoint_path=model_path)
 
     # Log results
     accuracy = test_results['metrics']['accuracy'] / 100.0  # Convert to decimal

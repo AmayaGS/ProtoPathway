@@ -82,5 +82,12 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
         # Test the model
         test_results = tester.run_testing(ge_test_data, wsi_test_data, model_path)
 
+        if config['execution']['visualise']:
+            attention_dict = ['metrics']['atention_dict']
+            patient_ids = test_results['metrics']['attention_dict'].keys()
+
+            for patient_id in patient_ids:
+                attention_dict[patient_id]
+
         # fold_histories.append(test_results['history'])
         # fold_summaries.append(test_results['summary'])

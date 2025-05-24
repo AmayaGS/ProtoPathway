@@ -19,9 +19,9 @@ execution:
   wsi_preprocess: false
   wsi_segmentation: false
   create_splits: false
-  cross_validation: false
+  cross_validation: true
   full_train: false
-  test: true
+  test: false
   visualise: false
 
 # Add survival-specific settings

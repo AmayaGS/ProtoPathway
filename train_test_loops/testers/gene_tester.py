@@ -71,8 +71,8 @@ class GeneExpressionTester(BaseTester):
             from torch_geometric.loader import DataLoader as PyGDataLoader
             test_loader = PyGDataLoader(
                 test_dataset,
-                batch_size=self.config['ge_training']['batch_size'],
-                num_workers=self.config['ge_training']['num_workers'],
+                batch_size=self.config['training']['batch_size'],
+                num_workers=self.config['training']['num_workers'],
                 shuffle=False
             )
 
@@ -93,9 +93,9 @@ class GeneExpressionTester(BaseTester):
         """
         if self.model_name == 'Hypergraph':
             # Initialize the model
-            model = PathwayEmbeddingModel(config, in_channels=1,
+            model = PathwayEmbeddingModel(self.config, in_channels=1,
                                           hidden_channels=self.config['ge_training']['hidden_dim'],
-                                          out_channels=self.config['num_classes'],
+                                          out_channels=self.config['n_classes'],
                                           num_layers=self.config['ge_training']['num_layers'],
                                           dropout=self.config['ge_training']['dropout_rate'],
                                           gene_names=self.hypergraph_data[
@@ -104,7 +104,7 @@ class GeneExpressionTester(BaseTester):
                                               'pathway_names'] if self.hypergraph_data else None)
 
             # Load state dict
-            state_dict = torch.load(checkpoint_path, weights_only=True)
+            state_dict = torch.load(checkpoint_path)
             if isinstance(state_dict, dict) and 'model_state_dict' in state_dict:
                 model.load_state_dict(state_dict['model_state_dict'])
             else:
@@ -278,7 +278,7 @@ class GeneExpressionTester(BaseTester):
 
         return visualization_paths
 
-    def run_testing(self, test_data, checkpoint_path=None):
+    def run_testing(self, test_data, aux_test_data=None, checkpoint_path=None):
         """
         Run complete testing process for gene expression models.
 
@@ -290,7 +290,8 @@ class GeneExpressionTester(BaseTester):
             Dictionary of test results and paths to outputs
         """
         # Call parent method for standard evaluation
-        results = super().run_testing(test_data, checkpoint_path)
+
+        results = super().run_testing(test_data, checkpoint_path=checkpoint_path)
 
         if self.config['execution'].get('visualise', False):
             # Add biomarker analysis if applicable

@@ -3,6 +3,7 @@ import numpy as np
 import ast
 
 import torch
+from mpmath import hyper
 from torch.utils.data import Dataset
 
 from torch_geometric.data import Data
@@ -142,6 +143,7 @@ class HypergraphDataset(Dataset):
         self.gene_names = hypergraph_data['gene_names']
         self.pathway_names = hypergraph_data['pathway_names']
         self.gene_idx = hypergraph_data['gene_idx']
+        # self.pathway_idx = hypergraph_data['pathway_idx']
         self.num_genes = hypergraph_data['num_genes']
         self.num_pathways = hypergraph_data['num_pathways']
 
@@ -153,7 +155,7 @@ class HypergraphDataset(Dataset):
         self.gene_expr_df = gene_expr_df[self.gene_names].loc[self.patient_ids]
 
         # Get labels
-        self.labels_df = labels_df[labels_df[self.config['patient_id']].isin(self.patient_ids)]
+        labels_df = labels_df[labels_df[self.config['patient_id']].isin(self.patient_ids)]
 
         print(f"Found {len(self.patient_ids)} patients with both expression data and labels")
         print(f"Hypergraph includes {self.num_genes} genes and {self.num_pathways} pathways")
@@ -171,6 +173,8 @@ class HypergraphDataset(Dataset):
                 censor_col=self.censor_col,
                 n_bins=self.n_bins
             )
+        else:
+            self.patient_df = labels_df
 
     def __len__(self):
         return len(self.patient_ids)

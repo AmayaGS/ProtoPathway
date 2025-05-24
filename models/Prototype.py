@@ -63,7 +63,7 @@ class ProtoMIL_V1(nn.Module):
         denom = alpha_g.sum(dim=1, keepdim=False).clamp(min=1e-6)  # [B, N]
         proto_tok = numer / denom.unsqueeze(2)  # [B, N, D]
 
-        # 4) slide-level representation for the unimodal baseline
+        # 5) slide-level representation for the unimodal baseline
         #    (simple mean over prototype tokens)
         bag_repr = proto_tok.mean(dim=1)  # [B, D]
         logits = self.classifier(bag_repr)  # [B, C]
@@ -72,88 +72,3 @@ class ProtoMIL_V1(nn.Module):
             return bag_repr, proto_tok
         else:
             return logits, sim
-
-
-
-class ProtoMIL_V0(nn.Module):
-    """
-    Smallest working prototype-MIL model.
-    """
-    def __init__(self, config, input_dim: int, num_prototypes: int = 64, tau: float = 10.0, num_classes: int = 2,
-                 init_centroids: torch.Tensor | None = None):
-
-        super().__init__()
-
-        if init_centroids is None:
-            self.proto = nn.Parameter(torch.randn(num_prototypes, input_dim))
-        else:
-            self.proto = nn.Parameter(init_centroids)          # k-means seeds
-
-        # (b) non-negative gates (soft-plus ensures ≥0)
-        self.logit_g = nn.Parameter(torch.zeros(num_prototypes))
-
-        self.tau = tau                                         # softmax temp
-        self.classifier = nn.Linear(input_dim, num_classes)
-
-    def forward(self, x):
-        """
-        x – [B, D] patch embeddings from a *single* slide
-        """
-        # 1) cosine distance → similarity
-        p = F.normalize(self.proto, dim=1)                     # [N, D]
-        x = F.normalize(x, dim=1)                              # [B, D]
-        sim = torch.matmul(x, p.T)                             # [B, N]
-
-        # 2) soft assignment
-        alpha = F.softmax(self.tau * sim, dim=1)               # [B, N]
-        gates = F.softplus(self.logit_g)  # g ≥ 0
-        weighted_alpha = alpha * gates  # ã
-
-        proto_sum = torch.matmul(weighted_alpha, p)
-        #max_proto_idx = torch.argmax(sim, dim=1)  # [batch_size]
-
-        # 3) bag-level histogram
-        h = proto_sum.mean(dim=0)                                  # [N]
-
-        # 4) classifier
-        out = self.classifier(h)
-
-        return out.unsqueeze(0), sim
-
-
-# class ProtoMIL_V0(nn.Module):
-#     """
-#     Smallest working prototype-MIL model.
-#     """
-#     def __init__(self, input_dim: int, num_prototypes: int = 64, tau: float = 10.0,
-#                  num_classes: int = 2, init_centroids: torch.Tensor | None = None):
-#
-#         super().__init__()
-#
-#         if init_centroids is None:
-#             self.proto = nn.Parameter(torch.randn(num_prototypes, input_dim))
-#         else:
-#             self.proto = nn.Parameter(init_centroids)          # k-means seeds
-#
-#         self.tau = tau                                         # softmax temp
-#         self.classifier = nn.Linear(num_prototypes, num_classes)
-#
-#     def forward(self, x):
-#         """
-#         x – [B, D] patch embeddings from a *single* slide
-#         """
-#         # 1) cosine distance → similarity
-#         p = F.normalize(self.proto, dim=1)                     # [N, D]
-#         x = F.normalize(x, dim=1)                              # [B, D]
-#         sim = torch.matmul(x, p.T)                             # [B, N]
-#
-#         # 2) soft assignment
-#         alpha = F.softmax(self.tau * sim, dim=1)               # [B, N]
-#
-#         # 3) bag-level histogram
-#         h = alpha.mean(dim=0)                                  # [N]
-#
-#         # 4) classifier
-#         out = self.classifier(h)
-#
-#         return out.unsqueeze(0), sim

@@ -1,4 +1,5 @@
 # models/MultimodalFusionModel.py
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -16,6 +17,7 @@ class ProtoPathwayFusion(torch.nn.Module):
         self.config = config
         self.device = device
         self.is_survival = config['execution'].get('task', 'classification') == 'survival'
+        self.is_visualise = config['execution']['visualise']
 
         if self.is_survival:
             n_classes = config['survival']['survival_bins']

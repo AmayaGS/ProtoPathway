@@ -84,7 +84,7 @@ class BiomarkerAnalysis:
                 self.patient_data["patient_id"].append(patient_id)
                 self.patient_data["true_label"].append(target.item())
                 self.patient_data["pred_label"].append(pred.item())
-                self.patient_data["pathway_importance"].append(self.model.pathway_importance.cpu().clone())
+                # self.patient_data["pathway_importance"].append(self.model.pathway_importance.cpu().clone())
                 self.patient_data["gene_pathway_attention"].append(self.model.gene_pathway_attention.cpu().clone())
                 self.patient_data["gene_importance"].append(self.model.get_gene_importance().cpu().clone())
 
@@ -102,7 +102,7 @@ class BiomarkerAnalysis:
             Dictionary with importance reports
         """
         # Temporarily set the model's importance values to this patient's values
-        self.model.pathway_importance = self.patient_data["pathway_importance"][patient_idx]
+        # self.model.pathway_importance = self.patient_data["pathway_importance"][patient_idx]
         self.model.gene_pathway_attention = self.patient_data["gene_pathway_attention"][patient_idx]
 
         # Generate report

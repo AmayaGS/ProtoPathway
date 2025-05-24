@@ -104,6 +104,7 @@ class BaseTester(ABC):
         all_targets = []
         all_probs = []
         all_patient_ids = []
+        attention_dict = {}
 
         # Survival-specific collections
         if self.is_survival:
@@ -128,15 +129,17 @@ class BaseTester(ABC):
                     result = self._process_batch(model, batch)
 
                 if self.is_survival:
-                    outputs, targets, patient_ids, survival_times, censorships = result
-
+                    outputs, targets, patient_id, survival_times, censorships, attention_results = result
+                    attention_dict[patient_id] = attention_results
                     # Calculate risk scores
                     risk_scores, _ = calculate_risk(outputs)
                     all_risk_scores.append(risk_scores)
                     all_survival_times.append(survival_times)
                     all_censorships.append(censorships)
                 else:
-                    outputs, targets, patient_ids = result
+                    outputs, targets, patient_id, attention_results = result
+
+                    attention_dict[patient_id[0]] = attention_results
 
                     # Calculate probabilities and predictions
                     probs = torch.nn.functional.softmax(outputs, dim=1)
@@ -151,7 +154,7 @@ class BaseTester(ABC):
                     correct += (preds == targets).sum().item()
                     total += targets.size(0)
 
-                all_patient_ids.extend(patient_ids)
+                all_patient_ids.extend(patient_id)
 
         # Calculate final metrics
         if self.is_survival:
@@ -169,7 +172,8 @@ class BaseTester(ABC):
                 'all_risk_scores': all_risk_scores,
                 'all_survival_times': all_survival_times,
                 'all_censorships': all_censorships,
-                'patient_ids': all_patient_ids
+                'patient_ids': all_patient_ids,
+                'attention_dict': attention_dict
             }
         else:
             # Concatenate classification results
@@ -183,6 +187,7 @@ class BaseTester(ABC):
             metrics['all_preds'] = all_preds
             metrics['all_targets'] = all_targets
             metrics['all_probs'] = all_probs
+            metrics['attention_dict'] = attention_dict
 
         return metrics
 
@@ -212,7 +217,7 @@ class BaseTester(ABC):
         Returns:
             Dictionary of metrics
         """
-        n_classes = self.config['num_classes']
+        n_classes = self.config['n_classes']
 
         metrics = {
             'accuracy': accuracy_score(y_true, y_pred) * 100,  # as percentage
