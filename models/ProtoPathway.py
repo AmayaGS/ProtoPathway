@@ -82,6 +82,10 @@ class PathwayEmbeddingModel(torch.nn.Module):
         # # Pathway-level attention
         path_attn_scores = self.gate_nn(pathway_x) # [num_pathways]
         path_weights = F.softmax(path_attn_scores, dim=0)  # [num_pathways]
+        # min max scaling
+        # path_attn_scores = (path_attn_scores - path_attn_scores.min()) / (path_attn_scores.max() - path_attn_scores.min())
+        # sigmoid scaling
+        # path_attn_scores = torch.sigmoid(path_attn_scores)
 
         # # Create a graph-level embedding by weighting pathway features
         weighted_pathway = path_weights * pathway_x
@@ -93,7 +97,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
         out = self.lin(graph_emb).unsqueeze(0) # [1, num_classes]
 
         if self.config['execution']['mode'] == 'multimodal':
-            return weighted_pathway, graph_emb
+            return pathway_x, graph_emb
         else:
             return out
 

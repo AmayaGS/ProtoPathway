@@ -95,7 +95,7 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
                 wsi_patch_names = wsi_features[patient_id][2]['filenames']
                 patch_asssignment = patient_info['hard_assignments'].squeeze(0)
                 patch_asssignment = [p.item() for p in patch_asssignment]
-                gene_imp = patient_info['gene_pathway_attn']
+                sorted_gene_importance = patient_info['gene_pathway_attn'].sum(dim=1).sort()
 
 
 

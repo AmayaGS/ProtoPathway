@@ -20,9 +20,9 @@ execution:
   wsi_segmentation: false
   create_splits: false
   cross_validation: false
-  full_train: true
-  test: false
-  visualise: false
+  full_train: false
+  test: true
+  visualise: true
 
 ## Model configuration
 #model:
@@ -102,8 +102,8 @@ output:
     removed_pathways_md: "${output_dir}/reports/removed_pathways_report.md"
 
 testing:
-#  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-4_bs-1_dr-0.2_l1-0.01_l2-0_nl-0_hd-128_20250525_002737"
-  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_021206"
+  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450"
+#  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_021206"
 #  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250523_205531"
 #  experiment_path: "${output_dir}/experiments/Hypergraph_FT_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_20250430_184419"
 

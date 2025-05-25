@@ -53,7 +53,10 @@ class ProtoMIL_V1(nn.Module):
         sim = torch.einsum("bpd,nd->bpn", x_n, p)  # [B, P, N]
 
         # 3) soft assignment
-        alpha = F.softmax(self.tau * sim, dim=2)  # [B, P, N]
+        alpha = F.softmax(self.tau * sim, dim=2)
+        # sigmoid scaling
+        # alpha = torch.sigmoid(self.tau * sim)
+        #alpha = self.tau * sim # [B, P, N]
         gates = F.softplus(self.logit_g)  # [N]
         alpha_g = alpha * gates  # broadcast to [B, P, N]
 
@@ -64,7 +67,7 @@ class ProtoMIL_V1(nn.Module):
         proto_tok = numer / denom.unsqueeze(2)  # [B, N, D]
 
         gate_prob = gates / gates.sum()
-        proto_tok_weighted = proto_tok * gate_prob.view(1, N, 1)
+        proto_tok_weighted = proto_tok * gates.view(1, N, 1)
 
         # 5) slide-level representation for the unimodal baseline
         #    (simple mean over prototype tokens)
@@ -73,6 +76,6 @@ class ProtoMIL_V1(nn.Module):
         logits = self.classifier(bag_repr)  # [B, C]
 
         if self.config['execution']['mode'] == 'multimodal':
-            return bag_repr, proto_tok_weighted
+            return bag_repr, proto_tok
         else:
             return logits, sim
