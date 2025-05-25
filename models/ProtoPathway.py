@@ -58,7 +58,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
 
         # First layer
         x = self.conv1(x, edge_index)
-        x = F.relu(x)
+        x = F.leaky_relu(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # Additional layers
@@ -69,7 +69,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
             else:
                 x = self.convs[i](x, edge_index)
 
-            x = F.relu(x)
+            x = F.leaky_relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
 
         # Pathway-level features

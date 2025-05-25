@@ -76,7 +76,7 @@ class ProtoPathwayFusion(torch.nn.Module):
                                                                         key=pathway_emb,
                                                                         value=pathway_emb,
                                                                         need_weights=True,
-                                                                        average_attn_weights=True
+                                                                        average_attn_weights=False
                                                                          )
 
         proto_path_mean = attended_proto.mean(dim=1)
@@ -173,7 +173,7 @@ class ProtoMIL_V1(nn.Module):
             }
 
         if self.config['execution']['mode'] == 'multimodal':
-            return bag_repr, proto_tok_weighted, self.patch_assignments
+            return bag_repr, proto_tok, self.patch_assignments
         else:
             return logits, sim
 
@@ -224,7 +224,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
 
         # First layer
         x = self.conv1(x, edge_index)
-        x = F.relu(x)
+        x = F.leaky_relu(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # Additional layers
@@ -235,7 +235,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
             else:
                 x = self.convs[i](x, edge_index)
 
-            x = F.relu(x)
+            x = F.leaky_relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
 
         # Pathway-level features
@@ -261,7 +261,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
         out = self.lin(graph_emb).unsqueeze(0) # [1, num_classes]
 
         if self.config['execution']['mode'] == 'multimodal':
-            return weighted_pathway, graph_emb, self.gene_pathway_attention
+            return pathway_x, graph_emb, self.gene_pathway_attention
         else:
             # Return only the output for single modality
             return out
