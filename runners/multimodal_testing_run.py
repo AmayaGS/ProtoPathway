@@ -82,149 +82,69 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
         # test_results = tester.run_testing(ge_test_data, wsi_test_data, model_path)
 
         if config['execution']['visualise']:
-            import numpy as np
-            from utils.vis_results import GeneImportanceAnalyzer, PathwayImportanceAnalyzer, CrossModalPathwayAnalyzer
+            from runners.gene_pathway_analysis_run import run_gene_pathway_analysis
 
             vis_results = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450\visualise\vis_dict.pkl"
             with open(vis_results, 'rb') as f:
                 test_results = pickle.load(f)
 
             attention_dict = test_results['metrics']['attention_dict']
-            analyzer = GeneImportanceAnalyzer(attention_dict['gene_idx'], attention_dict['pathway_idx'])
+            # run_gene_pathway_analysis(config, attention_dict, wsi_features, test_results_dir, experiment_logger)
 
-            patient_ids = [k for k in attention_dict.keys() if k not in ['gene_idx', 'pathway_idx']]
+            # VISUALIZATION CODE
+            from utils.simple_visualizations import create_summary_volcano_plots, create_simple_bar_chart
 
-            # === GENE-LEVEL ANALYSIS ===
-            # for pid in patient_ids:
-            #     label = wsi_features[pid][1]
-            #     analyzer.add_patient(pid, attention_dict[pid]['gene_pathway_attn'], label)
+            plots_dir = os.path.join(test_results_dir, 'plots')
+            create_summary_volcano_plots(test_results_dir, plots_dir, config=config)
+
+            from utils.simple_visualizations import create_plots
+
+            create_plots(test_results_dir, plots_dir, config)
+
+            analysis_types = ['gene', 'pathway', 'crossmodal']
+
+            for analysis_type in analysis_types:
+                for class_label in [0, 1]:  # Adjust based on your classes
+                    # Load the class aggregation results
+                    if analysis_type == 'crossmodal':
+                        filename = f'class_{class_label}_crossmodal_pathways.csv'
+                    else:
+                        filename = f'class_{class_label}_top_{analysis_type}s.csv'
+
+                    file_path = os.path.join(test_results_dir, filename)
+
+                    try:
+                        class_results = pd.read_csv(file_path)
+                        output_path = os.path.join(plots_dir, f'top_{analysis_type}_class_{class_label}.png')
+
+                        create_simple_bar_chart(
+                            class_results,
+                            analysis_type,
+                            class_label,
+                            output_path,
+                            top_k=20
+                        )
+
+                        print(f"Created bar chart: {output_path}")
+
+                    except FileNotFoundError:
+                        print(f"File not found: {file_path}")
+
+
+            # ####################################################################################
+            # patient_ids = list(test_results['metrics']['attention_dict'].keys())[-2]
+            # gene_idx = attention_dict['gene_idx']
+            # pathway_idx = attention_dict['pathway_idx']
             #
-            # patient_output_dir = os.path.join(test_results_dir, 'patient_gene_importance')
-            # analyzer.save_patient_results(patient_output_dir)
+            # gene_idx_inv = {v.item(): k for k, v in gene_idx.items()}
+            # pathway_idx_inv = {v.item(): k for k, v in pathway_idx.items()}
             #
-            # class_results = analyzer.class_aggregation(k=500)
-            # for label, df in class_results.items():
-            #     df.to_csv(os.path.join(test_results_dir, f'class_{label}_top_genes.csv'), index=False)
-            #     logger.info(f"Class {label} top 10:\n{df.head(10)}")
-            #
-            # # Differential analysis - shows which genes differ most between classes
-            # diff_results = analyzer.class_differences(k=500)
-            # diff_results.to_csv(os.path.join(test_results_dir, 'class_differences.csv'), index=False)
-            # significant_genes = diff_results[diff_results['significant'] == True]
-            # logger.info(f"Found {len(significant_genes)} statistically significant differential genes")
-            # logger.info(f"Top 10 differential genes:\n{diff_results.head(10)}")
-            #
-            # # Class-specific drivers - separates genes by which class they drive
-            # class_drivers = analyzer.class_specific_drivers(k=100)
-            # for driver_type, df in class_drivers.items():
-            #     driver_file = os.path.join(test_results_dir, f'{driver_type}.csv')
-            #     df.to_csv(driver_file, index=False)
-            #     logger.info(f"Top 5 {driver_type}:\n{df.head(5)}")
-            #
-            # # === PATHWAY-LEVEL ANALYSIS ===
-            # pathway_analyzer = PathwayImportanceAnalyzer(attention_dict['gene_idx'], attention_dict['pathway_idx'])
-            #
-            # for pid in patient_ids:
-            #     label = wsi_features[pid][1]
-            #     pathway_analyzer.add_patient(pid, attention_dict[pid]['gene_pathway_attn'], label)
-            #
-            # # Save individual pathway results
-            # pathway_output_dir = os.path.join(test_results_dir, 'patient_pathway_importance')
-            # pathway_analyzer.save_patient_results(pathway_output_dir)
-            #
-            # # Pathway class aggregation
-            # pathway_class_results = pathway_analyzer.class_aggregation(k=500)
-            # for label, df in pathway_class_results.items():
-            #     df.to_csv(os.path.join(test_results_dir, f'class_{label}_top_pathways.csv'), index=False)
-            #     logger.info(f"Class {label} top 5 pathways:\n{df.head(5)}")
-            #
-            # # Pathway differential analysis
-            # pathway_diff_results = pathway_analyzer.class_differences(k=100)
-            # pathway_diff_results.to_csv(os.path.join(test_results_dir, 'pathway_differences.csv'), index=False)
-            # pathway_significant = pathway_diff_results[pathway_diff_results['significant'] == True]
-            # logger.info(f"Found {len(pathway_significant)} significant differential pathways")
-            # logger.info(f"Top 5 differential pathways:\n{pathway_diff_results.head(5)}")
-            #
-            # # Pathway class-specific drivers
-            # pathway_drivers = pathway_analyzer.class_specific_drivers(k=100)
-            # for driver_type, df in pathway_drivers.items():
-            #     driver_file = os.path.join(test_results_dir, f'{driver_type}_pathways.csv')
-            #     df.to_csv(driver_file, index=False)
-            #     logger.info(f"Top 3 {driver_type} pathways:\n{df.head(3)}")
-            #
-            # logger.info("Pathway analysis complete!")
-            #
-            # if patient_ids:
-            #     top_genes = analyzer.top_genes(patient_ids[0], k=50)
-            #     logger.info(f"Top genes for {patient_ids[0]}:\n{top_genes}")
-
-
-            # === CROSS-MODAL PATHWAY ANALYSIS ===
-            crossmodal_analyzer = CrossModalPathwayAnalyzer(attention_dict['gene_idx'], attention_dict['pathway_idx'])
-
-            for pid in patient_ids:
-                label = wsi_features[pid][1]
-                crossmodal_analyzer.add_patient(pid, attention_dict[pid]['cross_modal_attn'], label)
-
-            # Save individual cross-modal results
-            crossmodal_output_dir = os.path.join(test_results_dir, 'patient_crossmodal_importance')
-            crossmodal_analyzer.save_patient_results(crossmodal_output_dir)
-
-            # Cross-modal class aggregation
-            crossmodal_class_results = crossmodal_analyzer.class_aggregation(k=500)
-            for label, df in crossmodal_class_results.items():
-                df.to_csv(os.path.join(test_results_dir, f'class_{label}_crossmodal_pathways.csv'), index=False)
-                logger.info(f"Class {label} top 5 cross-modal pathways:\n{df.head(5)}")
-
-            # Cross-modal differential analysis
-            crossmodal_diff_results = crossmodal_analyzer.class_differences(k=500)
-            crossmodal_diff_results.to_csv(os.path.join(test_results_dir, 'crossmodal_pathway_differences.csv'),
-                                           index=False)
-            crossmodal_significant = crossmodal_diff_results[crossmodal_diff_results['significant'] == True]
-            logger.info(f"Found {len(crossmodal_significant)} significant cross-modal differential pathways")
-            logger.info(f"Top 5 cross-modal differential pathways:\n{crossmodal_diff_results.head(5)}")
-
-            # Cross-modal class-specific drivers
-            crossmodal_drivers = crossmodal_analyzer.class_specific_drivers(k=100)
-            for driver_type, df in crossmodal_drivers.items():
-                driver_file = os.path.join(test_results_dir, f'{driver_type}_crossmodal_pathways.csv')
-                df.to_csv(driver_file, index=False)
-                logger.info(f"Top 3 {driver_type} cross-modal pathways:\n{df.head(3)}")
-
-            logger.info("Cross-modal analysis complete!")
-
-            # Rank-based analysis
-            rank_results = crossmodal_analyzer.rank_based_analysis(k=100)
-            rank_results.to_csv(os.path.join(test_results_dir, 'crossmodal_pathway_ranks.csv'), index=False)
-            logger.info(f"Top 5 rank-based differences:\n{rank_results.head(5)}")
-
-            # Run consensus analysis and save CSV files
-            consensus_result = crossmodal_analyzer.consensus_pathway_analysis(test_results_dir, k_per_method=100)
-            logger.info(consensus_result)
-
-            # Load and display high confidence results
-            for class_label in [0, 1]:  # Adjust based on your class labels
-                csv_path = os.path.join(test_results_dir, f'class_{class_label}_consensus_pathways.csv')
-                if os.path.exists(csv_path):
-                    consensus_df = pd.read_csv(csv_path)
-                    high_conf = consensus_df[consensus_df['confidence'] == 'high']
-                    logger.info(f"Class {class_label} - High Confidence Pathways ({len(high_conf)}):")
-                    logger.info(high_conf['pathway'].head(10).tolist())
-
-
-            patient_ids = list(test_results['metrics']['attention_dict'].keys())[-2]
-            gene_idx = attention_dict['gene_idx']
-            pathway_idx = attention_dict['pathway_idx']
-
-            gene_idx_inv = {v.item(): k for k, v in gene_idx.items()}
-            pathway_idx_inv = {v.item(): k for k, v in pathway_idx.items()}
-
-            for patient_id in patient_ids:
-                patient_info = attention_dict[patient_id]
-                wsi_patch_names = wsi_features[patient_id][2]['filenames']
-                patch_asssignment = patient_info['hard_assignments'].squeeze(0)
-                patch_asssignment = [p.item() for p in patch_asssignment]
-                sorted_gene_importance = patient_info['gene_pathway_attn'].sum(dim=1).sort()
+            # for patient_id in patient_ids:
+            #     patient_info = attention_dict[patient_id]
+            #     wsi_patch_names = wsi_features[patient_id][2]['filenames']
+            #     patch_asssignment = patient_info['hard_assignments'].squeeze(0)
+            #     patch_asssignment = [p.item() for p in patch_asssignment]
+            #     sorted_gene_importance = patient_info['gene_pathway_attn'].sum(dim=1).sort()
 
 
 
