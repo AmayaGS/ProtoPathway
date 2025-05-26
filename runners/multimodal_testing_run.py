@@ -193,6 +193,24 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
 
             logger.info("Cross-modal analysis complete!")
 
+            # Rank-based analysis
+            rank_results = crossmodal_analyzer.rank_based_analysis(k=100)
+            rank_results.to_csv(os.path.join(test_results_dir, 'crossmodal_pathway_ranks.csv'), index=False)
+            logger.info(f"Top 5 rank-based differences:\n{rank_results.head(5)}")
+
+            # Run consensus analysis and save CSV files
+            consensus_result = crossmodal_analyzer.consensus_pathway_analysis(test_results_dir, k_per_method=100)
+            logger.info(consensus_result)
+
+            # Load and display high confidence results
+            for class_label in [0, 1]:  # Adjust based on your class labels
+                csv_path = os.path.join(test_results_dir, f'class_{class_label}_consensus_pathways.csv')
+                if os.path.exists(csv_path):
+                    consensus_df = pd.read_csv(csv_path)
+                    high_conf = consensus_df[consensus_df['confidence'] == 'high']
+                    logger.info(f"Class {class_label} - High Confidence Pathways ({len(high_conf)}):")
+                    logger.info(high_conf['pathway'].head(10).tolist())
+
             # === COMPARE DIRECT vs CROSS-MODAL PATHWAY IMPORTANCE ===
             logger.info("Comparing direct vs cross-modal pathway importance...")
 
