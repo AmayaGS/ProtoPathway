@@ -83,6 +83,7 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
 
         if config['execution']['visualise']:
             from runners.gene_pathway_analysis_run import run_gene_pathway_analysis
+            from utils.simple_visualizations import create_plots
 
             vis_results = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450\visualise\vis_dict.pkl"
             with open(vis_results, 'rb') as f:
@@ -91,45 +92,8 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
             attention_dict = test_results['metrics']['attention_dict']
             # run_gene_pathway_analysis(config, attention_dict, wsi_features, test_results_dir, experiment_logger)
 
-            # VISUALIZATION CODE
-            from utils.simple_visualizations import create_summary_volcano_plots, create_simple_bar_chart
-
             plots_dir = os.path.join(test_results_dir, 'plots')
-            create_summary_volcano_plots(test_results_dir, plots_dir, config=config)
-
-            from utils.simple_visualizations import create_plots
-
             create_plots(test_results_dir, plots_dir, config)
-
-            analysis_types = ['gene', 'pathway', 'crossmodal']
-
-            for analysis_type in analysis_types:
-                for class_label in [0, 1]:  # Adjust based on your classes
-                    # Load the class aggregation results
-                    if analysis_type == 'crossmodal':
-                        filename = f'class_{class_label}_crossmodal_pathways.csv'
-                    else:
-                        filename = f'class_{class_label}_top_{analysis_type}s.csv'
-
-                    file_path = os.path.join(test_results_dir, filename)
-
-                    try:
-                        class_results = pd.read_csv(file_path)
-                        output_path = os.path.join(plots_dir, f'top_{analysis_type}_class_{class_label}.png')
-
-                        create_simple_bar_chart(
-                            class_results,
-                            analysis_type,
-                            class_label,
-                            output_path,
-                            top_k=20
-                        )
-
-                        print(f"Created bar chart: {output_path}")
-
-                    except FileNotFoundError:
-                        print(f"File not found: {file_path}")
-
 
             # ####################################################################################
             # patient_ids = list(test_results['metrics']['attention_dict'].keys())[-2]
