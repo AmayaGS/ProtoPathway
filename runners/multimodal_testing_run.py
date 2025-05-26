@@ -211,32 +211,6 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
                     logger.info(f"Class {class_label} - High Confidence Pathways ({len(high_conf)}):")
                     logger.info(high_conf['pathway'].head(10).tolist())
 
-            # === COMPARE DIRECT vs CROSS-MODAL PATHWAY IMPORTANCE ===
-            logger.info("Comparing direct vs cross-modal pathway importance...")
-
-            # Compare at patient level
-            correlations = []
-            for pid in patient_ids:
-                direct_importance = pathway_analyzer.patient_data[pid]['pathway_importance']
-                crossmodal_importance = crossmodal_analyzer.patient_data[pid]['pathway_importance']
-
-                correlation = np.corrcoef(direct_importance, crossmodal_importance)[0, 1]
-                correlations.append(correlation)
-
-            mean_correlation = np.mean(correlations)
-            logger.info(f"Mean patient-level correlation (direct vs cross-modal): {mean_correlation:.3f}")
-            logger.info(f"Correlation range: {np.min(correlations):.3f} to {np.max(correlations):.3f}")
-
-            # Save comparison results
-            comparison_df = pd.DataFrame({
-                'patient_id': patient_ids,
-                'correlation': correlations,
-                'label': [wsi_features[pid][1].item() for pid in patient_ids]
-            })
-            comparison_df.to_csv(os.path.join(test_results_dir, 'pathway_importance_correlations.csv'), index=False)
-
-            logger.info(f"Pathway importance comparison saved!")
-
 
             patient_ids = list(test_results['metrics']['attention_dict'].keys())[-2]
             gene_idx = attention_dict['gene_idx']
