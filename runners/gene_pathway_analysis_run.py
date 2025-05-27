@@ -15,26 +15,26 @@ def _run_analysis(analyzer, output_dir, analysis_name, logger=None):
     analyzer.save_patient_results(patient_dir)
 
     # Class aggregation
-    class_results = analyzer.class_aggregation(k=2000)
+    class_results = analyzer.class_aggregation(k=10000)
     for label, df in class_results.items():
         df.to_csv(os.path.join(output_dir, f'class_{label}_top_{analyzer.entity_name}s.csv'), index=False)
 
     # Statistical differences
-    diff_results = analyzer.class_differences(k=2000)
+    diff_results = analyzer.class_differences(k=10000)
     diff_results.to_csv(os.path.join(output_dir, f'{analysis_name}_differences.csv'), index=False)
 
     # Class-specific drivers
-    drivers = analyzer.class_specific_drivers(k=1000)
+    drivers = analyzer.class_specific_drivers(k=10000)
     for driver_type, df in drivers.items():
         if isinstance(df, pd.DataFrame):
-            df.to_csv(os.path.join(output_dir, f'{driver_type}_{analyzer.entity_name}s.csv'), index=False)
+            df.to_csv(os.path.join(output_dir, f'{driver_type}_{analysis_name}_{analyzer.entity_name}s.csv'), index=False)
 
     # Rank-based analysis
-    rank_results = analyzer.rank_based_analysis(k=1000)
+    rank_results = analyzer.rank_based_analysis(k=10000)
     rank_results.to_csv(os.path.join(output_dir, f'{analysis_name}_ranks.csv'), index=False)
 
     # Consensus analysis
-    analyzer.consensus_analysis(output_dir, k_per_method=1000)
+    analyzer.consensus_analysis(output_dir, k_per_method=10000)
 
     if logger:
         logger.info(f"{analysis_name.title()} analysis: {drivers['summary']}")

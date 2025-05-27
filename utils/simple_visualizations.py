@@ -150,6 +150,14 @@ def bar_plot(df, x_col, y_col, title, output_path, color='steelblue', n=40, conf
     plt.savefig(output_path, format='pdf')
     plt.close()
 
+def _get_entity_column(df):
+    """Helper function to determine the entity column name"""
+    if 'gene' in df.columns:
+        return 'gene'
+    elif 'pathway' in df.columns:
+        return 'pathway'
+    else:
+        raise ValueError(f"Could not find entity column. Available columns: {list(df.columns)}")
 
 def create_plots(results_dir, output_dir, config=None):
     """Create all plots"""
@@ -166,7 +174,7 @@ def create_plots(results_dir, output_dir, config=None):
     plots = [
         ('gene_differences.csv', 'Gene Differences'),
         ('pathway_differences.csv', 'Pathway Differences'),
-        ('crossmodal_pathway_differences.csv', 'Cross-modal Pathway Differences')
+        ('crossmodal_differences.csv', 'Cross-modal Pathway Differences')
     ]
 
     for filename, title in plots:
@@ -181,9 +189,13 @@ def create_plots(results_dir, output_dir, config=None):
     # Pathway ranking plots
     ranking_files = [
         ('pathway_differences.csv', 'cohens_d', 'Pathways with Highest Class Differences'),
-        ('class_0_drivers_pathways.csv', 'cohens_d', f'{class_0_name} Signature Pathways'),
-        ('class_1_drivers_pathways.csv', 'cohens_d', f'{class_1_name} Signature Pathways'),
-        ('pathway_ranks.csv', 'rank_difference', 'Relative Ranking of Pathways')
+        ('class_0_drivers_pathway_pathways.csv', 'cohens_d', f'{class_0_name} Signature Pathways'),
+        ('class_1_drivers_pathway_pathways.csv', 'cohens_d', f'{class_1_name} Signature Pathways'),
+        ('gene_ranks.csv', 'rank_difference', 'Relative Ranking of Genes'),
+        ('pathway_ranks.csv', 'rank_difference', 'Relative Ranking of Pathways'),
+        ('class_0_drivers_crossmodal_pathways.csv', 'cohens_d', f'{class_0_name} Signature Crossmodal Pathways'),
+        ('class_1_drivers_crossmodal_pathways.csv', 'cohens_d', f'{class_1_name} Signature Crossmodal Pathways'),
+        ('crossmodal_ranks.csv', 'rank_difference', 'Crossmodal Relative Ranking of Pathways')
     ]
 
     for filename, metric_col, plot_title in ranking_files:
@@ -195,14 +207,20 @@ def create_plots(results_dir, output_dir, config=None):
         # if 'significant' in df.columns:
         #     df = df[df['significant'] == True]
 
-        output = f"{output_dir}/pathways_{filename.split('.')[0]}.pdf"
+        try:
+            entity_col = _get_entity_column(df)
+        except ValueError as e:
+            print(f"Warning: {e} in {filename}")
+            continue
+
+        output = f"{output_dir}/{filename.split('.')[0]}.pdf"
 
         if 'class_0' in filename:
-            bar_plot(df, metric_col, 'pathway', f'{plot_title}', output, color='#3498DB', config=config)
+            bar_plot(df, metric_col, entity_col, f'{plot_title}', output, color='#3498DB', config=config)
         elif 'class_1' in filename:
-            bar_plot(df, metric_col, 'pathway', f'{plot_title}', output, color='#E74C3C', config=config)
+            bar_plot(df, metric_col, entity_col, f'{plot_title}', output, color='#E74C3C', config=config)
         else:
-            bar_plot(df, metric_col, 'pathway', f'{plot_title}', output, config=config)
+            bar_plot(df, metric_col, entity_col, f'{plot_title}', output, config=config)
 
     print(f"Plots saved to {output_dir}")
 
