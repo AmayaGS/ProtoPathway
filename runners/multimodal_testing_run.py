@@ -85,11 +85,11 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
             from runners.gene_pathway_analysis_run import run_gene_pathway_analysis
             from utils.simple_visualizations import create_plots
 
-            vis_results = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450\visualise\vis_dict.pkl"
-            with open(vis_results, 'rb') as f:
-                test_results = pickle.load(f)
-
-            attention_dict = test_results['metrics']['attention_dict']
+            # vis_results = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450\visualise\vis_dict.pkl"
+            # with open(vis_results, 'rb') as f:
+            #     test_results = pickle.load(f)
+            #
+            # attention_dict = test_results['metrics']['attention_dict']
             # run_gene_pathway_analysis(config, attention_dict, wsi_features, test_results_dir, experiment_logger)
 
             plots_dir = os.path.join(test_results_dir, 'plots')

@@ -98,7 +98,7 @@ def volcano_plot(df, title, output_path, config=None):
     plt.close()
 
 
-def bar_plot(df, x_col, y_col, title, output_path, color='steelblue', n=20, config=None):
+def bar_plot(df, x_col, y_col, title, output_path, color='steelblue', n=40, config=None):
     """Simple horizontal bar plot with value labels"""
     data = df.head(n)
 
@@ -192,8 +192,8 @@ def create_plots(results_dir, output_dir, config=None):
             continue
 
         df = pd.read_csv(path)
-        if 'significant' in df.columns:
-            df = df[df['significant'] == True]
+        # if 'significant' in df.columns:
+        #     df = df[df['significant'] == True]
 
         output = f"{output_dir}/pathways_{filename.split('.')[0]}.pdf"
 
