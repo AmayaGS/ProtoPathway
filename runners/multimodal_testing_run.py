@@ -84,6 +84,7 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
         if config['execution']['visualise']:
             from runners.gene_pathway_analysis_run import run_gene_pathway_analysis
             from utils.simple_visualizations import create_plots
+            from utils.prototype_utils import generate_prototype_heatmap, analyze_prototype_distribution
 
             vis_results = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450\visualise\vis_dict.pkl"
             with open(vis_results, 'rb') as f:
@@ -110,9 +111,30 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
             for patient_id in patient_ids:
                 patient_info = attention_dict[patient_id]
                 wsi_patch_names = wsi_features[patient_id][2]['filenames']
-                patch_asssignment = patient_info['hard_assignments'].squeeze(0)
-                patch_asssignment = [p.item() for p in patch_asssignment]
-            #     sorted_gene_importance = patient_info['gene_pathway_attn'].sum(dim=1).sort()
+                patch_assignment = patient_info['hard_assignments'].squeeze(0)
+                patch_assignment = [p.item() for p in patch_assignment]
+                patch_coordinates = patient_info['patch_coords']
+                path_to_patches = r"C:\Users\Amaya\Documents\PhD\Data\R4RA_patches\extracted_patches.csv"
+                output_dir = os.path.join(test_results_dir, 'prototype_plots')
+                ensure_directory(output_dir)
+
+                analyze_prototype_distribution(
+                    patient_id=patient_id,
+                    patch_assignments=patch_assignment,
+                    output_dir=output_dir
+                )
+
+                generate_prototype_heatmap(
+                    patient_id=patient_id,
+                    patch_assignments=patch_assignment,
+                    patch_names=wsi_patch_names,
+                    patch_coordinates=patch_coordinates,
+                    extracted_patches_path=path_to_patches,
+                    output_dir=output_dir,
+                    fold=0,
+                    patch_size=224
+                )
+
 
 
 
