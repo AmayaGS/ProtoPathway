@@ -3,6 +3,7 @@
 import os
 import pickle
 import pandas as pd
+from sympy.physics.vector import cross
 
 from utils.helpers import ensure_directory
 from utils.model_utils import load_gene_expression_folds, load_wsi_folds
@@ -85,6 +86,9 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
             from runners.gene_pathway_analysis_run import run_gene_pathway_analysis
             from utils.simple_visualizations import create_plots
             from utils.prototype_utils import generate_prototype_heatmap, analyze_prototype_distribution
+            from utils.prototype_utils import generate_pathway_prototype_heatmap, generate_top_pathway_prototype_pairs
+            from utils.prototype_utils import generate_max_pathway_attention_heatmap
+            # add prototype analysis runner functions here
 
             vis_results = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450\visualise\vis_dict.pkl"
             with open(vis_results, 'rb') as f:
@@ -110,6 +114,7 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
 
             for patient_id in patient_ids:
                 patient_info = attention_dict[patient_id]
+                cross_modal_attn = patient_info['cross_modal_attn']
                 wsi_patch_names = wsi_features[patient_id][2]['filenames']
                 patch_assignment = patient_info['hard_assignments'].squeeze(0)
                 patch_assignment = [p.item() for p in patch_assignment]
@@ -118,10 +123,64 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
                 output_dir = os.path.join(test_results_dir, 'prototype_plots')
                 ensure_directory(output_dir)
 
+                generate_max_pathway_attention_heatmap(
+                    patient_id=patient_id,
+                    patch_assignments=patch_assignment,
+                    patch_names=wsi_patch_names,
+                    patch_coordinates=patch_coordinates,
+                    cross_modal_attn=cross_modal_attn,
+                    pathway_names=pathway_idx_inv,
+                    extracted_patches_path=path_to_patches,
+                    output_dir=output_dir,
+                    fold=fold_idx,
+                    patch_size=224,
+                    show_values=True
+                )
+
+                patient_id = patient_id,
+                patch_assignments = patch_assignment,
+                patch_names = wsi_patch_names,
+                patch_coordinates = patch_coordinates,
+                extracted_patches_path = path_to_patches,
+                output_dir = output_dir,
+                fold = 0,
+                patch_size = 224,
+                use_binning = True
+
+                generate_pathway_prototype_heatmap(
+                    patient_id=patient_id,
+                    cross_modal_attn=cross_modal_attn,
+                    pathway_names=pathway_idx, # not sure this is correct, might need to use index mapping instead
+                    output_dir=output_dir,
+                    fold=fold_idx,
+                    use_binning=True
+                )
+
+                generate_top_pathway_prototype_pairs(
+                    patient_id=patient_id,
+                    cross_modal_attn=cross_modal_attn,
+                    pathway_names=pathway_idx_inv,
+                    output_dir=output_dir,
+                    top_k=20
+                )
+
                 analyze_prototype_distribution(
                     patient_id=patient_id,
                     patch_assignments=patch_assignment,
-                    output_dir=output_dir
+                    output_dir=output_dir,
+                    use_binning = True
+                )
+
+                generate_prototype_heatmap(
+                    patient_id=patient_id,
+                    patch_assignments=patch_assignment,
+                    patch_names=wsi_patch_names,
+                    patch_coordinates=patch_coordinates,
+                    extracted_patches_path=path_to_patches,
+                    output_dir=output_dir,
+                    fold=0,
+                    patch_size=224,
+                    use_binning=True
                 )
 
                 generate_prototype_heatmap(
