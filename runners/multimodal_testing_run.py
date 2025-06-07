@@ -86,7 +86,6 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
             from runners.gene_pathway_analysis_run import run_gene_pathway_analysis
             from utils.simple_visualizations import create_plots
             from utils.prototype_utils import generate_prototype_heatmap, analyze_prototype_distribution
-            from utils.prototype_utils import generate_pathway_prototype_heatmap, generate_top_pathway_prototype_pairs
             from utils.prototype_utils import generate_max_pathway_attention_heatmap
             # add prototype analysis runner functions here
 
@@ -134,65 +133,40 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
                     output_dir=output_dir,
                     fold=fold_idx,
                     patch_size=224,
-                    show_values=True
+                    show_values=True,
+                    use_bin=True
+
                 )
 
-                patient_id = patient_id,
-                patch_assignments = patch_assignment,
-                patch_names = wsi_patch_names,
-                patch_coordinates = patch_coordinates,
-                extracted_patches_path = path_to_patches,
-                output_dir = output_dir,
-                fold = 0,
-                patch_size = 224,
-                use_binning = True
-
-                generate_pathway_prototype_heatmap(
-                    patient_id=patient_id,
-                    cross_modal_attn=cross_modal_attn,
-                    pathway_names=pathway_idx, # not sure this is correct, might need to use index mapping instead
-                    output_dir=output_dir,
-                    fold=fold_idx,
-                    use_binning=True
-                )
-
-                generate_top_pathway_prototype_pairs(
-                    patient_id=patient_id,
-                    cross_modal_attn=cross_modal_attn,
-                    pathway_names=pathway_idx_inv,
-                    output_dir=output_dir,
-                    top_k=20
-                )
-
-                analyze_prototype_distribution(
-                    patient_id=patient_id,
-                    patch_assignments=patch_assignment,
-                    output_dir=output_dir,
-                    use_binning = True
-                )
-
-                generate_prototype_heatmap(
-                    patient_id=patient_id,
-                    patch_assignments=patch_assignment,
-                    patch_names=wsi_patch_names,
-                    patch_coordinates=patch_coordinates,
-                    extracted_patches_path=path_to_patches,
-                    output_dir=output_dir,
-                    fold=0,
-                    patch_size=224,
-                    use_binning=True
-                )
-
-                generate_prototype_heatmap(
-                    patient_id=patient_id,
-                    patch_assignments=patch_assignment,
-                    patch_names=wsi_patch_names,
-                    patch_coordinates=patch_coordinates,
-                    extracted_patches_path=path_to_patches,
-                    output_dir=output_dir,
-                    fold=0,
-                    patch_size=224
-                )
+                # analyze_prototype_distribution(
+                #     patient_id=patient_id,
+                #     patch_assignments=patch_assignment,
+                #     output_dir=output_dir,
+                #     use_binning = True
+                # )
+                #
+                # generate_prototype_heatmap(
+                #     patient_id=patient_id,
+                #     patch_assignments=patch_assignment,
+                #     patch_names=wsi_patch_names,
+                #     patch_coordinates=patch_coordinates,
+                #     extracted_patches_path=path_to_patches,
+                #     output_dir=output_dir,
+                #     fold=0,
+                #     patch_size=224,
+                #     use_binning=True
+                # )
+                #
+                # generate_prototype_heatmap(
+                #     patient_id=patient_id,
+                #     patch_assignments=patch_assignment,
+                #     patch_names=wsi_patch_names,
+                #     patch_coordinates=patch_coordinates,
+                #     extracted_patches_path=path_to_patches,
+                #     output_dir=output_dir,
+                #     fold=0,
+                #     patch_size=224
+                # )
 
 
 

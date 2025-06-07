@@ -365,7 +365,7 @@ def generate_top_pathway_prototype_pairs(patient_id, cross_modal_attn, pathway_n
 
 def generate_max_pathway_attention_heatmap(patient_id, patch_assignments, patch_names, patch_coordinates,
                                            cross_modal_attn, pathway_names, extracted_patches_path,
-                                           output_dir, fold, patch_size=224, show_values=True):
+                                           output_dir, fold, patch_size=224, show_values=True, use_bin=False):
     """
     Generate spatial heatmap showing the most highly attended pathway per patch
 
@@ -382,6 +382,28 @@ def generate_max_pathway_attention_heatmap(patient_id, patch_assignments, patch_
     # Get attention matrix [n_prototypes, n_pathways]
     attn_matrix = cross_modal_attn.squeeze(0).cpu().numpy()
 
+    if use_bin:
+        # Create binned attention matrix by averaging within bins
+        bin_to_prototypes = defaultdict(list)
+        for proto_id in range(attn_matrix.shape[0]):
+            bin_id = bin_prototypes([proto_id])[0]
+            bin_to_prototypes[bin_id].append(proto_id)
+
+        # Aggregate attention by bins using mean
+        n_bins = len(bin_to_prototypes)
+        binned_attn_matrix = np.zeros((n_bins, attn_matrix.shape[1]))
+
+        for bin_id, proto_ids in bin_to_prototypes.items():
+            binned_attn_matrix[bin_id] = attn_matrix[proto_ids].mean(axis=0)
+
+        effective_attn_matrix = binned_attn_matrix
+        get_attention_unit = lambda proto_id: bin_prototypes([proto_id])[0]
+        unit_type = "bin"
+    else:
+        effective_attn_matrix = attn_matrix
+        get_attention_unit = lambda proto_id: proto_id
+        unit_type = "prototype"
+
     # Process patch data with max pathway info
     patch_data = []
     for i, (patch_name_tuple, coord_str, proto_id) in enumerate(zip(patch_names, patch_coordinates, patch_assignments)):
@@ -394,6 +416,7 @@ def generate_max_pathway_attention_heatmap(patient_id, patch_assignments, patch_
             continue
 
         # Get attention values for this prototype across all pathways
+        attention_unit = get_attention_unit(proto_id)
         proto_attention = attn_matrix[proto_id, :]
         max_pathway_idx = proto_attention.argmax()
         max_attention_val = proto_attention[max_pathway_idx]
@@ -403,6 +426,7 @@ def generate_max_pathway_attention_heatmap(patient_id, patch_assignments, patch_
             'patch_name': patch_name,
             'row1': row1, 'row2': row2, 'col1': col1, 'col2': col2,
             'prototype_id': proto_id,
+            'attention_unit': attention_unit,
             'max_pathway_idx': max_pathway_idx,
             'max_pathway_name': max_pathway_name,
             'max_attention_val': max_attention_val,
@@ -421,11 +445,11 @@ def generate_max_pathway_attention_heatmap(patient_id, patch_assignments, patch_
     # Generate heatmap for each slide
     for slide_name, slide_patches in slides.items():
         create_max_pathway_attention_slide(patient_id, slide_name, slide_patches, output_dir,
-                                           fold, patch_size, pathway_names, show_values)
+                                           fold, patch_size, pathway_names, show_values, use_bin, unit_type)
 
 
 def create_max_pathway_attention_slide(patient_id, slide_name, patches, output_dir, fold,
-                                       patch_size, pathway_names, show_values):
+                                       patch_size, pathway_names, show_values, use_bin, unit_type):
     """Create max pathway attention heatmap for a single slide"""
 
     # Calculate canvas dimensions
@@ -437,7 +461,7 @@ def create_max_pathway_attention_slide(patient_id, slide_name, patches, output_d
     if show_values:
         # Color by attention value (continuous)
         value_map = np.zeros((max_row + patch_size, max_col + patch_size), dtype=np.float32)
-        map_type = "attention values"
+        map_type = f"attention values ({unit_type}-aggregated)" if use_bin else "attention values"
         cmap = 'viridis'
     else:
         # Color by pathway identity (discrete)
@@ -445,7 +469,7 @@ def create_max_pathway_attention_slide(patient_id, slide_name, patches, output_d
         unique_pathways = sorted(set(p['max_pathway_idx'] for p in patches))
         pathway_colors = plt.cm.tab20(np.linspace(0, 1, len(unique_pathways)))
         pathway_to_color = {pid: pathway_colors[i] for i, pid in enumerate(unique_pathways)}
-        map_type = "pathway identity"
+        map_type = f"pathway identity ({unit_type}-aggregated)" if use_bin else "pathway identity"
         cmap = None
 
     # Load patches and fill canvas
@@ -516,12 +540,12 @@ def create_max_pathway_attention_slide(patient_id, slide_name, patches, output_d
     ax_stats = fig.add_subplot(gs[1, :])
     ax_stats.axis('off')
 
-    # Count pathway frequencies
     from collections import Counter
     pathway_counts = Counter(p['max_pathway_idx'] for p in valid_patches)
     top_pathways = pathway_counts.most_common(5)
 
-    stats_text = "Top Attended Pathways:\n"
+    aggregation_text = f" (aggregated by {unit_type})" if use_bin else ""
+    stats_text = f"Top Attended Pathways{aggregation_text}:\n"
     for pathway_idx, count in top_pathways:
         pathway_name = pathway_names[pathway_idx][:40] + ('...' if len(pathway_names[pathway_idx]) > 40 else '')
         stats_text += f"{pathway_name}: {count} patches\n"
@@ -533,14 +557,16 @@ def create_max_pathway_attention_slide(patient_id, slide_name, patches, output_d
                   fontsize=11, transform=ax_stats.transAxes,
                   bbox=dict(boxstyle="round,pad=0.5", facecolor='white', alpha=0.8))
 
-    plt.suptitle(f'Patient {patient_id} - {slide_name} - Max Pathway Per Patch', size=18)
+    title_suffix = f" ({unit_type.title()}-Aggregated)" if use_bin else ""
+    plt.suptitle(f'Patient {patient_id} - {slide_name} - Max Pathway Per Patch{title_suffix}', size=18)
 
     # Save
     output_folder = os.path.join(output_dir, patient_id)
     os.makedirs(output_folder, exist_ok=True)
 
     suffix = "values" if show_values else "identity"
-    filename = f"{slide_name}_max_pathway_{suffix}_heatmap_fold_{fold}.png"
+    bin_suffix = f"_{unit_type}" if use_bin else ""
+    filename = f"{slide_name}_max_pathway_{suffix}{bin_suffix}_heatmap_fold_{fold}.png"
     output_path = os.path.join(output_folder, filename)
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
