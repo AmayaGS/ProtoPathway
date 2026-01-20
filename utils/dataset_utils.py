@@ -42,6 +42,8 @@ class GeneExpressionDataset(Dataset):
                 censor_col=self.censor_col,
                 n_bins=self.n_bins
             )
+        else:
+            self.patient_df = self.labels_df
 
     def __len__(self):
         return len(self.patient_ids)
@@ -62,6 +64,13 @@ class GeneExpressionDataset(Dataset):
             # For classification task
             label = patient_row[self.config['label']]
             target = torch.tensor(label, dtype=torch.long)
+
+            return {
+                'patient_id': patient_id,
+                'data': gene_expr_tensor.unsqueeze(0),
+                'id': patient_id,
+                'target': target
+            }
         else:
             target = get_survival_target(
                 patient_row,
@@ -72,7 +81,7 @@ class GeneExpressionDataset(Dataset):
 
         return {
             'patient_id': patient_id,
-            'data': gene_expr_tensor,
+            'data': gene_expr_tensor.unsqueeze(0),  # [1, num_genes]
             'id': patient_id,
             **target
         }

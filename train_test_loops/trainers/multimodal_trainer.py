@@ -172,6 +172,8 @@ class MultimodalTrainer(BaseTrainer):
         else:
             centroids = None
 
+        # centroids = None
+
         # Create multimodal fusion model
         model = ProtoPathwayFusion(
             config=self.config,

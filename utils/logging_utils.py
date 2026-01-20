@@ -256,7 +256,7 @@ class ExperimentLogger:
                 l1_reg = training_config.get('L1_norm', 0)
                 l2_reg = training_config.get('L2_norm', 0)
                 num_layers = training_config.get('num_layers', 0)
-                hidden_dim = training_config.get('hidden_dim', 0)
+                hidden_dim = training_config.get('embedding_dim', 0)
             elif mode == "wsi":
                 model_name = self.config.get('wsi', {}).get('model', 'unknown')
                 # Get training hyperparameters
@@ -267,7 +267,7 @@ class ExperimentLogger:
                 l1_reg = training_config.get('L1_norm', 0)
                 l2_reg = training_config.get('L2_norm', 0)
                 num_layers = training_config.get('num_layers', 0)
-                hidden_dim = training_config.get('hidden_dim', 0)
+                hidden_dim = training_config.get('embedding_dim', 0)
             elif mode == "multimodal":
                 model_name = f"MM-{self.config.get('multimodal', {}).get('fusion_type', 'unknown')}"
                 # Get training hyperparameters
@@ -278,7 +278,7 @@ class ExperimentLogger:
                 l1_reg = training_config.get('L1_norm', 0)
                 l2_reg = training_config.get('L2_norm', 0)
                 num_layers = training_config.get('num_layers', 0)
-                hidden_dim = training_config.get('hidden_dim', 0)
+                hidden_dim = training_config.get('embedding_dim', 0)
 
             # # Get training hyperparameters
             # training_config = self.config.get('ge_training', {})
@@ -288,7 +288,7 @@ class ExperimentLogger:
             # l1_reg = training_config.get('L1_norm', 0)
             # l2_reg = training_config.get('L2_norm', 0)
             # num_layers = training_config.get('num_layers', 0)
-            # hidden_dim = training_config.get('hidden_dim', 0)
+            # embedding_dim = training_config.get('embedding_dim', 0)
 
             # Get dataset information
             dataset_name = self.config.get('dataset_name', 'unknown')
@@ -356,7 +356,7 @@ class ExperimentLogger:
             elif mode == "multimodal":
                 # Add fusion layer information if available
                 fusion_layers = self.config.get('multimodal', {}).get('fusion_layers', 'na')
-                hidden_dim = self.config.get('multimodal', {}).get('hidden_dim', 'na')
+                hidden_dim = self.config.get('multimodal', {}).get('embedding_dim', 'na')
                 components.insert(2, f"fl-{fusion_layers}-{hidden_dim}")
 
             # Join components with underscores
@@ -394,7 +394,7 @@ class ExperimentLogger:
     #         l1_reg = training_config.get('L1_norm', 0)
     #         l2_reg = training_config.get('L2_norm', 0)
     #         num_layers = training_config.get('num_layers', 0)
-    #         hidden_dim = training_config.get('hidden_dim', 0)
+    #         embedding_dim = training_config.get('embedding_dim', 0)
     #
     #         # Get dataset information
     #         dataset_name = self.config.get('dataset_name', 'unknown')
@@ -431,7 +431,7 @@ class ExperimentLogger:
     #             f"l1-{l1_reg}",
     #             f"l2-{l2_reg}",
     #             f"nl-{num_layers}",
-    #             f"hd-{hidden_dim}",
+    #             f"hd-{embedding_dim}",
     #             self.timestamp
     #         ]
     #
@@ -454,8 +454,8 @@ class ExperimentLogger:
     #         elif mode == "multimodal":
     #             # Add fusion layer information if available
     #             fusion_layers = self.config.get('multimodal', {}).get('fusion_layers', 'na')
-    #             hidden_dim = self.config.get('multimodal', {}).get('hidden_dim', 'na')
-    #             components.insert(2, f"fl-{fusion_layers}-{hidden_dim}")
+    #             embedding_dim = self.config.get('multimodal', {}).get('embedding_dim', 'na')
+    #             components.insert(2, f"fl-{fusion_layers}-{embedding_dim}")
     #
     #         # Join components with underscores
     #         return "_".join(components)

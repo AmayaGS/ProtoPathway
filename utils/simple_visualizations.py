@@ -98,7 +98,7 @@ def volcano_plot(df, title, output_path, config=None):
     plt.close()
 
 
-def bar_plot(df, x_col, y_col, title, output_path, color='steelblue', n=40, config=None):
+def bar_plot(df, x_col, y_col, title, output_path, color='steelblue', n=45, config=None):
     """Simple horizontal bar plot with value labels"""
     data = df.head(n)
 
@@ -152,8 +152,10 @@ def bar_plot(df, x_col, y_col, title, output_path, color='steelblue', n=40, conf
 
 def _get_entity_column(df):
     """Helper function to determine the entity column name"""
-    if 'gene' in df.columns:
-        return 'gene'
+    if 'gene_sum' in df.columns:
+        return 'gene_sum'
+    elif 'gene_average' in df.columns:
+        return 'gene_average'
     elif 'pathway' in df.columns:
         return 'pathway'
     else:
@@ -170,28 +172,31 @@ def create_plots(results_dir, output_dir, config=None):
     else:
         class_0_name, class_1_name = 'Class 0', 'Class 1'
 
-    # Volcano plots
-    plots = [
-        ('gene_differences.csv', 'Gene Differences'),
-        ('pathway_differences.csv', 'Pathway Differences'),
-        ('crossmodal_differences.csv', 'Cross-modal Pathway Differences')
-    ]
-
-    for filename, title in plots:
-        path = f"{results_dir}/{filename}"
-        if not os.path.exists(path):
-            continue
-
-        df = pd.read_csv(path)
-        output = f"{output_dir}/volcano_{filename.split('_')[0]}.pdf"
-        volcano_plot(df, title, output, config)
+    # # Volcano plots
+    # plots = [
+    #     ('gene_differences.csv', 'Gene Differences'),
+    #     ('pathway_differences.csv', 'Pathway Differences'),
+    #     ('crossmodal_differences.csv', 'Cross-modal Pathway Differences')
+    # ]
+    #
+    # for filename, title in plots:
+    #     path = f"{results_dir}/{filename}"
+    #     if not os.path.exists(path):
+    #         continue
+    #
+    #     df = pd.read_csv(path)
+    #     output = f"{output_dir}/volcano_{filename.split('_')[0]}.pdf"
+    #     volcano_plot(df, title, output, config)
 
     # Pathway ranking plots
     ranking_files = [
         ('pathway_differences.csv', 'cohens_d', 'Pathways with Highest Class Differences'),
         ('class_0_drivers_pathway_pathways.csv', 'cohens_d', f'{class_0_name} Signature Pathways'),
         ('class_1_drivers_pathway_pathways.csv', 'cohens_d', f'{class_1_name} Signature Pathways'),
-        ('gene_ranks.csv', 'rank_difference', 'Relative Ranking of Genes'),
+        ('gene_sum_ranks.csv', 'rank_difference', 'Relative Ranking of Genes - Sum'),
+        ('gene_average_ranks.csv', 'rank_difference', 'Relative Ranking of Genes - Average'),
+        ('gene_sum_differences.csv', 'cohens_d', 'Highest Class Differences between Genes - sum'),
+        ('gene_average_differences.csv', 'cohens_d', 'Highest Class Differences between Genes - average'),
         ('pathway_ranks.csv', 'rank_difference', 'Relative Ranking of Pathways'),
         ('class_0_drivers_crossmodal_pathways.csv', 'cohens_d', f'{class_0_name} Signature Crossmodal Pathways'),
         ('class_1_drivers_crossmodal_pathways.csv', 'cohens_d', f'{class_1_name} Signature Crossmodal Pathways'),

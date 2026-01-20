@@ -23,39 +23,40 @@ class ProtoPathwayFusion(torch.nn.Module):
         if self.is_survival:
             n_classes = config['survival']['survival_bins']
         else:
-            n_classes = config['n_classes']
+            n_classes = config['num_classes']
 
 
         # Initialize the gene expression model
         self.ge_model = PathwayEmbeddingModel(config, in_channels=config['ge_training']['input_dim'],
-                                              hidden_channels=config['ge_training']['hidden_dim'],
+                                              hidden_channels=config['ge_training']['embedding_dim'],
                                               out_channels=n_classes,
                                               num_layers=config['ge_training']['num_layers'],
                                               dropout=config['ge_training']['dropout_rate']).to(device)
 
         # Initialize the WSI model
         self.wsi_model = ProtoMIL_V1(config, input_dim=config['wsi_training']['input_dim'],
-                                     embedding_dim=config['wsi_training']['hidden_dim'],
+                                     embedding_dim=config['wsi_training']['embedding_dim'],
                                      num_prototypes=config['wsi_training']['num_prototypes'],
                                      tau=config['wsi_training']['tau'],
                                      num_classes=n_classes,
                                      init_centroids=centroids).to(device)
 
-        # Initialize MHSA cross-attention between pathway embeddings and prototypes
-        self.proto_pathway_attention = nn.MultiheadAttention(
-                                        embed_dim=config['mm_training']['hidden_dim'],
-                                        num_heads=config['mm_training']['attention_heads'],
-                                        dropout=config['mm_training']['dropout_rate'],
-                                        batch_first=True
-                                        ).to(device) # change this to the mm_training after setup in config
+        # # Initialize MHSA cross-attention between pathway embeddings and prototypes
+        # self.proto_pathway_attention = nn.MultiheadAttention(
+        #                                 embed_dim=config['mm_training']['embedding_dim'],
+        #                                 num_heads=config['mm_training']['attention_heads'],
+        #                                 dropout=config['mm_training']['dropout_rate'],
+        #                                 batch_first=True
+        #                                 ).to(device) # change this to the mm_training after setup in config
 
         # self.proto_pathway_attention = SimpleCrossAttention(
-        #     embed_dim=config['mm_training']['hidden_dim'],
+        #     embed_dim=config['mm_training']['embedding_dim'],
         #     dropout=config['mm_training']['dropout_rate']
         # )
 
         # Initialize the final classifier
-        self.classifier = nn.Linear(config['mm_training']['hidden_dim'] * 3, n_classes).to(device)
+        self.classifier = nn.Linear(config['mm_training']['embedding_dim'] * 3, n_classes).to(device)
+        # self.classifier = nn.Linear(config['mm_training']['embedding_dim'] * 2, n_classes).to(device)
 
     def forward(self, ge_data, wsi_data):
         """
@@ -82,6 +83,7 @@ class ProtoPathwayFusion(torch.nn.Module):
         raw_attention = torch.matmul(proto_tokens, pathway_emb.transpose(-2, -1))
         # attention_weights = raw_attention / raw_attention.sum(dim=-1, keepdim=True)  # L1 normalize
         attention_weights = (raw_attention - raw_attention.min()) / (raw_attention.max() - raw_attention.min())
+        # attention_weights = F.softmax(raw_attention, dim=-1)
         attended_proto = torch.matmul(attention_weights, pathway_emb)
 
         # attended_proto, attention_weights = self.proto_pathway_attention(
@@ -95,8 +97,15 @@ class ProtoPathwayFusion(torch.nn.Module):
         # attended_proto = torch.matmul(attention_scores, pathway_emb)
 
         proto_path_mean = attended_proto.mean(dim=1)
+
+        # outer product fusion (use for ablation study)
+        # outer_fusion = torch.einsum('bnd,bpd->bnpd', proto_tokens, pathway_emb)
+        # attended_proto = outer_fusion.mean(dim=2)
+        # proto_path_mean = attended_proto.mean(dim=1)
+
         # Concatenate the mean pooled pathway embeddings and the attended prototypes
         combined_features = torch.cat((pathway_mean, proto_path_mean, proto_hist), dim=1)
+        # combined_features = torch.cat((pathway_mean, proto_hist), dim=1) # ablation study without attention, only concat
 
         # Classifier on the attention output
         logits = self.classifier(combined_features)

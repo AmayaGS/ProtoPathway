@@ -3,7 +3,6 @@
 import os
 import pickle
 import pandas as pd
-from sympy.physics.vector import cross
 
 from utils.helpers import ensure_directory
 from utils.model_utils import load_gene_expression_folds, load_wsi_folds
@@ -64,40 +63,56 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
         n_folds = len(split_dict['CV'])
 
 
-
     for fold_idx, (ge_test_data, wsi_test_data) in enumerate(zip(ge_test_folds, wsi_test_folds)):
         logger.info(f"Testing fold {fold_idx + 1}/{n_folds}")
 
-        # Initialize tester
-        tester = MultimodalTester(
-            config=config,
-            experiment_logger=experiment_logger,
-            fold_idx=fold_idx
-        )
-
-        # Load the model
-        checkpoint_name = f"best_fold_{fold_idx}.pt"
-        model_path = os.path.join(model_dir, checkpoint_name)
-
-        # Test the model
+        # # Initialize tester
+        # tester = MultimodalTester(
+        #     config=config,
+        #     experiment_logger=experiment_logger,
+        #     fold_idx=fold_idx
+        # )
+        #
+        # # Load the model
+        # checkpoint_name = f"best_fold_{fold_idx}.pt"
+        # model_path = os.path.join(model_dir, checkpoint_name)
+        #
+        # # Test the model
         # test_results = tester.run_testing(ge_test_data, wsi_test_data, model_path)
+        # #
+        # vis_results_path = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-na_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_nl-0_hd-128_20250902_004932\visualise\vis_dict.pkl"
+        # with open(vis_results_path, 'wb') as f:
+        #     pickle.dump(test_results, f)
 
         if config['execution']['visualise']:
             from runners.gene_pathway_analysis_run import run_gene_pathway_analysis
             from utils.simple_visualizations import create_plots
             from utils.prototype_utils import generate_prototype_heatmap, analyze_prototype_distribution
             from utils.prototype_utils import generate_max_pathway_attention_heatmap
+            from utils.vis_results import plot_pathway_gates_from_csv
             # add prototype analysis runner functions here
-
-            vis_results = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450\visualise\vis_dict.pkl"
-            with open(vis_results, 'rb') as f:
+            #
+            vis_results_path = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-na_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_nl-0_hd-128_20250902_004932\visualise\vis_dict.pkl"
+            with open(vis_results_path, 'rb') as f:
                 test_results = pickle.load(f)
+            # #
 
-            # attention_dict = test_results['metrics']['attention_dict']
-            # run_gene_pathway_analysis(config, attention_dict, wsi_features, test_results_dir, experiment_logger)
-
+            attention_dict = test_results['metrics']['attention_dict']
+            predictions = test_results['metrics']['all_preds']
+            run_gene_pathway_analysis(config, attention_dict, predictions, wsi_features, test_results_dir,
+                                      experiment_logger)
+            #
             # plots_dir = os.path.join(test_results_dir, 'plots')
             # create_plots(test_results_dir, plots_dir, config)
+
+            # # Plot pathway gates from CSV
+            # pathway_gates_csv = os.path.join(test_results_dir, 'pathway_gates_rank_differences.csv')
+            # plot_pathway_gates_from_csv(
+            #     csv_path=pathway_gates_csv,
+            #     top_k=30,
+            #     plot_type='rank_difference',
+            #     output_path= os.path.join(plots_dir, 'pathway_gate_importance_plot.pdf')
+            # )
 
             # HEATMAPS
 
@@ -118,10 +133,10 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
                 patch_assignment = patient_info['hard_assignments'].squeeze(0)
                 patch_assignment = [p.item() for p in patch_assignment]
                 patch_coordinates = patient_info['patch_coords']
-                path_to_patches = r"C:\Users\Amaya\Documents\PhD\Data\R4RA_patches\extracted_patches.csv"
+                path_to_patches = r"C:\Users\Amaya\Documents\PhD\Data\R4RA_patches\extracted_patches_2\extracted_patches.csv"
                 output_dir = os.path.join(test_results_dir, 'prototype_plots')
                 ensure_directory(output_dir)
-
+            #
                 generate_max_pathway_attention_heatmap(
                     patient_id=patient_id,
                     patch_assignments=patch_assignment,
@@ -133,8 +148,8 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
                     output_dir=output_dir,
                     fold=fold_idx,
                     patch_size=224,
-                    show_values=True,
-                    use_bin=True
+                    show_values=False,
+                    use_bin=False
 
                 )
 
@@ -144,7 +159,7 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
                 #     output_dir=output_dir,
                 #     use_binning = True
                 # )
-                #
+
                 # generate_prototype_heatmap(
                 #     patient_id=patient_id,
                 #     patch_assignments=patch_assignment,
@@ -154,7 +169,7 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
                 #     output_dir=output_dir,
                 #     fold=0,
                 #     patch_size=224,
-                #     use_binning=True
+                #     use_binning=False
                 # )
                 #
                 # generate_prototype_heatmap(

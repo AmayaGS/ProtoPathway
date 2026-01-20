@@ -26,39 +26,39 @@ class ProtoPathwayFusion(torch.nn.Module):
         if self.is_survival:
             n_classes = config['survival']['survival_bins']
         else:
-            n_classes = config['n_classes']
+            n_classes = config['num_classes']
 
 
         # Initialize the gene expression model
         self.ge_model = PathwayEmbeddingModel(config, in_channels=config['ge_training']['input_dim'],
-                                              hidden_channels=config['ge_training']['hidden_dim'],
+                                              hidden_channels=config['ge_training']['embedding_dim'],
                                               out_channels=n_classes,
                                               num_layers=config['ge_training']['num_layers'],
                                               dropout=config['ge_training']['dropout_rate']).to(device)
 
         # Initialize the WSI model
         self.wsi_model = ProtoMIL_V1(config, input_dim=config['wsi_training']['input_dim'],
-                                     embedding_dim=config['wsi_training']['hidden_dim'],
+                                     embedding_dim=config['wsi_training']['embedding_dim'],
                                      num_prototypes=config['wsi_training']['num_prototypes'],
                                      tau=config['wsi_training']['tau'],
                                      num_classes=n_classes,
                                      init_centroids=centroids).to(device)
 
-        # Initialize MHSA cross-attention between pathway embeddings and prototypes
-        self.proto_pathway_attention = nn.MultiheadAttention(
-                                        embed_dim=config['mm_training']['hidden_dim'],
-                                        num_heads=config['mm_training']['attention_heads'],
-                                        dropout=config['mm_training']['dropout_rate'],
-                                        batch_first=True
-                                        ).to(device) # change this to the mm_training after setup in config
+        # # Initialize MHSA cross-attention between pathway embeddings and prototypes
+        # self.proto_pathway_attention = nn.MultiheadAttention(
+        #                                 embed_dim=config['mm_training']['embedding_dim'],
+        #                                 num_heads=config['mm_training']['attention_heads'],
+        #                                 dropout=config['mm_training']['dropout_rate'],
+        #                                 batch_first=True
+        #                                 ).to(device) # change this to the mm_training after setup in config
 
         # self.proto_pathway_attention = SimpleCrossAttention(
-        #     embed_dim=config['mm_training']['hidden_dim'],
+        #     embed_dim=config['mm_training']['embedding_dim'],
         #     dropout=config['mm_training']['dropout_rate']
         # ).to(device)
 
         # Initialize the final classifier
-        self.classifier = nn.Linear(config['mm_training']['hidden_dim'] * 3, n_classes).to(device)
+        self.classifier = nn.Linear(config['mm_training']['embedding_dim'] * 3, n_classes).to(device)
 
 
     def forward(self, ge_data, wsi_features, wsi_coordinates):
@@ -70,7 +70,7 @@ class ProtoPathwayFusion(torch.nn.Module):
         """
 
         # Get gene expression embeddings
-        pathway_emb, pathway_mean, gene_pathway_attention = self.ge_model(ge_data)
+        pathway_emb, pathway_mean, gene_pathway_attention, path_weights_raw, path_weights_softmax = self.ge_model(ge_data)
         pathway_emb = pathway_emb.unsqueeze(0)  # Add a batch dimension for attention
 
         # Get prototype hist and prototype tokens
@@ -92,8 +92,10 @@ class ProtoPathwayFusion(torch.nn.Module):
 
         raw_attention = torch.matmul(proto_tokens, pathway_emb.transpose(-2, -1))
         # attention_weights = raw_attention / raw_attention.sum(dim=-1, keepdim=True)  # L1 normalize
-        attention_weights = (raw_attention - raw_attention.min()) / (raw_attention.max() - raw_attention.min())
+        # attention_weights = (raw_attention - raw_attention.min()) / (raw_attention.max() - raw_attention.min())
+        attention_weights = F.softmax(raw_attention, dim=-1)
         attended_proto = torch.matmul(attention_weights, pathway_emb)
+
 
         proto_path_mean = attended_proto.mean(dim=1)
         # Concatenate the mean pooled pathway embeddings and the attended prototypes
@@ -103,6 +105,8 @@ class ProtoPathwayFusion(torch.nn.Module):
         logits = self.classifier(combined_features)
         patch_assignments['gene_pathway_attn'] = gene_pathway_attention
         patch_assignments['cross_modal_attn'] = attention_weights
+        patch_assignments['pathway_attn_raw'] = path_weights_raw
+        patch_assignments['pathway_attn_softmax'] = path_weights_softmax
 
         return logits, patch_assignments
 
@@ -159,7 +163,11 @@ class ProtoMIL_V1(nn.Module):
         self.dim_reducer = nn.Linear(input_dim, embedding_dim)
 
         # (b) non-negative gates (soft-plus ensures ≥0)
-        self.logit_g = nn.Parameter(torch.zeros(num_prototypes))
+        # self.logit_g = nn.Parameter(torch.zeros(num_prototypes))
+
+        self.proto_gate_nn = nn.Sequential(
+            nn.Linear(embedding_dim, num_prototypes)
+        )
 
         self.tau = tau                                         # softmax temp
         self.classifier = nn.Linear(embedding_dim, num_classes)
@@ -191,7 +199,11 @@ class ProtoMIL_V1(nn.Module):
 
         # 3) soft assignment
         alpha = F.softmax(self.tau * sim, dim=2)  # [B, P, N]
-        gates = F.softplus(self.logit_g)  # [N]
+        #gates = F.softplus(self.logit_g)
+        # gates = self.logit_g / self.logit_g.sum() # [N]
+        gates = self.proto_gate_nn(x_reduced)
+        gates = gates.mean(dim=1)
+        gates = (gates - gates.min()) / (gates.max() - gates.min() + 1e-8)
         alpha_g = alpha * gates  # broadcast to [B, P, N]
 
         # 4) prototype-wise pooling  →  tokens
@@ -200,7 +212,7 @@ class ProtoMIL_V1(nn.Module):
         denom = alpha_g.sum(dim=1, keepdim=False).clamp(min=1e-6)  # [B, N]
         proto_tok = numer / denom.unsqueeze(2)  # [B, N, D]
 
-        gate_prob = gates / gates.sum()
+        # gate_prob = gates / gates.sum()
         proto_tok_weighted = proto_tok * gates.view(1, N, 1)
 
         # 5) slide-level representation for the unimodal baseline
@@ -215,7 +227,8 @@ class ProtoMIL_V1(nn.Module):
                 'soft_assignments': alpha,
                 'hard_assignments': patch_to_prototype,
                 'similarities': sim,
-                'patch_coords': wsi_coords
+                'patch_coords': wsi_coords,
+                'gate_importance': gates
             }
 
         if self.config['execution']['mode'] == 'multimodal':
@@ -248,7 +261,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
         # pathway-level attention gate 𝑔(·)
         self.gate_nn = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(hidden_channels // 2, 1)
         )
 
@@ -293,22 +306,22 @@ class PathwayEmbeddingModel(torch.nn.Module):
 
         # # Pathway-level attention
         path_attn_scores = self.gate_nn(pathway_x) # [num_pathways]
-        path_weights = F.softmax(path_attn_scores, dim=0)  # [num_pathways]
+        # path_weights = F.softmax(path_attn_scores, dim=0)  # [num_pathways]
+        path_weights = (path_attn_scores - path_attn_scores.min()) / (path_attn_scores.max() - path_attn_scores.min() + 1e-8)
 
         # # # Create a graph-level embedding by weighting pathway features
-        # graph_emb = (path_weights * pathway_x).sum(dim=0).unsqueeze(0)  # [hidden_dim]
+        # graph_emb = (path_weights * pathway_x).sum(dim=0).unsqueeze(0)  # [embedding_dim]
         # pooled = torch.mean(pathway_x, dim=0).unsqueeze(0)
 
         # # Create a graph-level embedding by weighting pathway features
         weighted_pathway = path_weights * pathway_x
-        graph_emb = (weighted_pathway).sum(dim=0).unsqueeze(0)  # [hidden_dim]
+        graph_emb = (weighted_pathway).sum(dim=0).unsqueeze(0)  # [embedding_dim]
 
-        # Final prediction
-        out = self.lin(graph_emb).unsqueeze(0) # [1, num_classes]
-
-        if self.config['execution']['mode'] == 'multimodal':
-            return pathway_x, graph_emb, self.gene_pathway_attention
+        if self.config['execution']['mode'] == 'multimodal' and self.is_visualise:
+            return pathway_x, graph_emb, self.gene_pathway_attention, path_attn_scores, path_weights
         else:
+            # Final prediction
+            out = self.lin(graph_emb).unsqueeze(0)  # [1, num_classes]
             # Return only the output for single modality
             return out
 

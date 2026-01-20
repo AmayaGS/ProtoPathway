@@ -5,13 +5,6 @@ import torch.nn.functional as F
 
 from torch_geometric.nn import GATv2Conv
 
-import pandas as pd
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-from torch_geometric.nn import GATv2Conv
-
 
 class PathwayEmbeddingModel(torch.nn.Module):
     """
@@ -36,7 +29,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
         # pathway-level attention gate 𝑔(·)
         self.gate_nn = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(hidden_channels // 2, 1)
         )
 
@@ -81,15 +74,16 @@ class PathwayEmbeddingModel(torch.nn.Module):
 
         # # Pathway-level attention
         path_attn_scores = self.gate_nn(pathway_x) # [num_pathways]
-        path_weights = F.softmax(path_attn_scores, dim=0)  # [num_pathways]
+        # path_weights = F.softmax(path_attn_scores, dim=0)  # [num_pathways]
+        # path_weights = path_attn_scores / (path_attn_scores.sum() + 1e-8 ) # L1 normalization
         # min max scaling
-        # path_attn_scores = (path_attn_scores - path_attn_scores.min()) / (path_attn_scores.max() - path_attn_scores.min())
+        path_weights = (path_attn_scores - path_attn_scores.min()) / (path_attn_scores.max() - path_attn_scores.min() + 1e-8)
         # sigmoid scaling
         # path_attn_scores = torch.sigmoid(path_attn_scores)
 
         # # Create a graph-level embedding by weighting pathway features
         weighted_pathway = path_weights * pathway_x
-        graph_emb = (weighted_pathway).sum(dim=0).unsqueeze(0)  # [hidden_dim]
+        graph_emb = (weighted_pathway).sum(dim=0).unsqueeze(0)  # [embedding_dim]
 
         #pooled = torch.mean(pathway_x, dim=0).unsqueeze(0)
 
@@ -270,7 +264,7 @@ class PathwayEmbeddingModel(torch.nn.Module):
 #             self.gene_pathway_attention = self._process_gene_pathway_attention(edge_index, final_attn, num_genes, num_pathways)
 #
 #         # # Create a graph-level embedding by weighting pathway features
-#         graph_emb = (path_weights * pathway_x).sum(dim=0).unsqueeze(0)  # [hidden_dim]
+#         graph_emb = (path_weights * pathway_x).sum(dim=0).unsqueeze(0)  # [embedding_dim]
 #         pooled = torch.mean(pathway_x, dim=0).unsqueeze(0)
 #
 #         # Final prediction

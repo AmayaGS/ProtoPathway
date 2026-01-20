@@ -8,7 +8,7 @@ output_dir: "C:/Users/Amaya/Documents/PhD/ProtoPathway_benchmarks/HNSC"
 dataset_name: "HNSC" # choices: ['R4RA', 'Sjogren']
 #label: 'label'
 #label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
-#n_classes: 2
+#num_classes: 2
 patient_id: 'case_id'
 
 # Execution mode

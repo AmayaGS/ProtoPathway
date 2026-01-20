@@ -734,8 +734,8 @@ def create_result_summary(fold_results: pd.DataFrame, config: Dict, output_path:
         # f.write(f"  L2 regularization: {config['ge_training']['L2_norm']}\n")
         #
         # f.write("\nModel Configuration:\n")
-        # if 'hidden_dim' in config['ge_training']:
-        #     f.write(f"  Hidden dimensions: {config['ge_training']['hidden_dim']}\n")
+        # if 'embedding_dim' in config['ge_training']:
+        #     f.write(f"  Hidden dimensions: {config['ge_training']['embedding_dim']}\n")
         # if 'num_classes' in config:
         #     f.write(f"  Number of classes: {config['num_classes']}\n")
         # if 'label_dict' in config:
@@ -860,7 +860,7 @@ def visualize_fold_results(
     # Get class names
 
     if not is_survival and 'confusion_matrix' in fold_data['history']['val']:
-        class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
+        class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['num_classes'])]
 
         if ('confusion_matrix' in fold_data['history']['val'] and
                 isinstance(fold_data['history']['val']['confusion_matrix'], dict) and
@@ -1113,7 +1113,7 @@ def visualize_full_training_results(
     best_epoch, best_metrics = get_best_epoch_data(history, metric_for_best, mode)
 
     # Get class names
-    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['n_classes'])]
+    class_names = [config['label_dict'].get(str(i), f"Class {i}") for i in range(config['num_classes'])]
 
     is_survival = config['execution'].get('task', 'classification') == 'survival'
     # Get appropriate metrics list based on task

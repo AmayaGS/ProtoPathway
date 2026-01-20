@@ -117,29 +117,29 @@ class GeneExpressionTrainer(BaseTrainer):
             if self.is_survival:
                 model = MLPBaseline(
                     input_size=self.input_dim,
-                    hidden_size=self.config['ge_training']['hidden_dim'],
+                    hidden_size=self.config['ge_training']['embedding_dim'],
                     num_classes=self.config['survival']['survival_bins'],
                     dropout_rate=self.config['ge_training']['dropout_rate']
                     )
             else:
                 model = MLPBaseline(
                     input_size=self.input_dim,
-                    hidden_size=self.config['ge_training']['hidden_dim'],
-                    num_classes=self.config['n_classes'],
+                    hidden_size=self.config['ge_training']['embedding_dim'],
+                    num_classes=self.config['num_classes'],
                     dropout_rate=self.config['ge_training']['dropout_rate']
                     )
 
         if self.model_name == 'Hypergraph':
             if self.is_survival:
                 model = PathwayEmbeddingModel(self.config, in_channels=1,
-                                                hidden_channels=self.config['ge_training']['hidden_dim'],
+                                                hidden_channels=self.config['ge_training']['embedding_dim'],
                                                 out_channels=self.config['survival']['survival_bins'],
                                                 num_layers=self.config['ge_training']['num_layers'],
                                                 dropout=self.config['ge_training']['dropout_rate'])
             else:
                 model = PathwayEmbeddingModel(self.config, in_channels=1,
-                                              hidden_channels=self.config['ge_training']['hidden_dim'],
-                                              out_channels=self.config['n_classes'],
+                                              hidden_channels=self.config['ge_training']['embedding_dim'],
+                                              out_channels=self.config['num_classes'],
                                               num_layers=self.config['ge_training']['num_layers'],
                                               dropout=self.config['ge_training']['dropout_rate'])
 
@@ -189,7 +189,7 @@ class GeneExpressionTrainer(BaseTrainer):
                 if self.is_survival:
                     survival_time = batch['survival_time'].to(self.device)
                     censorship = batch['censorship'].to(self.device)
-                outputs = model(data)
+                outputs = model(data).squeeze(0)
 
             elif self.model_name == 'Hypergraph':
                 batch.to(self.device)
@@ -201,7 +201,7 @@ class GeneExpressionTrainer(BaseTrainer):
                 else:
                     target = batch.y
 
-                outputs = model(batch)
+                outputs = model(batch).squeeze(0)
 
             if self.is_survival:
                 risk_scores, _ = calculate_risk(outputs)
@@ -295,7 +295,7 @@ class GeneExpressionTrainer(BaseTrainer):
                     if self.is_survival:
                         survival_time = batch['survival_time'].to(self.device)
                         censorship = batch['censorship'].to(self.device)
-                    outputs = model(data)
+                    outputs = model(data).squeeze(0)
 
                 elif self.model_name == 'Hypergraph':
                     batch.to(self.device)
@@ -306,7 +306,7 @@ class GeneExpressionTrainer(BaseTrainer):
                     else:
                         target = batch.y
 
-                    outputs = model(batch)
+                    outputs = model(batch).squeeze(0)
 
                 if self.is_survival:
                     risk_scores, _ = calculate_risk(outputs)

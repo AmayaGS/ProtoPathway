@@ -8,7 +8,7 @@ output_dir: "C:/Users/Amaya/Documents/PhD/ProtoPathway_benchmarks/BLCA"
 dataset_name: "BLCA" # choices: ['HNSC', 'STAD', 'COADREAD','BLCA']
 #label: 'label'
 #label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
-#n_classes: 2
+#num_classes: 2
 patient_id: 'case_id'
 
 # Execution mode

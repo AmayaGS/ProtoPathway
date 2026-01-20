@@ -109,9 +109,10 @@ def create_prototype_slide_heatmap(patient_id, slide_name, patches, output_dir, 
         prototype_to_color = {proto_id: bin_colors[proto_id] for proto_id in unique_prototypes}
     else:
         # Use tab20 but make it consistent by using prototype ID as index
-        max_proto_id = max(unique_prototypes)
-        colors = plt.cm.tab20(np.linspace(0, 1, max(20, max_proto_id + 1)))
-        prototype_to_color = {proto_id: colors[proto_id % 20] for proto_id in unique_prototypes}
+        prototype_colors = generate_distinct_colors(64)
+        # max_proto_id = max(unique_prototypes)
+        # colors = plt.cm.tab20(np.linspace(0, 1, max(20, max_proto_id + 1)))
+        prototype_to_color = {proto_id: prototype_colors[proto_id] for proto_id in unique_prototypes}
 
     # Load patches and fill canvas
     valid_patches = []
@@ -160,8 +161,9 @@ def create_prototype_slide_heatmap(patient_id, slide_name, patches, output_dir, 
 
     # Prototype heatmap
     ax2 = fig.add_subplot(gs[0, 1])
-    title_suffix = " (Binned)" if use_binning else ""
-    ax2.set_title(f'Prototype Assignment Heatmap{title_suffix}', size=16, pad=10)
+    # title_suffix = " (Binned)" if use_binning else ""
+    # ax2.set_title(f'Prototype Assignment Heatmap{title_suffix}', size=16, pad=10)
+    ax2.set_title(f'Prototype Assignment Heatmap', size=16, pad=10)
     ax2.imshow(canvas)
     ax2.imshow(prototype_overlay, alpha=0.6)
     ax2.axis('off')
@@ -173,21 +175,27 @@ def create_prototype_slide_heatmap(patient_id, slide_name, patches, output_dir, 
     # Create legend with sample patches
     create_prototype_legend(ax_legend, valid_patches, prototype_to_color, unique_prototypes, use_binning)
 
+    # title_suffix = " (Binned Prototypes)" if use_binning else " (Original Prototypes)"
+    # plt.suptitle(f'Patient {patient_id} - {slide_name}{title_suffix}', size=18)
+    #
+
+    slide_stain_type = slide_name.split(' - ')[0] if ' - ' in slide_name else 'Unknown'
     title_suffix = " (Binned Prototypes)" if use_binning else " (Original Prototypes)"
-    plt.suptitle(f'Patient {patient_id} - {slide_name}{title_suffix}', size=18)
+    plt.suptitle(f'Patient {patient_id} - {slide_stain_type}', size=18)
 
     # Save
     output_folder = os.path.join(output_dir, patient_id)
     os.makedirs(output_folder, exist_ok=True)
     filename_suffix = "_binned" if use_binning else "_original"
-    output_path = os.path.join(output_folder, f"{slide_name}_prototype_heatmap{filename_suffix}_fold_{fold}.png")
+    # output_path = os.path.join(output_folder, f"{slide_name}_prototype_heatmap{filename_suffix}_fold_{fold}.png")
+    output_path = os.path.join(output_folder, f"{slide_name}_prototype_heatmap_fold.png")
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
 
     print(f"Saved prototype heatmap: {output_path}")
 
 
-def create_prototype_legend(ax, patches, prototype_to_color, unique_prototypes, use_binning, max_samples=3):
+def create_prototype_legend(ax, patches, prototype_to_color, unique_prototypes, use_binning, max_samples=2):
     """Create legend showing sample patches for each prototype"""
 
     # Group patches by prototype
@@ -241,10 +249,11 @@ def create_prototype_legend(ax, patches, prototype_to_color, unique_prototypes, 
         label_x = x_start + patch_width / 2
         if use_binning:
             # Show bin range
-            bin_ranges = {0: "0-10", 1: "11-20", 2: "21-30", 3: "31-40", 4: "41-50", 5: "51-64", 6: "65+"}
-            label_text = f'Bin {proto_id} ({bin_ranges.get(proto_id, "?")})\n({len(proto_patches[proto_id])} patches)'
+            # bin_ranges = {0: "0-10", 1: "11-20", 2: "21-30", 3: "31-40", 4: "41-50", 5: "51-64", 6: "65+"}
+            # label_text = f'Bin {proto_id} ({bin_ranges.get(proto_id, "?")})\n({len(proto_patches[proto_id])} patches)'
+            label_text = f'{proto_id}\n({len(proto_patches[proto_id])})'
         else:
-            label_text = f'Prototype {proto_id}\n({len(proto_patches[proto_id])} patches)'
+            label_text = f'{proto_id}\n({len(proto_patches[proto_id])})'
 
         ax.text(label_x, 0.1, label_text,
                 ha='center', va='center', fontsize=10, weight='bold',
@@ -284,15 +293,16 @@ def analyze_prototype_distribution(patient_id, patch_assignments, output_dir, us
     bars = plt.bar(prototypes, counts, alpha=0.7, color=colors)
 
     if use_binning:
-        bin_ranges = {0: "0-10", 1: "11-20", 2: "21-30", 3: "31-40", 4: "41-50", 5: "51-64", 6: "65+"}
-        plt.xlabel('Prototype Bin')
-        # Add bin range labels
-        ax = plt.gca()
-        ax2 = ax.twiny()
-        ax2.set_xlim(ax.get_xlim())
-        ax2.set_xticks(prototypes)
-        ax2.set_xticklabels([bin_ranges.get(p, "?") for p in prototypes], rotation=45)
-        ax2.set_xlabel('Prototype Range')
+        # bin_ranges = {0: "0-10", 1: "11-20", 2: "21-30", 3: "31-40", 4: "41-50", 5: "51-64", 6: "65+"}
+        # plt.xlabel('Prototype Bin')
+        # # Add bin range labels
+        # ax = plt.gca()
+        # ax2 = ax.twiny()
+        # ax2.set_xlim(ax.get_xlim())
+        # ax2.set_xticks(prototypes)
+        # ax2.set_xticklabels([bin_ranges.get(p, "?") for p in prototypes], rotation=45)
+        # ax2.set_xlabel('Prototype Range')
+        plt.xlabel('Prototype ID')
     else:
         plt.xlabel('Prototype ID')
 
@@ -516,7 +526,7 @@ def create_max_pathway_attention_slide(patient_id, slide_name, patches, output_d
 
     # Max pathway heatmap
     ax2 = fig.add_subplot(gs[0, 1])
-    ax2.set_title(f'Max Pathway Attention Heatmap ({map_type})', size=16, pad=10)
+    ax2.set_title(f'Pathway Attention Heatmap ({map_type})', size=16, pad=10)
     ax2.imshow(canvas)
 
     if show_values:
@@ -557,8 +567,9 @@ def create_max_pathway_attention_slide(patient_id, slide_name, patches, output_d
                   fontsize=11, transform=ax_stats.transAxes,
                   bbox=dict(boxstyle="round,pad=0.5", facecolor='white', alpha=0.8))
 
+    slide_stain_type = slide_name.split(' - ')[0] if ' - ' in slide_name else 'Unknown'
     title_suffix = f" ({unit_type.title()}-Aggregated)" if use_bin else ""
-    plt.suptitle(f'Patient {patient_id} - {slide_name} - Max Pathway Per Patch{title_suffix}', size=18)
+    plt.suptitle(f'Patient {patient_id} - {slide_stain_type} - Max Pathway Per Patch{title_suffix}', size=18)
 
     # Save
     output_folder = os.path.join(output_dir, patient_id)
@@ -609,6 +620,41 @@ def get_consistent_colors():
     }
     return bin_colors
 
+def generate_distinct_colors(n_colors):
+    """Generate n distinct colors using HSV color space"""
+    """Avoid browns, greens, AND muddy yellows"""
+    import colorsys
+
+    colors = []
+    golden_ratio = (1 + 5 ** 0.5) / 2
+
+    i = 0
+    attempts = 0
+    while len(colors) < n_colors and attempts < n_colors * 5:
+
+        hue = (i * golden_ratio) % 1.0
+        saturation = 0.7 + 0.3 * ((i % 2))  # 0.7, 1.0 (higher minimum)
+        value = 0.8 + 0.2 * ((i % 2))  # 0.8, 1.0 (brighter)
+
+        # 🔥 SKIP problematic ranges:
+        skip_ranges = [
+            (0.08, 0.17),  # Brown/orange-brown
+            (0.15, 0.45),  # Yellow through green (broader range)
+        ]
+
+        should_skip = any(start <= hue <= end for start, end in skip_ranges)
+
+        if should_skip:
+            i += 1
+            attempts += 1
+            continue
+
+        rgb = colorsys.hsv_to_rgb(hue, saturation, value)
+        colors.append(rgb)
+        i += 1
+        attempts += 1
+
+    return colors
 
 #
 # def generate_prototype_heatmap(patient_id, patch_assignments, patch_names, patch_coordinates,

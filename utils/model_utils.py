@@ -442,14 +442,14 @@ def seed_all(SEED):
 #     if config['gene_expression']['model'] == 'MLP':
 #         model = MLPBaseline(
 #             input_size=input_dim,
-#             hidden_size=config['ge_training']['hidden_dim'],
+#             hidden_size=config['ge_training']['embedding_dim'],
 #             num_classes=config['num_classes'],
 #             dropout_rate=config['ge_training']['dropout_rate']
 #         )
 #
 #     if config['gene_expression']['model'] == 'Hypergraph':
 #
-#         model = PathwayEmbeddingModel(config, in_channels=1, hidden_channels=config['ge_training']['hidden_dim'],
+#         model = PathwayEmbeddingModel(config, in_channels=1, hidden_channels=config['ge_training']['embedding_dim'],
 #                                       out_channels=config['num_classes'], num_layers=3, dropout=0.2)
 #
 #         # model = BipartiteGAT_MHSA(

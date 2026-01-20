@@ -50,6 +50,8 @@ class WSITrainer(BaseTrainer):
     def create_model(self):
         """Create and initialize the WSI model."""
 
+        output_dim = self.config['survival']['survival_bins'] if self.is_survival else self.config['num_classes']
+
         if self.model_name == 'Prototype':
 
             centroid_dir = self.config['output']['data']['dir']
@@ -65,45 +67,55 @@ class WSITrainer(BaseTrainer):
             else:
                 centroids = None
 
-            output_dim = self.config['survival']['survival_bins'] if self.is_survival else self.config['n_classes']
+            # centroids = None
 
             model = ProtoMIL_V1(self.config, input_dim=self.config['wsi_training']['input_dim'],
-                                embedding_dim=self.config['wsi_training']['hidden_dim'],
+                                embedding_dim=self.config['wsi_training']['embedding_dim'],
                                 num_prototypes=self.config['wsi_training']['num_prototypes'],
                                 tau=self.config['wsi_training']['tau'],
                                 num_classes=output_dim,
                                 init_centroids=centroids)
 
-            if self.is_survival:
-                criterion = NLLSurvLoss(alpha=self.config['survival'].get('alpha', 0.5))
-            else:
-                criterion = torch.nn.CrossEntropyLoss()
+        elif self.model_name == 'ABMIL':
 
-            optimizer = torch.optim.AdamW(
-                model.parameters(),
-                lr=self.config['wsi_training']['learning_rate'],
-                weight_decay=self.config['wsi_training']['L2_norm']
-            )
+            from models.ABMIL import ABMIL
 
-            # Configure scheduler if needed
-            lr_scheduler = None
-            if self.config['scheduler']['use']:
-                if self.config['scheduler']['type'] == 'step':
-                    lr_scheduler = torch.optim.lr_scheduler.StepLR(
-                        optimizer,
-                        step_size=self.config['scheduler']['step'],
-                        gamma=self.config['scheduler']['gamma']
-                    )
-                elif self.config['scheduler']['type'] == 'plateau':
-                    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                        optimizer,
-                        mode='min' if self.config['wsi_training']['weight_type'] == 'loss' else 'max',
-                        patience=self.config['scheduler']['patience'],
-                        factor=self.config['scheduler']['gamma']
-                    )
+            model = ABMIL(input_dim=self.config['wsi_training']['input_dim'],
+                          embedding_dim=self.config['wsi_training']['embedding_dim'],
+                          attention_heads=self.config['wsi_training']['attention_heads'],
+                          num_classes=output_dim)
 
         else:
             raise ValueError(f"Unsupported WSI model: {self.model_name}")
+
+        if self.is_survival:
+            criterion = NLLSurvLoss(alpha=self.config['survival'].get('alpha', 0.5))
+        else:
+            criterion = torch.nn.CrossEntropyLoss()
+
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=self.config['wsi_training']['learning_rate'],
+            weight_decay=self.config['wsi_training']['L2_norm']
+        )
+
+        # Configure scheduler if needed
+        lr_scheduler = None
+        if self.config['scheduler']['use']:
+            if self.config['scheduler']['type'] == 'step':
+                lr_scheduler = torch.optim.lr_scheduler.StepLR(
+                    optimizer,
+                    step_size=self.config['scheduler']['step'],
+                    gamma=self.config['scheduler']['gamma']
+                )
+            elif self.config['scheduler']['type'] == 'plateau':
+                lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                    optimizer,
+                    mode='min' if self.config['wsi_training']['weight_type'] == 'loss' else 'max',
+                    patience=self.config['scheduler']['patience'],
+                    factor=self.config['scheduler']['gamma']
+                )
+
 
         model = model.to(self.device)
 
@@ -134,7 +146,7 @@ class WSITrainer(BaseTrainer):
                 images, targets, _ = data_object
                 images, targets = images.to(self.device), targets.to(self.device)
 
-            outputs, prototype_distances = model(images)
+            outputs = model(images)
 
             if self.is_survival:
                 # Calculate loss
@@ -220,7 +232,7 @@ class WSITrainer(BaseTrainer):
                     images, targets, _ = data_object
                     images, targets = images.to(self.device), targets.to(self.device)
 
-                outputs, prototype_distances = model(images)
+                outputs = model(images)
 
                 if self.is_survival:
                     # Get survival time and censorship
@@ -289,7 +301,7 @@ class WSITrainer(BaseTrainer):
             if all_probs.shape[1] == 2:
                 metrics['auc'] = roc_auc_score(all_targets, all_probs[:, 1])
             else:
-                n_classes = self.config['n_classes']
+                n_classes = self.config['num_classes']
                 binary_labels = label_binarize(all_targets, classes=list(range(n_classes)))
                 metrics['auc'] = roc_auc_score(binary_labels, all_probs, average='macro', multi_class='ovr')
                 metrics['precision'] = average_precision_score(

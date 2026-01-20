@@ -7,8 +7,8 @@ output_dir: "${base_dir}/output"
 # Dataset name
 dataset_name: "R4RA" # choices: ['R4RA', 'Sjogren']
 label: 'label'
-label_dict: {'0': 'Pauci-Immune', '1': 'Lymphoid/Myeloid'}
-n_classes: 2
+label_dict: {'0': 'Low Inflammatory', '1': 'High Inflammatory'}
+num_classes: 2
 patient_id: 'Patient_ID'
 
 # Execution mode
@@ -52,7 +52,7 @@ gene_expression:
 # WSI specific configuration
 wsi:
   enabled: true  # Set to true to enable WSI branch
-  model: 'Prototype'  # WSI model to use
+  model: 'Prototype'  # WSI model to use (Prototype, ABMIL)
   input:
     slides_dir: "${base_dir}/input_files/slides/${dataset_name}"
     masks_dir: "${base_dir}/input_files/masks/${dataset_name}"
@@ -102,7 +102,9 @@ output:
     removed_pathways_md: "${output_dir}/reports/removed_pathways_report.md"
 
 testing:
-  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450"
+#  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_180450"
+#  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-na_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_nl-0_hd-128_20250828_223255"
+  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-na_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_nl-0_hd-128_20250902_005720"
 #  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250525_021206"
 #  experiment_path: "${output_dir}/experiments/MM-MM-ProtoPathway_FT_fl-2-128_ds-R4RA_lr-1.0e-5_bs-1_dr-0.2_l1-0_l2-0_nl-0_hd-128_20250523_205531"
 #  experiment_path: "${output_dir}/experiments/Hypergraph_FT_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_20250430_184419"
@@ -133,20 +135,20 @@ training:
 # Training settings
 ge_training:
   input_dim: 1
-  hidden_dim: 128
+  embedding_dim: 128
   num_layers: 3
   learning_rate: 0.001
-  dropout_rate: 0.2
+  dropout_rate: 0.5
   L2_norm: 0
   L1_norm: 0
   num_workers: 0
 
 wsi_training:
   input_dim: 1024
-  hidden_dim: 128
-  learning_rate: 0.00001
-  L2_norm: 0.001
-  L1_norm: 0.001
+  embedding_dim: 128
+  learning_rate: 0.001
+  L2_norm: 0 # 0.001
+  L1_norm: 0
   num_prototypes: 64
   tau: 10.0
   batch_size: 1
@@ -156,13 +158,13 @@ wsi_training:
 
 mm_training:
   input_dim: 1024
-  hidden_dim: 128
-  learning_rate: 0.00001
-  L2_norm: 0
+  embedding_dim: 128
+  learning_rate: 0.001
+  L2_norm: 0 # 0.001
   L1_norm: 0
-  num_prototypes: 16
-  tau: 2.0
-  dropout_rate: 0.2
+  num_prototypes: 30
+  tau: 3.0
+  dropout_rate: 0.5
   batch_size: 1
   slide_batch: 1
   num_workers: 0

@@ -27,7 +27,7 @@ class NLLSurvLoss(nn.Module):
         """
         Parameters
         ----------
-        h: (n_batches, n_classes)
+        h: (n_batches, num_classes)
             The neural network output discrete survival predictions such that hazards = sigmoid(h).
         y_c: (n_batches, 2) or (n_batches, 3)
             The true time bin label (first column) and censorship indicator (second column).
@@ -45,7 +45,7 @@ def nll_loss(h, y, c, alpha=0.0, eps=1e-7, reduction='sum'):
     Code borrowed from https://github.com/mahmoodlab/Patch-GCN/blob/master/utils/utils.py
     Parameters
     ----------
-    h: (n_batches, n_classes)
+    h: (n_batches, num_classes)
         The neural network output discrete survival predictions such that hazards = sigmoid(h).
     y: (n_batches, 1)
         The true time bin index label.

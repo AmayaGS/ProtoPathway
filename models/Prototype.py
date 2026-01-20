@@ -25,7 +25,11 @@ class ProtoMIL_V1(nn.Module):
         self.dim_reducer = nn.Linear(input_dim, embedding_dim)
 
         # (b) non-negative gates (soft-plus ensures ≥0)
-        self.logit_g = nn.Parameter(torch.zeros(num_prototypes))
+        # self.logit_g = nn.Parameter(torch.zeros(num_prototypes))
+
+        self.proto_gate_nn = nn.Sequential(
+            nn.Linear(embedding_dim, num_prototypes)
+        )
 
         self.tau = tau                                         # softmax temp
         self.classifier = nn.Linear(embedding_dim, num_classes)
@@ -54,10 +58,15 @@ class ProtoMIL_V1(nn.Module):
 
         # 3) soft assignment
         alpha = F.softmax(self.tau * sim, dim=2)
+        gates = self.proto_gate_nn(x_reduced)
+        gates = gates.mean(dim=1)
+        gates = (gates - gates.min()) / (gates.max() - gates.min() + 1e-8)
+
         # sigmoid scaling
         # alpha = torch.sigmoid(self.tau * sim)
         #alpha = self.tau * sim # [B, P, N]
-        gates = F.softplus(self.logit_g)  # [N]
+        # gates = F.softplus(self.logit_g)
+        # gates = self.logit_g / (self.logit_g.sum() + 1e-8)  # [N]
         alpha_g = alpha * gates  # broadcast to [B, P, N]
 
         # 4) prototype-wise pooling  →  tokens
@@ -66,7 +75,7 @@ class ProtoMIL_V1(nn.Module):
         denom = alpha_g.sum(dim=1, keepdim=False).clamp(min=1e-6)  # [B, N]
         proto_tok = numer / denom.unsqueeze(2)  # [B, N, D]
 
-        gate_prob = gates / gates.sum()
+        # gate_prob = gates / gates.sum()
         proto_tok_weighted = proto_tok * gates.view(1, N, 1)
 
         # 5) slide-level representation for the unimodal baseline
@@ -78,4 +87,4 @@ class ProtoMIL_V1(nn.Module):
         if self.config['execution']['mode'] == 'multimodal':
             return bag_repr, proto_tok
         else:
-            return logits, sim
+            return logits
