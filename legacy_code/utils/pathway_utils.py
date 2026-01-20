@@ -3,7 +3,7 @@ import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 
-from utils.helpers import ensure_directory
+from legacy_code.utils.helpers import ensure_directory
 
 
 def parse_reactome_gmt(file_path):

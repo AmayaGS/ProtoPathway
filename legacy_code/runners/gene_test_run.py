@@ -4,8 +4,8 @@ import os
 import pickle
 import pandas as pd
 
-from utils.helpers import ensure_directory
-from train_test_loops.testers.gene_tester import GeneExpressionTester
+from legacy_code.utils.helpers import ensure_directory
+from legacy_code.train_test_loops.testers.gene_tester import GeneExpressionTester
 
 
 def test_gene_expression_model(config, is_continuation=False, experiment_logger=None):

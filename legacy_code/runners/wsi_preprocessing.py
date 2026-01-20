@@ -5,13 +5,11 @@ import os
 import numpy as np
 import pandas as pd
 import pickle
-from pathlib import Path
 import h5py
 
 import torch
 
-from utils.helpers import ensure_directory
-from utils.survival_utils import discretize_survival_times
+from legacy_code.utils.survival_utils import discretize_survival_times
 
 
 def wsi_preprocessing(config, experiment_logger=None):
@@ -149,7 +147,6 @@ def load_wsi_h5_directory(config, h5_dir_path, patient_id_pattern=None):
     Returns:
         Dictionary mapping patient IDs to (embeddings, targets) tuples
     """
-    import re
 
     wsi_features = {}
 

@@ -13,17 +13,16 @@ import torch.nn.functional as F
 
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
-from train_test_loops.trainers.base_trainer import BaseTrainer
+from legacy_code.train_test_loops.trainers.base_trainer import BaseTrainer
 
-from utils.dataset_utils import HypergraphDataset
-from utils.dataset_utils import build_incidence_matrix
-from utils.model_utils import l1_regularization
-from utils.loss_utils import NLLSurvLoss
-from utils.survival_utils import calculate_risk
+from legacy_code.utils.dataset_utils import HypergraphDataset
+from legacy_code.utils.dataset_utils import build_incidence_matrix
+from legacy_code.utils.model_utils import l1_regularization
+from legacy_code.utils.loss_utils import NLLSurvLoss
+from legacy_code.utils.survival_utils import calculate_risk
 from sksurv.metrics import concordance_index_censored
 
-from models.MultimodalFusionModel import ProtoPathwayFusion
-from utils.kmeans_init import sample_embeddings, init_prototypes
+from legacy_code.models.MultimodalFusionModel import ProtoPathwayFusion
 
 
 class MultimodalTrainer(BaseTrainer):

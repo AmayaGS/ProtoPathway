@@ -3,12 +3,9 @@
 import os
 import pickle
 import pandas as pd
-from utils.helpers import ensure_directory
-from utils.vis_results import GenePathwayAnalyzer
-from utils.vis_results import PathwayGateAnalyzer
-from utils.vis_results import PrototypeGateAnalyzer
-from utils.vis_results import plot_prototype_importance, plot_prototype_importance_by_class
-from utils.vis_results import PrototypePatchAnalyzer
+from legacy_code.utils.helpers import ensure_directory
+from legacy_code.utils.vis_results import PrototypeGateAnalyzer
+from legacy_code.utils.vis_results import PrototypePatchAnalyzer
 
 
 def _run_analysis(analyzer, output_dir, analysis_name, logger=None):

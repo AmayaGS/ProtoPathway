@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 
 from torch_geometric.data import Data
 
-from utils.survival_utils import discretize_survival_times, get_survival_target
+from legacy_code.utils.survival_utils import discretize_survival_times, get_survival_target
 
 
 class GeneExpressionDataset(Dataset):

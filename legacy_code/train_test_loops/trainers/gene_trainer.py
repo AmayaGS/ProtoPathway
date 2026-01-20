@@ -16,14 +16,14 @@ from sksurv.metrics import concordance_index_censored
 from torch_geometric.loader import DataLoader as PyGDataLoader
 from torch.utils.data import DataLoader
 
-from train_test_loops.trainers.base_trainer import BaseTrainer
-from utils.dataset_utils import GeneExpressionDataset, HypergraphDataset
-from utils.dataset_utils import build_incidence_matrix
-from utils.loss_utils import NLLSurvLoss
-from utils.survival_utils import calculate_risk
+from legacy_code.train_test_loops.trainers.base_trainer import BaseTrainer
+from legacy_code.utils.dataset_utils import GeneExpressionDataset, HypergraphDataset
+from legacy_code.utils.dataset_utils import build_incidence_matrix
+from legacy_code.utils.loss_utils import NLLSurvLoss
+from legacy_code.utils.survival_utils import calculate_risk
 
-from models.GeneExpressionMLP import MLPBaseline
-from models.ProtoPathway import PathwayEmbeddingModel
+from legacy_code.models.GeneExpressionMLP import MLPBaseline
+from legacy_code.models.ProtoPathway import PathwayEmbeddingModel
 
 
 class GeneExpressionTrainer(BaseTrainer):

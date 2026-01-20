@@ -1,20 +1,18 @@
 # runners/gene_expression_run.py
 
 import os
-import pandas as pd
-import numpy as np
 
-from utils.helpers import ensure_directory
-from utils.expression_utils import extract_gene_annotations, load_expression_data, filter_expression_data
-from utils.pathway_utils import (
+from legacy_code.utils.helpers import ensure_directory
+from legacy_code.utils.expression_utils import extract_gene_annotations, load_expression_data, filter_expression_data
+from legacy_code.utils.pathway_utils import (
     load_reactome_pathways, build_reactome_hierarchy, select_pathways_by_depth,
     filter_pathways_by_size, plot_pathway_depth_histogram,
     plot_pathway_size_histograms, plot_filtered_pathway_histogram
 )
-from utils.pathway_similarity_utils import (
+from legacy_code.utils.pathway_similarity_utils import (
     calculate_pathway_similarities, identify_redundant_pathways, generate_removal_report
 )
-from utils.hypergraph_utils import build_pathway_hypergraph, visualize_pathway_hypergraph
+from legacy_code.utils.hypergraph_utils import build_pathway_hypergraph, visualize_pathway_hypergraph
 
 
 def gene_expression_preprocessing(config):

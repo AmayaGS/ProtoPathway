@@ -1,23 +1,12 @@
 # utils/simple_visualizations.py
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import seaborn as sns
-from utils.helpers import ensure_directory
 from adjustText import adjust_text
 
 import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from utils.helpers import ensure_directory
-
-import os
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from utils.helpers import ensure_directory
+from legacy_code.utils.helpers import ensure_directory
 
 
 def volcano_plot(df, title, output_path, config=None):

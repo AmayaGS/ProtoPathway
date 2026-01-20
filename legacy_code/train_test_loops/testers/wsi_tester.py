@@ -7,10 +7,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import roc_curve, precision_recall_curve, auc
-from sklearn.manifold import TSNE
 from torch.utils.data import DataLoader
 
-from train_test_loops.testers.base_tester import BaseTester
+from legacy_code.train_test_loops.testers.base_tester import BaseTester
 from utils.wsi_dataset import WSIDataset, WSIPatchDataset
 from models.WSIModels.prototype_model import PrototypeModel
 

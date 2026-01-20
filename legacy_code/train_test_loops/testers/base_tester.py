@@ -12,7 +12,7 @@ from sklearn.metrics import (
     roc_auc_score, confusion_matrix, classification_report
 )
 from sksurv.metrics import concordance_index_censored
-from utils.survival_utils import calculate_risk
+from legacy_code.utils.survival_utils import calculate_risk
 
 
 class BaseTester(ABC):

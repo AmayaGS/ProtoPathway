@@ -4,9 +4,8 @@ import os
 import pickle
 import pandas as pd
 
-from utils.helpers import ensure_directory
-from utils.model_utils import load_gene_expression_folds, load_wsi_folds
-from train_test_loops.testers.multimodal_tester import MultimodalTester
+from legacy_code.utils.helpers import ensure_directory
+from legacy_code.utils.model_utils import load_gene_expression_folds, load_wsi_folds
 
 
 def test_multimodal_model(config, is_continuation=False, is_full_train=False, experiment_logger=None):
@@ -85,14 +84,11 @@ def test_multimodal_model(config, is_continuation=False, is_full_train=False, ex
         #     pickle.dump(test_results, f)
 
         if config['execution']['visualise']:
-            from runners.gene_pathway_analysis_run import run_gene_pathway_analysis
-            from utils.simple_visualizations import create_plots
-            from utils.prototype_utils import generate_prototype_heatmap, analyze_prototype_distribution
-            from utils.prototype_utils import generate_max_pathway_attention_heatmap
-            from utils.vis_results import plot_pathway_gates_from_csv
+            from legacy_code.runners.gene_pathway_analysis_run import run_gene_pathway_analysis
+            from legacy_code.utils.prototype_utils import generate_max_pathway_attention_heatmap
             # add prototype analysis runner functions here
             #
-            vis_results_path = r"C:\Users\Amaya\Documents\PhD\ProtoPathway\output\experiments\MM-MM-ProtoPathway_FT_fl-2-na_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_nl-0_hd-128_20250902_004932\visualise\vis_dict.pkl"
+            vis_results_path = r"/output/experiments/MM-MM-ProtoPathway_FT_fl-2-na_ds-R4RA_lr-1.0e-3_bs-1_dr-0.5_l1-0_l2-0_nl-0_hd-128_20250902_004932/visualise/vis_dict.pkl"
             with open(vis_results_path, 'rb') as f:
                 test_results = pickle.load(f)
             # #
