@@ -1,0 +1,65 @@
+# =============================================================================
+# Data Splits Configuration
+# =============================================================================
+# Finds shared patients between WSI and gene expression data.
+# Either loads predefined TCGA splits or creates new ones.
+# Run after: preprocess_gene.py, preprocess_wsi.py
+# =============================================================================
+
+dataset_name: BLCA  # choices: [BLCA, HNSC, STAD, COADREAD]
+
+# -----------------------------------------------------------------------------
+# Paths
+# -----------------------------------------------------------------------------
+paths:
+  base_dir: /path/to/data
+  processed_dir: ${paths.base_dir}/processed/${dataset_name}
+
+# -----------------------------------------------------------------------------
+# Input (outputs from preprocessing)
+# -----------------------------------------------------------------------------
+input:
+  gene_expression: ${paths.processed_dir}/gene_expression.csv
+  wsi_features: ${paths.processed_dir}/wsi_features.pkl
+  clinical_csv: ${paths.base_dir}/raw/tcga_${dataset_name}.csv
+
+# -----------------------------------------------------------------------------
+# Task
+# -----------------------------------------------------------------------------
+task: survival  # survival | classification
+
+survival:
+  time_col: survival_months
+  event_col: censorship
+  num_bins: 4
+
+classification:
+  label_col: label
+
+# -----------------------------------------------------------------------------
+# Split Source
+# -----------------------------------------------------------------------------
+splits:
+  # Use predefined TCGA splits (for survival) or generate new ones
+  use_predefined: true
+  predefined_dir: ${paths.base_dir}/TCGA-${dataset_name}/splits  # contains fold CSVs
+
+  # If use_predefined: false, generate splits with these settings
+  generate:
+    test_fraction: 0.2
+    num_folds: 5
+    stratified: true
+    seed: 42
+
+# -----------------------------------------------------------------------------
+# Output
+# -----------------------------------------------------------------------------
+output:
+  splits: ${paths.processed_dir}/data_splits.pkl
+  labels: ${paths.processed_dir}/labels.csv
+  shared_patient_ids: ${paths.processed_dir}/shared_patient_ids.csv
+
+# -----------------------------------------------------------------------------
+# Options
+# -----------------------------------------------------------------------------
+patient_id_col: case_id

@@ -1,0 +1,212 @@
+# =============================================================================
+# ProtoPathway Experiment Configuration
+# =============================================================================
+# Training config for all models. Preprocessing handled separately.
+# Uses OmegaConf variable interpolation.
+#
+# Models:
+#   Multimodal: protopath, survpath, mcat, pibd
+#   WSI-only:   abmil, transmil, mean_mil, max_mil
+#   Gene-only:  snn, mlp
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Dataset
+# -----------------------------------------------------------------------------
+dataset_name: BLCA  # choices: [BLCA, HNSC, STAD, COADREAD]
+
+paths:
+  base_dir: /path/to/data
+  processed_dir: ${paths.base_dir}/processed/${dataset_name}
+  output_dir: ${paths.base_dir}/experiments/${dataset_name}
+
+# -----------------------------------------------------------------------------
+# Data (references preprocessing outputs)
+# -----------------------------------------------------------------------------
+data:
+  gene_expression: ${paths.processed_dir}/gene_expression.csv
+  pathway_graph: ${paths.processed_dir}/pathway_graph.pkl
+  pathway_definitions: ${paths.processed_dir}/pathway_definitions.csv
+  wsi_features: ${paths.processed_dir}/wsi_features.pkl
+  labels: ${paths.processed_dir}/labels.csv
+  splits: ${paths.processed_dir}/data_splits.pkl
+  shared_patient_ids: ${paths.processed_dir}/shared_patient_ids.csv
+  # For baselines (survpath, pibd)
+  baseline_signatures: ${paths.processed_dir}/baseline_signatures.csv
+
+patient_id_col: case_id
+
+# -----------------------------------------------------------------------------
+# Task
+# -----------------------------------------------------------------------------
+task: survival  # survival | classification
+
+classification:
+  num_classes: 2
+  label_col: label
+
+survival:
+  time_col: survival_months
+  event_col: censorship
+  num_bins: 4
+  alpha: 0.5  # NLL vs ranking loss balance
+
+# -----------------------------------------------------------------------------
+# Model Selection
+# -----------------------------------------------------------------------------
+model_name: protopath
+
+# Ablation flags (for protopath)
+ablation:
+  use_wsi: true
+  use_gene: true
+  use_pathways: true  # false = flat gene embedding (no GATv2)
+  use_hierarchy: true  # false = ignore Reactome DAG structure
+
+# -----------------------------------------------------------------------------
+# Training
+# -----------------------------------------------------------------------------
+training:
+  epochs: 100
+  lr: 1.0e-4
+  weight_decay: 1.0e-5
+  l1_reg: 0
+  dropout: 0.2
+  batch_size: 1
+  num_workers: 0
+  seed: 42
+
+  # Gradient clipping
+  clip_grad: true
+  max_grad_norm: 1.0
+
+  # Scheduler
+  scheduler:
+    enabled: true
+    type: plateau  # plateau | step | cosine
+    patience: 5
+    factor: 0.5
+    min_lr: 1.0e-6
+    # For step scheduler
+    step_size: 10
+    gamma: 0.1
+
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 15
+    metric: c_index  # c_index | loss | auc | accuracy
+    mode: max  # max | min
+
+  # Checkpointing
+  checkpoint:
+    enabled: true
+    save_best: true
+    metric: c_index
+
+# -----------------------------------------------------------------------------
+# Cross-Validation
+# -----------------------------------------------------------------------------
+cv:
+  enabled: true
+  num_folds: 5
+  stratified: true
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  wandb: false
+  project: protopath
+  log_every: 10
+
+# =============================================================================
+# Model Configurations
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# ProtoPathway (Ours)
+# -----------------------------------------------------------------------------
+protopath:
+  # Dimensions
+  wsi_input_dim: 1536  # UNI2-h: 1536, UNI: 1024, CONCH: 512
+  gene_input_dim: 1
+  hidden_dim: 128
+
+  # Gene pathway encoder (GATv2)
+  ge_encoder:
+    num_layers: 2
+    num_heads: 4
+    dropout: ${training.dropout}
+
+  # WSI prototype encoder
+  wsi_encoder:
+    num_prototypes: 64
+    tau: 10.0  # softmax temperature
+    num_heads: 1
+
+  # Fusion
+  fusion:
+    type: cross_attention  # cross_attention | concat | bilinear
+    num_heads: 4
+    dropout: ${training.dropout}
+
+# -----------------------------------------------------------------------------
+# SurvPath
+# -----------------------------------------------------------------------------
+survpath:
+  wsi_input_dim: 768
+  hidden_dim: 256
+  num_pathways: 300
+  num_layers: 2
+  num_heads: 8
+  dropout: ${training.dropout}
+
+# -----------------------------------------------------------------------------
+# MCAT
+# -----------------------------------------------------------------------------
+mcat:
+  wsi_input_dim: 1536
+  hidden_dim: 256
+  omic_sizes: [100, 200, 300, 400, 500, 600]  # per omic group
+  num_heads: 4
+  dropout: ${training.dropout}
+
+# -----------------------------------------------------------------------------
+# PIBD
+# -----------------------------------------------------------------------------
+pibd:
+  wsi_input_dim: 768
+  hidden_dim: 256
+  num_prototypes: 4
+  dropout: ${training.dropout}
+
+# -----------------------------------------------------------------------------
+# ABMIL (WSI-only)
+# -----------------------------------------------------------------------------
+abmil:
+  wsi_input_dim: 1536
+  hidden_dim: 128
+  dropout: ${training.dropout}
+
+# -----------------------------------------------------------------------------
+# TransMIL (WSI-only)
+# -----------------------------------------------------------------------------
+transmil:
+  wsi_input_dim: 1536
+  hidden_dim: 128
+  num_heads: 4
+  num_layers: 2
+  dropout: ${training.dropout}
+
+# -----------------------------------------------------------------------------
+# SNN, MLP (Gene-only)
+# -----------------------------------------------------------------------------
+snn:
+  hidden_dims: [256, 128]
+  dropout: ${training.dropout}
+  use_pathways: false  # true = pathway-aware SNN
+
+mlp:
+  hidden_dims: [512, 256, 128]
+  dropout: ${training.dropout}

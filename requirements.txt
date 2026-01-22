@@ -30,3 +30,4 @@ networkx==3.4.1
 
 # System utilities
 psutil==5.9.8
+omegaconf==2.3.0

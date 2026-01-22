@@ -1,0 +1,54 @@
+# =============================================================================
+# WSI Preprocessing Configuration
+# =============================================================================
+# For pre-extracted features (UNI2-h from Mahmood lab HuggingFace).
+# Loads h5 files, integrates clinical data, creates splits.
+# Output: wsi_features.pkl, data_splits.pkl
+# =============================================================================
+
+dataset_name: BLCA  # choices: [BLCA, HNSC, STAD, COADREAD]
+
+# -----------------------------------------------------------------------------
+# Paths
+# -----------------------------------------------------------------------------
+paths:
+  base_dir: /path/to/data
+  output_dir: ${paths.base_dir}/processed/${dataset_name}
+
+# -----------------------------------------------------------------------------
+# Input
+# -----------------------------------------------------------------------------
+input:
+  # Directory containing h5 files (one per slide)
+  h5_dir: ${paths.base_dir}/features/TCGA-${dataset_name}
+  # Clinical data with survival info
+  clinical_csv: ${paths.base_dir}/raw/tcga_${dataset_name}.csv
+
+# -----------------------------------------------------------------------------
+# H5 Loading
+# -----------------------------------------------------------------------------
+h5:
+  # Expected feature dimension (for validation)
+  feature_dim: 1024  # UNI2-h: 1536, UNI: 1024
+  # Key in h5 file containing features (null = auto-detect)
+  features_key: features
+
+# -----------------------------------------------------------------------------
+# Patient ID Parsing
+# -----------------------------------------------------------------------------
+# How to extract patient ID from h5 filename
+# TCGA format: TCGA-XX-XXXX-01Z-00-DX1.h5 -> TCGA-XX-XXXX
+parsing:
+  patient_ID: 'img.split("-")[0:3]'
+  separator: "-"
+
+# -----------------------------------------------------------------------------
+# Output
+# -----------------------------------------------------------------------------
+output:
+  wsi_features: ${paths.output_dir}/wsi_features.pkl
+
+# -----------------------------------------------------------------------------
+# Options
+# -----------------------------------------------------------------------------
+force_preprocess: false  # Re-run even if output exists

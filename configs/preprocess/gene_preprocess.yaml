@@ -1,0 +1,96 @@
+# =============================================================================
+# Gene Expression Preprocessing Configuration
+# =============================================================================
+# Run once per dataset to filter genes, build pathway graphs, and prepare
+# gene expression matrices for training.
+# Output: filtered gene expression, pathway definitions, bipartite graph
+# =============================================================================
+
+dataset_name: BLCA  # choices: [BLCA, HNSC, STAD, COADREAD]
+
+# -----------------------------------------------------------------------------
+# Paths
+# -----------------------------------------------------------------------------
+paths:
+  base_dir: /path/to/data
+  output_dir: ${paths.base_dir}/processed/${dataset_name}
+
+# -----------------------------------------------------------------------------
+# Input Files
+# -----------------------------------------------------------------------------
+input:
+  gene_expression: ${paths.base_dir}/raw/rna_clean_${dataset_name}.csv
+  gtf_file: ${paths.base_dir}/raw/Homo_sapiens.GRCh38.113.gtf
+
+# -----------------------------------------------------------------------------
+# Patient ID Column
+# -----------------------------------------------------------------------------
+patient_id_col: case_id
+
+# -----------------------------------------------------------------------------
+# Gene Filtering
+# -----------------------------------------------------------------------------
+gene_filtering:
+  # Remove genes with low expression
+  min_expression_threshold: 1
+  # Remove genes expressed in fewer than X% of samples
+  min_sample_proportion: 0.10
+  # Keep top X% by variance (1.0 = keep all)
+  variance_proportion: 1.0
+  # Log transform
+  log_transform: true
+  # Normalization: null, zscore, minmax
+  normalization: zscore
+
+# -----------------------------------------------------------------------------
+# Pathway Database
+# -----------------------------------------------------------------------------
+pathways:
+  # Reactome files
+  reactome_gmt: ${paths.base_dir}/raw/ReactomePathways.gmt
+  reactome_relations: ${paths.base_dir}/raw/ReactomePathwaysRelation.txt
+  reactome_names: ${paths.base_dir}/raw/ReactomePathways.txt
+
+  # Pathway filtering
+  min_genes: 3
+  max_genes: 200
+  target_depth: 5  # hierarchy depth for granularity
+
+  # Overlap handling
+  similarity_threshold: 1.0  # Jaccard threshold for merging (1.0 = no merge)
+
+# -----------------------------------------------------------------------------
+# Bipartite Graph Construction
+# -----------------------------------------------------------------------------
+# For ProtoPathway's GATv2-based pathway embedding
+graph:
+  build_bipartite: true
+  build_hierarchy: true  # include Reactome DAG structure
+  edge_weights: false  # weight edges by gene-pathway relevance
+
+# -----------------------------------------------------------------------------
+# Baseline Signatures (for SurvPath, PIBD comparison)
+# -----------------------------------------------------------------------------
+baseline_signatures:
+  enabled: false
+  signatures_file: ${paths.base_dir}/raw/combine_signatures.csv
+
+# -----------------------------------------------------------------------------
+# Output Files
+# -----------------------------------------------------------------------------
+output:
+  # Processed gene expression
+  gene_expression: ${paths.output_dir}/gene_expression.csv
+  gene_annotations: ${paths.output_dir}/gene_annotations.csv
+
+  # Pathway definitions
+  pathway_definitions: ${paths.output_dir}/pathway_definitions.csv
+  pathway_graph: ${paths.output_dir}/pathway_graph.pkl
+
+  # For baselines
+  baseline_signatures: ${paths.output_dir}/baseline_signatures.csv
+
+  # Reports
+  reports_dir: ${paths.output_dir}/reports
+  removed_genes_report: ${output.reports_dir}/removed_genes.csv
+  removed_pathways_report: ${output.reports_dir}/removed_pathways.csv
