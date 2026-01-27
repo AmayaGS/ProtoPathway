@@ -1,0 +1,76 @@
+# Reactome Base Preprocessing Configuration
+# Run once: python main.py preprocess reactome --config configs/preprocessing/preprocess_pathways.yaml
+#
+# This creates a filtered, non-redundant pathway set that can be used across datasets.
+# Output filename encodes parameters for reproducibility.
+
+paths:
+  base_data_dir: C:/Users/Amaya/Documents/PhD/Data/TGCA_data
+  output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
+
+input:
+  reactome_gmt: ${paths.base_data_dir}/Reactome/ReactomePathways.gmt
+  reactome_relations: ${paths.base_data_dir}/Reactome/ReactomePathwaysRelation.txt
+  reactome_pathways: ${paths.base_data_dir}/Reactome/ReactomePathways.txt
+
+  # MSigDB Hallmark gene sets for gap-filling
+  hallmark_csv: ${paths.base_data_dir}/Hallmark/hallmarks_signatures.csv
+
+output:
+  pathways: ${paths.output_dir}/processed/pathways/
+  figures_dir: ${paths.output_dir}/processed/pathways/figures/
+
+filtering:
+  # Hierarchy filtering
+  target_depth: 5  # Max depth in Reactome hierarchy (0 = root)
+
+  # Size filtering
+  min_genes: 3
+  max_genes: 200
+
+  # Category exclusion - these top-level Reactome categories will be removed
+  exclude_categories:
+    # Pharmacology - not disease biology
+    - "Drug ADME"
+
+    # Disease-specific pathways - risk of circularity and irrelevant diseases
+    - "Disease"
+
+    # Housekeeping / Basic cellular machinery
+    - "Metabolism of proteins"
+    - "Gene expression (Transcription)"
+    - "Organelle biogenesis and maintenance"
+    - "Protein localization"
+    - "Transport of small molecules"
+    - "Vesicle-mediated transport"
+    - "DNA Replication"
+
+    # Less relevant to cancer/autoimmunity
+    - "Neuronal System"
+    - "Sensory Perception"
+    - "Muscle contraction"
+    - "Digestion and absorption"
+    - "Reproduction"
+    - "Circadian clock"
+
+    # Mixed - excluding, will add specific Hallmarks
+    - "Metabolism"
+    - "Developmental Biology"
+
+  # Hallmark gene sets to add (fills gaps from excluded categories)
+  hallmark_additions:
+    # Metabolism gap-fill (Warburg effect, metabolic reprogramming)
+    - "HALLMARK_GLYCOLYSIS"
+    - "HALLMARK_OXIDATIVE_PHOSPHORYLATION"
+    - "HALLMARK_FATTY_ACID_METABOLISM"
+    - "HALLMARK_CHOLESTEROL_HOMEOSTASIS"
+
+    # EMT gap-fill (metastasis)
+    - "HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION"
+
+  # Redundancy removal
+  redundancy:
+    jaccard_threshold: 1.00  # Remove pathways with >100% gene overlap
+
+  # Generate diagnostic plots
+  generate_figures: true
