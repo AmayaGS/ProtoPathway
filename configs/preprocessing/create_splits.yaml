@@ -1,55 +1,31 @@
 # =============================================================================
-# Data Splits Configuration
+# Create Splits and Labels Configuration (Stage 3)
 # =============================================================================
-# Finds shared patients between WSI and gene expression data.
-# Either loads predefined TCGA splits or creates new ones.
-# Run after: preprocess_gene.py, preprocess_wsi.py
+# Finds shared patients between gene expression and WSI data.
+# Processes labels (classification or survival discretization).
+# Either loads predefined TCGA splits or generates new stratified splits.
+#
+# Run after: preprocess_genes.py, preprocess_wsi.py
+# Usage: python main.py preprocess splits --config configs/preprocessing/create_splits.yaml
 # =============================================================================
 
-dataset_name: BLCA  # choices: [BLCA, HNSC, STAD, COADREAD]
+dataset: TCGA-BLCA  # choices: [TCGA-BLCA, TCGA-HNSC, TCGA-STAD, TCGA-COADREAD]
 
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
 paths:
-  base_dir: /path/to/data
-  processed_dir: ${paths.base_dir}/processed/${dataset_name}
+  base_data_dir: C:/Users/Amaya/Documents/PhD/Data/TGCA_data
+  output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
+  processed_dir: ${paths.output_dir}/processed/${dataset}
 
 # -----------------------------------------------------------------------------
-# Input (outputs from preprocessing)
+# Input (outputs from Stage 2 preprocessing)
 # -----------------------------------------------------------------------------
 input:
-  gene_expression: ${paths.processed_dir}/gene_expression.csv
-  wsi_features: ${paths.processed_dir}/wsi_features.pkl
-  clinical_csv: ${paths.base_dir}/raw/tcga_${dataset_name}.csv
-
-# -----------------------------------------------------------------------------
-# Task
-# -----------------------------------------------------------------------------
-task: survival  # survival | classification
-
-survival:
-  time_col: survival_months
-  event_col: censorship
-  num_bins: 4
-
-classification:
-  label_col: label
-
-# -----------------------------------------------------------------------------
-# Split Source
-# -----------------------------------------------------------------------------
-splits:
-  # Use predefined TCGA splits (for survival) or generate new ones
-  use_predefined: true
-  predefined_dir: ${paths.base_dir}/TCGA-${dataset_name}/splits  # contains fold CSVs
-
-  # If use_predefined: false, generate splits with these settings
-  generate:
-    test_fraction: 0.2
-    num_folds: 5
-    stratified: true
-    seed: 42
+  gene_expression: ${paths.processed_dir}/gene_expression.csv # From preprocess_genes.py
+  wsi_patient_ids: ${paths.processed_dir}/wsi_patient_ids.csv # From preprocess_wsi.py
+  clinical_csv: ${paths.base_data_dir}/${dataset}/${dataset}.csv # Clinical data with survival/label info
 
 # -----------------------------------------------------------------------------
 # Output
@@ -60,6 +36,39 @@ output:
   shared_patient_ids: ${paths.processed_dir}/shared_patient_ids.csv
 
 # -----------------------------------------------------------------------------
-# Options
+# Column Names
 # -----------------------------------------------------------------------------
-patient_id_col: case_id
+patient_id_col: case_id          # Column name for patient ID in clinical CSV
+
+# -----------------------------------------------------------------------------
+# Task Configuration
+# -----------------------------------------------------------------------------
+task: survival  # choices: [survival, classification]
+
+# Survival task settings
+survival:
+  time_col: survival_months      # Column name for survival time
+  event_col: censorship          # Column name for event indicator (1=event, 0=censored)
+  num_bins: 4                    # Number of risk bins for discretization
+
+# Classification task settings (used if task: classification)
+classification:
+  label_col: label               # Column name for classification label
+
+# -----------------------------------------------------------------------------
+# Split Configuration
+# -----------------------------------------------------------------------------
+splits:
+  # Use predefined TCGA splits (recommended for survival benchmarking)
+  use_predefined: true
+
+  # Path to predefined splits (e.g., from SurvPath repository)
+  # Expected format: splits_0.csv, splits_1.csv, ... with columns [train, val, test]
+  predefined_dir: ${paths.base_data_dir}/${dataset}/splits
+
+  # If use_predefined: false, generate splits with these settings
+  generate:
+    test_fraction: 0.0           # 0 = pure CV (matches TCGA predefined format), >0 = held-out test set
+    num_folds: 5                 # Number of CV folds
+    seed: 42                     # Random seed for reproducibility
+

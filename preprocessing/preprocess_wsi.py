@@ -316,6 +316,12 @@ def run(cfg):
         pickle.dump(patient_features_tensor, f)
     logging.info(f"Saved WSI features to {features_path}")
 
+    # Save patient IDs as CSV
+    patient_ids_path = os.path.join(output_dir, 'wsi_patient_ids.csv')
+    patient_ids_df = pd.DataFrame({'patient_id': list(patient_features.keys())})
+    patient_ids_df.to_csv(patient_ids_path, index=False)
+    logging.info(f"Saved patient IDs to {patient_ids_path}")
+
     # Plot feature statistics
     if generate_figures:
         plot_feature_statistics(
@@ -337,8 +343,7 @@ def run(cfg):
         'min_patches': min(patches_per_patient),
         'max_patches': max(patches_per_patient),
         'feature_extractor': cfg['feature_extractor']['name'],
-        'slide_type_filter': slide_type_filter,
-        'patient_ids': list(patient_features.keys())
+        'slide_type_filter': slide_type_filter
     }
 
     info_path = os.path.join(output_dir, 'wsi_preprocessing_info.json')
