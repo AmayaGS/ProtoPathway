@@ -7,6 +7,7 @@ Functions for:
 - Handling censorship
 """
 
+import torch
 import logging
 import numpy as np
 
@@ -158,3 +159,49 @@ def compute_survival_statistics(times, events):
     }
 
     return stats
+
+
+def calculate_risk(outputs):
+    """Calculate risk scores from hazard predictions."""
+    # hazards: [batch, num_bins]
+    hazards = torch.sigmoid(outputs)
+    survival = torch.cumprod(1 - hazards, dim=1)
+    risk = -torch.sum(survival, dim=1)
+    return risk
+
+# def calculate_risk(outputs):
+#     """Calculate risk scores from hazard predictions."""
+#     # hazards: [batch, num_bins]
+#     hazards = torch.sigmoid(outputs)
+#     cum_hazard = torch.cumsum(hazards, dim=1)
+#     risk = cum_hazard[:, -1].view(-1)
+#     return risk
+
+
+
+
+def stratify_risk_groups(risk_scores, num_groups=2):
+    """
+    Stratify patients into risk groups based on predicted risk scores.
+
+    Args:
+        risk_scores: numpy array of risk scores
+        num_groups: number of risk groups (2 or 4)
+
+    Returns:
+        risk_groups: numpy array of risk group assignments (0 to num_groups-1)
+    """
+    if num_groups == 2:
+        # Simple median split for 2 groups
+        median_risk = np.median(risk_scores)
+        risk_groups = (risk_scores > median_risk).astype(int)
+    elif num_groups == 4:
+        # Quartile split for 4 groups
+        quartiles = np.percentile(risk_scores, [25, 50, 75])
+        risk_groups = np.zeros_like(risk_scores, dtype=int)
+        for i in range(1, 4):
+            risk_groups[risk_scores > quartiles[i - 1]] = i
+    else:
+        raise ValueError("num_groups must be either 2 or 4")
+
+    return risk_groups

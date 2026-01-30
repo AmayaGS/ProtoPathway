@@ -1,212 +1,162 @@
 # =============================================================================
-# ProtoPathway Experiment Configuration
+# ProtoPathway Training Configuration
 # =============================================================================
-# Training config for all models. Preprocessing handled separately.
-# Uses OmegaConf variable interpolation.
+# Unified config for training ProtoPathway and baseline models.
+# Supports ablation studies through branch enable/disable.
 #
-# Models:
-#   Multimodal: protopath, survpath, mcat, pibd
-#   WSI-only:   abmil, transmil, mean_mil, max_mil
-#   Gene-only:  snn, mlp
+# Usage:
+#   python main.py train --config configs/experiments/experiment.yaml
+#   python main.py train --config configs/experiments/experiment.yaml model.fusion=concat
+#   python main.py train --config configs/experiments/experiment.yaml branches.wsi=false
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Dataset
+# Dataset Configuration
 # -----------------------------------------------------------------------------
-dataset_name: BLCA  # choices: [BLCA, HNSC, STAD, COADREAD]
+dataset: TCGA-COADREAD
 
 paths:
-  base_dir: /path/to/data
-  processed_dir: ${paths.base_dir}/processed/${dataset_name}
-  output_dir: ${paths.base_dir}/experiments/${dataset_name}
+  base_data_dir: C:/Users/Amaya/Documents/PhD/Data/TGCA_data
+  output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
+  processed_dir: ${paths.output_dir}/processed/${dataset}
 
-# -----------------------------------------------------------------------------
-# Data (references preprocessing outputs)
-# -----------------------------------------------------------------------------
-data:
+# Input files (outputs from preprocessing)
+input:
   gene_expression: ${paths.processed_dir}/gene_expression.csv
-  pathway_graph: ${paths.processed_dir}/pathway_graph.pkl
-  pathway_definitions: ${paths.processed_dir}/pathway_definitions.csv
+  bipartite_graph: ${paths.processed_dir}/bipartite_graph.pt
   wsi_features: ${paths.processed_dir}/wsi_features.pkl
   labels: ${paths.processed_dir}/labels.csv
   splits: ${paths.processed_dir}/data_splits.pkl
-  shared_patient_ids: ${paths.processed_dir}/shared_patient_ids.csv
-  # For baselines (survpath, pibd)
-  baseline_signatures: ${paths.processed_dir}/baseline_signatures.csv
 
+# Output directory for experiments
+output:
+  experiments_dir: ${paths.output_dir}/experiments/${dataset}
+
+# -----------------------------------------------------------------------------
+# Task Configuration
+# -----------------------------------------------------------------------------
+task: survival  # choices: [survival, classification]
+
+# Survival task settings
+survival:
+  num_bins: 4
+  time_col: survival_time
+  event_col: censorship # 1=censored (alive), 0=death
+
+# Classification task settings
+classification:
+  num_classes: 2
+
+# Column names
 patient_id_col: case_id
 
 # -----------------------------------------------------------------------------
-# Task
+# Model Configuration
 # -----------------------------------------------------------------------------
-task: survival  # survival | classification
+model:
+  name: protopath  # choices: [protopath, abmil, transmil, mlp, snn, survpath, mcat, motcat]
 
-classification:
-  num_classes: 2
-  label_col: label
+  wsi_input_dim: 1536
 
-survival:
-  time_col: survival_months
-  event_col: censorship
-  num_bins: 4
-  alpha: 0.5  # NLL vs ranking loss balance
+  # Branch enable/disable for ablation
+  branches:
+    gene: true
+    wsi: false
+
+  # Gene encoder (PathwayEmbeddingModel) settings
+  gene_encoder:
+    hidden_dim: 256
+    hidden_dims: [256, 128]  # For SNN/MLP
+    num_layers: 4
+    dropout: 0.1
+    num_heads: 1  # GATv2 attention heads
+
+  # WSI encoder (PrototypeMIL) settings
+  wsi_encoder:
+    hidden_dim: 128
+    num_prototypes: 64
+    tau: 10.0  # Softmax temperature
+    dropout: 0.1
+    num_layers: 2  # For TransMIL
+    num_heads: 4  # For TransMIL
+    use_precomputed_centroids: false
+
+  # Fusion settings
+  fusion:
+    type: cross_attention  # choices: [concat, cross_attention, bilinear, gated]
+    hidden_dim: 128
+    num_heads: 1
+    dropout: 0.1
 
 # -----------------------------------------------------------------------------
-# Model Selection
-# -----------------------------------------------------------------------------
-model_name: protopath
-
-# Ablation flags (for protopath)
-ablation:
-  use_wsi: true
-  use_gene: true
-  use_pathways: true  # false = flat gene embedding (no GATv2)
-  use_hierarchy: true  # false = ignore Reactome DAG structure
-
-# -----------------------------------------------------------------------------
-# Training
+# Training Configuration
 # -----------------------------------------------------------------------------
 training:
-  epochs: 100
-  lr: 1.0e-4
-  weight_decay: 1.0e-5
-  l1_reg: 0
-  dropout: 0.2
+  debug_survival: false
+  # Optimization
+  learning_rate: 0.00001
+  weight_decay: 0.0  # L2 regularization
+  l1_lambda: 0.0  # L1 regularization
+
+  # Batching (batch_size=1 for MIL)
   batch_size: 1
   num_workers: 0
-  seed: 42
+
+  # Training duration
+  max_epochs: 100
+  patience: 30  # Early stopping patience
+
+  # Learning rate scheduler
+  scheduler:
+    type: null  # choices: [cosine, step, plateau, none]
+    # Step scheduler settings
+    step_size: 10
+    gamma: 0.5
+    # Plateau scheduler settings
+    factor: 0.5
+    plateau_patience: 5
 
   # Gradient clipping
-  clip_grad: true
-  max_grad_norm: 1.0
+  grad_clip: 0  # 0 = disabled
 
-  # Scheduler
-  scheduler:
-    enabled: true
-    type: plateau  # plateau | step | cosine
-    patience: 5
-    factor: 0.5
-    min_lr: 1.0e-6
-    # For step scheduler
-    step_size: 10
-    gamma: 0.1
+  # Loss weighting for survival
+  nll_alpha: 0.0  # Weight on uncensored samples in NLL loss
 
-  # Early stopping
-  early_stopping:
-    enabled: true
-    patience: 15
-    metric: c_index  # c_index | loss | auc | accuracy
-    mode: max  # max | min
-
-  # Checkpointing
-  checkpoint:
-    enabled: true
-    save_best: true
-    metric: c_index
+  # Model selection metric
+  monitor_metric: c_index  # For survival: c_index, For classification: acc
+  monitor_mode: max  # max for c_index/acc, min for loss
 
 # -----------------------------------------------------------------------------
-# Cross-Validation
+# Cross-Validation Configuration
 # -----------------------------------------------------------------------------
 cv:
   enabled: true
-  num_folds: 5
-  stratified: true
+  # If false, uses Train/Test split from preprocessing
 
 # -----------------------------------------------------------------------------
-# Logging
+# Experiment Settings
+# -----------------------------------------------------------------------------
+experiment:
+  name: null  # Auto-generated if null
+  seed: 42
+  deterministic: true
+
+# -----------------------------------------------------------------------------
+# Logging and Checkpointing
 # -----------------------------------------------------------------------------
 logging:
-  wandb: false
-  project: protopath
-  log_every: 10
+  log_every_n_steps: 10
+  save_predictions: true  # Save patient-level predictions
 
-# =============================================================================
-# Model Configurations
-# =============================================================================
-
-# -----------------------------------------------------------------------------
-# ProtoPathway (Ours)
-# -----------------------------------------------------------------------------
-protopath:
-  # Dimensions
-  wsi_input_dim: 1536  # UNI2-h: 1536, UNI: 1024, CONCH: 512
-  gene_input_dim: 1
-  hidden_dim: 128
-
-  # Gene pathway encoder (GATv2)
-  ge_encoder:
-    num_layers: 2
-    num_heads: 4
-    dropout: ${training.dropout}
-
-  # WSI prototype encoder
-  wsi_encoder:
-    num_prototypes: 64
-    tau: 10.0  # softmax temperature
-    num_heads: 1
-
-  # Fusion
-  fusion:
-    type: cross_attention  # cross_attention | concat | bilinear
-    num_heads: 4
-    dropout: ${training.dropout}
+checkpointing:
+  save_best_only: true
+  save_last: true
 
 # -----------------------------------------------------------------------------
-# SurvPath
+# Visualization (computed during evaluation, not training)
 # -----------------------------------------------------------------------------
-survpath:
-  wsi_input_dim: 768
-  hidden_dim: 256
-  num_pathways: 300
-  num_layers: 2
-  num_heads: 8
-  dropout: ${training.dropout}
-
-# -----------------------------------------------------------------------------
-# MCAT
-# -----------------------------------------------------------------------------
-mcat:
-  wsi_input_dim: 1536
-  hidden_dim: 256
-  omic_sizes: [100, 200, 300, 400, 500, 600]  # per omic group
-  num_heads: 4
-  dropout: ${training.dropout}
-
-# -----------------------------------------------------------------------------
-# PIBD
-# -----------------------------------------------------------------------------
-pibd:
-  wsi_input_dim: 768
-  hidden_dim: 256
-  num_prototypes: 4
-  dropout: ${training.dropout}
-
-# -----------------------------------------------------------------------------
-# ABMIL (WSI-only)
-# -----------------------------------------------------------------------------
-abmil:
-  wsi_input_dim: 1536
-  hidden_dim: 128
-  dropout: ${training.dropout}
-
-# -----------------------------------------------------------------------------
-# TransMIL (WSI-only)
-# -----------------------------------------------------------------------------
-transmil:
-  wsi_input_dim: 1536
-  hidden_dim: 128
-  num_heads: 4
-  num_layers: 2
-  dropout: ${training.dropout}
-
-# -----------------------------------------------------------------------------
-# SNN, MLP (Gene-only)
-# -----------------------------------------------------------------------------
-snn:
-  hidden_dims: [256, 128]
-  dropout: ${training.dropout}
-  use_pathways: false  # true = pathway-aware SNN
-
-mlp:
-  hidden_dims: [512, 256, 128]
-  dropout: ${training.dropout}
+visualization:
+  # These are computed during evaluation mode, not during training
+  enabled: false
+  save_attention_weights: false
+  save_prototype_assignments: false

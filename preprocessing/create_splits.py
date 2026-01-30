@@ -289,21 +289,24 @@ def run(cfg):
 
     if task == 'survival':
         time_col = cfg['survival']['time_col']
-        event_col = cfg['survival']['event_col']
+        censorship_col = cfg['survival']['event_col']  # Raw TCGA censorship column
         num_bins = cfg['survival']['num_bins']
+
+        # Convert censorship (1=alive) to event (1=death) for all downstream use
+        clinical_df['event'] = 1 - clinical_df[censorship_col]
 
         # Discretize survival times (adds 'survival_bin' column to clinical_df)
         clinical_df, bin_edges = discretize_survival_times(
-            clinical_df, time_col, event_col, n_bins=num_bins
+            clinical_df, time_col, 'event', n_bins=num_bins
         )
 
-        # Build label dictionary directly (avoid calling get_survival_label_dict which discretizes again)
+        # Build label dictionary directly
         label_dict = {}
         for _, row in clinical_df.iterrows():
             pid = str(row[patient_id_col])
             label_dict[pid] = {
                 'time': float(row[time_col]),
-                'event': int(row[event_col]),
+                'event': int(row['event']),
                 'bin': int(row['survival_bin'])
             }
 
@@ -312,7 +315,7 @@ def run(cfg):
 
         # Compute and log survival statistics
         times = clinical_df[time_col].values
-        events = clinical_df[event_col].values
+        events = clinical_df['event'].values
         stats = compute_survival_statistics(times, events)
         logging.info(f"Survival statistics:")
         logging.info(f"  Total patients: {stats['n_total']}")
@@ -391,7 +394,7 @@ def run(cfg):
             {
                 patient_id_col: pid,
                 'survival_time': label_dict[pid]['time'],
-                'censorship': label_dict[pid]['event'],
+                'event': int(label_dict[pid]['event']),
                 'survival_bin': label_dict[pid]['bin']
             }
             for pid in shared_patient_ids

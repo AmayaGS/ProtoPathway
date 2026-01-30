@@ -3,15 +3,22 @@ ProtoPathway
 
 Usage:
     # Preprocessing
-    python main.py preprocess pathways --config configs/preprocess/preprocess_pathways.yaml
-    python main.py preprocess genes --config configs/preprocess/preprocess_genes.yaml
-    python main.py preprocess wsi --config configs/preprocess/preprocess_wsi.yaml
-    python main.py preprocess splits --config configs/preprocess/create_splits.yaml
+    python main.py preprocess pathways --config configs/preprocessing/preprocess_pathways.yaml
+    python main.py preprocess genes --config configs/preprocessing/preprocess_genes.yaml
+    python main.py preprocess wsi --config configs/preprocessing/preprocess_wsi.yaml
+    python main.py preprocess splits --config configs/preprocessing/create_splits.yaml
 
     # Training
     python main.py train --config configs/experiments/experiment.yaml
-    python main.py train --config configs/experiments/experiment.yaml model_name=protopath
-    python main.py train --config configs/experiments/experiment.yaml dataset_name=BLCA training.lr=1e-3
+    python main.py train --config configs/experiments/experiment.yaml dataset=BLCA training.lr=1e-5
+
+    # WSI baselines
+    python main.py train --config configs/experiments/experiment.yaml model.name=abmil
+    python main.py train --config configs/experiments/experiment.yaml model.name=transmil
+
+    # Gene baselines
+    python main.py train --config configs/experiments/experiment.yaml model.name=snn
+    python main.py train --config configs/experiments/experiment.yaml model.name=mlp
 
     # Evaluation
     python main.py evaluate --checkpoint output/BLCA/exp_001/best_model.pt
@@ -47,7 +54,7 @@ def parse_args():
 
     # preprocess pathways
     prep_reactome = prep_sub.add_parser('pathways', help='Process Reactome pathways (run once)')
-    prep_reactome.add_argument('--config', default='configs/preprocessing/reactome_base.yaml')
+    prep_reactome.add_argument('--config', default='configs/preprocessing/preprocess_pathways.yaml')
 
     # preprocess genes
     prep_genes = prep_sub.add_parser('genes', help='Preprocess gene expression data')
@@ -63,7 +70,7 @@ def parse_args():
 
     # preprocess all
     prep_all = prep_sub.add_parser('all', help='Run all preprocessing steps')
-    prep_all.add_argument('--reactome-config', default='configs/preprocessing/reactome_base.yaml')
+    prep_all.add_argument('--reactome-config', default='configs/preprocessing/preprocess_pathways.yaml')
     prep_all.add_argument('--gene-config', default='configs/preprocessing/preprocess_genes.yaml')
     prep_all.add_argument('--wsi-config', default='configs/preprocessing/preprocess_wsi.yaml')
     prep_all.add_argument('--splits-config', default='configs/preprocessing/create_splits.yaml')
@@ -171,13 +178,13 @@ def main():
             print("=" * 60)
 
     elif args.command == 'train':
-        from training.train import run
+        from experiments.train import run
         cfg = load_config(args.config, args.overrides)
         cfg.device = args.device
         run(cfg)
 
     elif args.command == 'evaluate':
-        from evaluation.evaluate import run
+        from experiments.evaluate import run
 
         # Load config from checkpoint directory if not provided
         if args.config is None:
@@ -195,7 +202,7 @@ def main():
         run(cfg)
 
     elif args.command == 'visualize':
-        from evaluation.visualize import run
+        from experiments.visualize import run
         run(args.results, args.output)
 
 
