@@ -6,12 +6,13 @@ Provides model-agnostic building interface:
 
 Supports:
 - ProtoPathway (multimodal, gene-only, wsi-only via config.model.branches)
-- ABMIL, TransMIL (WSI baselines)
+- ABMIL, TransMIL, DSMIL (WSI baselines)
 - SNN, MLP (Gene expression baselines)
+- SurvPath, MMP, PIBD, MCAT, MOTCAT, PORPOISE
 """
 
 import logging
-from typing import Optional, Dict, Any, Callable
+from typing import Dict, Callable
 
 import torch.nn as nn
 
@@ -62,6 +63,7 @@ def get_available_models():
 # protopath: wsi_centroids (optional), graph_data (implicit in dataset)
 # abmil: none (WSI features only)
 # transmil: none (WSI features only)
+# dsmil: none (WSI features only)
 # snn: none (gene features only, uses bipartite graph)
 # mlp: none (gene features flattened)
 # =============================================================================
@@ -83,7 +85,7 @@ def build_protopath(cfg, wsi_centroids=None, **kwargs):
 @register_model("abmil")
 def build_abmil(cfg, **kwargs):
     """Build Attention-Based MIL model."""
-    from models.baselines.wsi import ABMIL
+    from models.baselines.unimodal_wsi import ABMIL
 
     # Determine number of output classes
     if cfg.task == 'survival':
@@ -91,18 +93,13 @@ def build_abmil(cfg, **kwargs):
     else:
         n_classes = cfg.classification.num_classes
 
-    return ABMIL(
-        input_dim=cfg.model.get('wsi_input_dim', 1536),  # UNI2-h default
-        hidden_dim=cfg.model.wsi_encoder.hidden_dim,
-        n_classes=n_classes,
-        dropout=cfg.model.wsi_encoder.get('dropout', 0.1)
-    )
+    return ABMIL(input_dim=cfg.model.get('num_features', 1536), n_classes=n_classes)
 
 
 @register_model("transmil")
 def build_transmil(cfg, **kwargs):
     """Build TransMIL model."""
-    from models.baselines.wsi import TransMIL
+    from models.baselines.unimodal_wsi import TransMIL
 
     if cfg.task == 'survival':
         n_classes = cfg.survival.num_bins
@@ -110,14 +107,24 @@ def build_transmil(cfg, **kwargs):
         n_classes = cfg.classification.num_classes
 
     return TransMIL(
-        input_dim=cfg.model.get('wsi_input_dim', 1536),
-        hidden_dim=cfg.model.wsi_encoder.hidden_dim,
+        num_features=cfg.model.get('num_features', 1536),
         n_classes=n_classes,
-        num_layers=cfg.model.wsi_encoder.get('num_layers', 2),
-        num_heads=cfg.model.wsi_encoder.get('num_heads', 4),
-        dropout=cfg.model.wsi_encoder.get('dropout', 0.1)
     )
 
+@register_model("dsmil")
+def build_dsmil(cfg, **kwargs):
+    """Build DSMIL model."""
+    from models.baselines.unimodal_wsi import DSMIL
+
+    if cfg.task == "survival":
+        n_classes = cfg.survival.num_bins
+    else:
+        n_classes = cfg.classification.num_classes
+
+    return DSMIL(
+        input_dim=cfg.model.get("num_features", 1536),
+        n_classes=n_classes
+    )
 
 # -----------------------------------------------------------------------------
 # Gene Expression Baselines
@@ -125,7 +132,7 @@ def build_transmil(cfg, **kwargs):
 @register_model("snn")
 def build_snn(cfg, **kwargs):
     """Build Survival Neural Network (SNN) for gene expression."""
-    from models.baselines.gene import SNN
+    from models.baselines.unimodal_genes import SNN
 
     if cfg.task == 'survival':
         n_classes = cfg.survival.num_bins
@@ -143,7 +150,7 @@ def build_snn(cfg, **kwargs):
 @register_model("mlp")
 def build_mlp(cfg, **kwargs):
     """Build MLP baseline for gene expression."""
-    from models.baselines.gene import GeneExpressionMLP
+    from models.baselines.unimodal_genes import GeneExpressionMLP
 
     if cfg.task == 'survival':
         n_classes = cfg.survival.num_bins
@@ -157,11 +164,152 @@ def build_mlp(cfg, **kwargs):
         dropout=cfg.model.gene_encoder.dropout
     )
 
+# -----------------------------------------------------------------------------
+# Multimodal Baselines
+# -----------------------------------------------------------------------------
 
+@register_model("survpath")
+def build_survpath(cfg, **kwargs):
+    """
+    Build SurvPath model from config.
+
+    Args:
+        cfg: Config object
+        omic_sizes: List of gene counts per pathway
+    """
+    from models.baselines.survpath import SurvPath
+
+    if cfg.task == 'survival':
+        n_classes = cfg.survival.num_bins
+    else:
+        n_classes = cfg.classification.num_classes
+
+    return SurvPath(
+        num_features=cfg.model.get('wsi_input_dim', 1536),
+        hidden_dim=cfg.model.wsi_encoder.get('hidden_dim', 256),
+        num_heads=cfg.model.wsi_encoder.get('num_heads', 1),
+        n_classes=n_classes,
+        dropout=cfg.model.fusion.get('dropout', 0.1),
+    )
+
+@register_model("porpoise")
+def build_porpoise(cfg, **kwargs):
+    """Build PORPOISE model from config."""
+    from models.baselines.porpoise import PORPOISE
+
+    if cfg.task == 'survival':
+        n_classes = cfg.survival.num_bins
+    else:
+        n_classes = cfg.classification.num_classes
+
+    return PORPOISE(
+        num_genes=kwargs.get('num_genes', cfg.model.gene_encoder.get('num_genes')),
+        num_features=cfg.model.get('wsi_input_dim', 1536),
+        fusion='bilinear',
+        hidden_dim=cfg.model.wsi_encoder.get('hidden_dim', 256),
+        n_classes=n_classes,
+        dropout=cfg.model.wsi_encoder.get('dropout', 0.25),
+        drop_input=0.10,
+        gate_wsi=True,
+        gate_omic=True,
+        skip=True,
+        use_mlp=False,
+    )
+
+
+@register_model("pibd")
+def build_pibd(cfg, **kwargs):
+    """Build PIBD model from config."""
+    from models.baselines.pibd.pibd import PIBD
+
+    if cfg.task == 'survival':
+        n_classes = cfg.survival.num_bins
+    else:
+        n_classes = cfg.classification.num_classes
+
+    return PIBD(num_features=cfg.model.get('wsi_input_dim', 1536),
+                hidden_dim=256,
+                n_classes=n_classes,
+                bag_size=512,
+                num_patches=4096,
+                ratio_wsi=0.5,
+                ratio_omics=0.5,
+                sample_num=50,
+                alpha=0.1,
+                beta=0.01,
+                seed=cfg.experiment.get('seed', 42))
+
+
+@register_model("mmp")
+def build_mmp_model(cfg, **kwargs):
+    from models.baselines.mmp import MMP
+
+    centroids = kwargs.get('wsi_centroids')
+    if centroids is None:
+        raise ValueError("MMP requires 'wsi_centroids' in model_kwargs. "
+                        "Ensure needs_centroids=True and config has wsi settings.")
+
+    if cfg.task == 'survival':
+        n_classes = cfg.survival.num_bins
+    else:
+        n_classes = cfg.classification.num_classes
+
+    return MMP(
+        centroids=centroids,
+        num_features=cfg.model.get('wsi_input_dim', 1536),
+        hidden_dim=cfg.model.wsi_encoder.get('hidden_dim', 256),
+        num_heads=cfg.model.wsi_encoder.get('num_heads', 1),
+        n_classes=n_classes,
+        dropout=cfg.model.wsi_encoder.get('dropout', 0.25),
+        n_em_iters=1,
+        tau=10
+    )
+
+@register_model("mcat")
+def build_mcat_model(cfg, **kwargs):
+    from models.baselines.mcat import MCAT
+
+    if cfg.task == 'survival':
+        n_classes = cfg.survival.num_bins
+    else:
+        n_classes = cfg.classification.num_classes
+
+    return MCAT(
+        num_features= cfg.model.get('wsi_input_dim', 1536),
+        hidden_dim= cfg.model.wsi_encoder.get('hidden_dim', 256),
+        num_heads= cfg.model.wsi_encoder.get('num_heads', 1),
+        n_classes=n_classes,
+        dropout= cfg.model.wsi_encoder.get('dropout', 0.25),
+        fusion= 'concat',
+        n_transformer_layers= 1
+    )
+
+
+@register_model("motcat")
+def build_motcat_model(cfg, **kwargs):
+    from models.baselines.motcat import MOTCAT
+
+    if cfg.task == 'survival':
+        n_classes = cfg.survival.num_bins
+    else:
+        n_classes = cfg.classification.num_classes
+
+    return MOTCAT(
+        num_features= cfg.model.get('wsi_input_dim', 1536),
+        hidden_dim= cfg.model.wsi_encoder.get('hidden_dim', 256),
+        num_heads= cfg.model.wsi_encoder.get('num_heads', 1),
+        n_classes= n_classes,
+        dropout= cfg.model.wsi_encoder.get('dropout', 0.25),
+        fusion= 'concat',
+        n_transformer_layers= 1,
+        ot_impl= 'pot-uot-l2',
+        ot_reg= 0.1,
+        ot_tau= 0.5
+    )
 # -----------------------------------------------------------------------------
 # Helper: Check model requirements
 # -----------------------------------------------------------------------------
-def get_model_requirements(model_name: str) -> Dict[str, Any]:
+def get_model_requirements(model_name):
     """
     Get requirements for a model type.
 
@@ -190,6 +338,12 @@ def get_model_requirements(model_name: str) -> Dict[str, Any]:
             'needs_centroids': False,
             'modality': 'wsi'
         },
+        'dsmil':{
+            'needs_graph': False,
+            'needs_wsi': True,
+            'needs_centroids': False,
+            'modality': 'wsi'
+        },
         'snn': {
             'needs_graph': True,  # Uses pathway structure
             'needs_wsi': False,
@@ -201,6 +355,43 @@ def get_model_requirements(model_name: str) -> Dict[str, Any]:
             'needs_wsi': False,
             'needs_centroids': False,
             'modality': 'gene'
+        },
+        'survpath': {
+            'needs_graph': True,
+            'needs_wsi': True,
+            'needs_centroids': False,
+            'modality': 'multimodal'
+        },
+        'porpoise': {
+            'needs_graph': False,
+            'needs_wsi': True,
+            'needs_centroids': False,
+            'modality': 'multimodal'
+        },
+        'pibd': {
+            'needs_graph': True,  # Uses pathway structure
+            'needs_wsi': True,
+            'needs_centroids': False,
+            'modality': 'multimodal'
+        },
+        'mmp': {
+            'needs_graph': True,
+            'needs_wsi': True,
+            'needs_centroids': True,
+            'modality': 'multimodal'
+        },
+        'mcat': {
+            'needs_graph': True,
+            'needs_wsi': True,
+            'needs_centroids': False,
+            'modality': 'multimodal'
+        },
+        'motcat': {
+            'needs_graph': True,
+            'needs_wsi': True,
+            'needs_centroids': False,
+            'modality': 'multimodal'
         }
+
     }
     return requirements.get(model_name.lower(), {})

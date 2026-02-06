@@ -12,8 +12,8 @@ Gene expression baselines:
     - PathwayMLP: MLP with pathway aggregation
 """
 
-from models.baselines.wsi import ABMIL, TransMIL, DSMIL
-from models.baselines.gene import SNN, GeneExpressionMLP, PathwayMLP
+from models.baselines.unimodal_wsi import ABMIL, TransMIL, DSMIL
+from models.baselines.unimodal_genes import SNN, GeneExpressionMLP, PathwayMLP
 
 __all__ = [
     'ABMIL', 'TransMIL', 'DSMIL',

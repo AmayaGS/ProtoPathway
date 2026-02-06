@@ -60,6 +60,7 @@ class MultimodalDataset(Dataset):
         self.num_pathways = graph_data['num_pathways']
         self.gene_names = graph_data['gene_names']
         self.pathway_names = graph_data['pathway_names']
+        self.pathway_gene_indices = graph_data['pathway_gene_indices']
 
         # Filter to patients with all modalities
         gene_patients = set(str(pid) for pid in gene_expression_df.index)
@@ -142,6 +143,7 @@ class MultimodalDataset(Dataset):
         # Add other fields
         data.wsi_features = wsi_feat
         data.y = target
+        data.pathway_gene_indices = self.pathway_gene_indices
 
         if self.return_patient_id:
             data.patient_id = patient_id
@@ -174,6 +176,19 @@ def load_dataset_components(cfg):
 
     # Bipartite graph
     graph_data = torch.load(cfg.input.bipartite_graph, weights_only=False)
+
+    # Precompute pathway->gene indices for baselines
+    num_genes = graph_data['num_genes']
+    edge_index = graph_data['edge_index']
+    mask = edge_index[1] >= num_genes
+    gene_idx = edge_index[0][mask]
+    pathway_idx = edge_index[1][mask] - num_genes
+
+    pathway_gene_indices = [[] for _ in range(graph_data['num_pathways'])]
+    for g, p in zip(gene_idx.tolist(), pathway_idx.tolist()):
+        pathway_gene_indices[p].append(g)
+    graph_data['pathway_gene_indices'] = pathway_gene_indices
+
     logging.info(f"  Graph: {graph_data['num_genes']} genes, {graph_data['num_pathways']} pathways")
 
     # WSI features

@@ -54,31 +54,31 @@ patient_id_col: case_id
 # Model Configuration
 # -----------------------------------------------------------------------------
 model:
-  name: protopath  # choices: [protopath, abmil, transmil, mlp, snn, survpath, mcat, motcat]
+  name: protopath  # choices: [protopath, abmil, transmil, dsmil, mlp, snn, survpath, porpoise, mcat, motcat, pibd, mmp]
 
   wsi_input_dim: 1536
 
   # Branch enable/disable for ablation
   branches:
     gene: true
-    wsi: false
+    wsi: true
 
   # Gene encoder (PathwayEmbeddingModel) settings
   gene_encoder:
-    hidden_dim: 256
-    hidden_dims: [256, 128]  # For SNN/MLP
-    num_layers: 4
-    dropout: 0.1
+    hidden_dim: 128
+    hidden_dims: [128, 64]  # For SNN/MLP
+    num_layers: 3
+    dropout: 0
     num_heads: 1  # GATv2 attention heads
 
   # WSI encoder (PrototypeMIL) settings
   wsi_encoder:
     hidden_dim: 128
-    num_prototypes: 64
+    num_prototypes: 16
     tau: 10.0  # Softmax temperature
     dropout: 0.1
     num_layers: 2  # For TransMIL
-    num_heads: 4  # For TransMIL
+    num_heads: 1  # For TransMIL
     use_precomputed_centroids: false
 
   # Fusion settings
@@ -88,13 +88,19 @@ model:
     num_heads: 1
     dropout: 0.1
 
+  pibd:
+    gamma: 1 # gamma for PIBD model
+    sigma: 0.1
+    num_patches: 4096
+
+
 # -----------------------------------------------------------------------------
 # Training Configuration
 # -----------------------------------------------------------------------------
 training:
   debug_survival: false
   # Optimization
-  learning_rate: 0.00001
+  learning_rate: 0.0001
   weight_decay: 0.0  # L2 regularization
   l1_lambda: 0.0  # L1 regularization
 
@@ -104,7 +110,7 @@ training:
 
   # Training duration
   max_epochs: 100
-  patience: 30  # Early stopping patience
+  patience: 50  # Early stopping patience
 
   # Learning rate scheduler
   scheduler:

@@ -5,6 +5,8 @@ I/O utilities for file handling.
 import os
 import logging
 
+from models.factory import get_model_requirements
+
 
 def ensure_directory(path):
     """Create directory if it doesn't exist."""
@@ -121,3 +123,56 @@ def setup_logging_to_file(output_dir):
     logging.getLogger().addHandler(file_handler)
 
     return log_path, file_handler
+
+
+def get_modality_tag(cfg):
+    model_name = cfg.model.name
+    reqs = get_model_requirements(model_name)
+
+    base_modality = reqs.get("modality")
+
+    # Baselines: modality is fixed
+    if base_modality in {"gene", "wsi"}:
+        return base_modality
+
+    # Multimodal models: respect branches
+    if base_modality == "multimodal":
+        gene_on = cfg.model.branches.get("gene", False)
+        wsi_on = cfg.model.branches.get("wsi", False)
+
+        if gene_on and wsi_on:
+            return "gene+wsi"
+        elif gene_on:
+            return "gene"
+        elif wsi_on:
+            return "wsi"
+        else:
+            return "none"
+
+    # Fallback
+    return "unknown"
+
+
+def build_experiment_name(cfg, timestamp):
+    modality = get_modality_tag(cfg)
+
+    parts = [
+        cfg.model.name,
+        modality,
+        cfg.dataset,
+    ]
+
+    # Fusion only when truly multimodal
+    if modality == "gene+wsi":
+        parts.append(cfg.model.fusion.type)
+
+    if "wsi" in modality and cfg.model.name == "protopath":
+        parts.append(f"P{cfg.model.wsi_encoder.num_prototypes}")
+
+    parts.extend([
+        f"lr{cfg.training.learning_rate:g}",
+        f"s{cfg.experiment.seed}",
+        timestamp,
+    ])
+
+    return "_".join(parts)

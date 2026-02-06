@@ -12,9 +12,9 @@ Supports ablation studies by enabling/disabling branches.
 import logging
 import torch.nn as nn
 
-from models.components.gene_encoder import PathwayEmbeddingModel
-from models.components.wsi_encoder import PrototypeMIL
-from models.components.fusion import get_fusion_module
+from models.protopath_components.gene_encoder import PathwayEmbeddingModel
+from models.protopath_components.wsi_encoder import PrototypeMIL
+from models.protopath_components.fusion import get_fusion_module
 
 
 class ProtoPathway(nn.Module):
@@ -138,7 +138,7 @@ class ProtoPathway(nn.Module):
                 - x: Gene node features [num_genes + num_pathways, 1]
                 - edge_index: Bipartite graph edges
                 - num_genes, num_pathways: Graph structure info
-                - wsi_features: WSI patch features [num_patches, wsi_input_dim]
+                - wsi_features: WSI patch features [num_patches, num_features]
             return_attention: Whether to compute and store attention weights
 
         Returns:

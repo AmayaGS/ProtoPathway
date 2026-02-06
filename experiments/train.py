@@ -28,7 +28,9 @@ from sklearn.metrics import roc_auc_score, accuracy_score
 from utils.io import (
     get_model_schema,
     format_model_schema,
-    setup_logging_to_file
+    setup_logging_to_file,
+    get_modality_tag,
+    build_experiment_name
 )
 
 from utils.dataset import (
@@ -38,7 +40,7 @@ from utils.dataset import (
     compute_centroids
 )
 
-from utils.survival import calculate_risk
+from utils.survival import calculate_risk, debug_inversion
 from utils.losses import NLLSurvLoss
 
 # Use factory instead of direct import
@@ -71,14 +73,25 @@ def train_epoch(model, loader, optimizer, criterion, cfg, device):
         batch = batch.to(device)
         optimizer.zero_grad()
 
-        logits = model(batch)
+        if cfg.model.name == 'pibd':
+            logits, aux_losses = model(batch)
+        else:
+            logits = model(batch, return_attention=True) # I've set attention to true to check entropy
 
         if cfg.task == 'survival':
+
             target = batch.y['bin']
             time = batch.y['time']
             event = batch.y['event']
 
-            loss = criterion(logits, target, time, event)
+            if cfg.model.name == 'pibd':
+                surv_loss = criterion(logits, target, time, event)
+                loss = (surv_loss
+                        + aux_losses['IB_loss']
+                        + cfg.model.pibd.gamma * aux_losses['proxy_loss']
+                        + cfg.model.pibd.sigma * (aux_losses['mimin'] + aux_losses['mimin_loss']))
+            else:
+                loss = criterion(logits, target, time, event)
 
             with torch.no_grad():
                 risk = calculate_risk(logits)
@@ -115,10 +128,9 @@ def train_epoch(model, loader, optimizer, criterion, cfg, device):
         times = torch.cat(all_times).numpy()
         events = torch.cat(all_events).numpy()
 
-
         event_indicator = events.astype(bool) # event=1 → True (death)
         try:
-            c_index = concordance_index_censored(event_indicator, times, risks)[0] # Expects True=uncensored
+            c_index = concordance_index_censored(event_indicator, times, risks)[0] # Expects True=uncensored=1
         except Exception as e:
             logging.warning(f"C-index failed: {e}")
             c_index = 0.5
@@ -181,6 +193,9 @@ def validate(model, loader, criterion, cfg, device):
         events = torch.cat(all_events).numpy()
 
         if cfg.training.get("debug_survival", False):
+
+            debug_inversion(risks, times, events)
+
             risk_std = np.std(risks)
             event_rate = events.mean()
             corr = np.corrcoef(risks, times)[0, 1]
@@ -367,6 +382,13 @@ def train_fold(
         # Train
         train_metrics = train_epoch(model, train_loader, optimizer, criterion, cfg, device)
 
+        # if hasattr(model.gene_encoder, '_gate_entropy'):
+        #     logging.info(f"  Gate entropy: {model.gene_encoder._gate_entropy:.3f} (max={np.log(617):.3f}), "
+        #                 f" range: [{model.gene_encoder._gate_min:.4f}, {model.gene_encoder._gate_max:.4f}]" )
+        #
+        # if hasattr(model.gene_encoder, '_gat_entropy'):
+        #     logging.info(f" GAT entropy: {model.gene_encoder._gat_entropy:.3f} (max={model.gene_encoder._gat_max:.4f}), ")
+
         # Validate
         val_metrics = validate(model, val_loader, criterion, cfg, device)
 
@@ -461,7 +483,8 @@ def run(cfg):
 
     # Create experiment directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    exp_name = cfg.experiment.name or f"{cfg.model.name}_{cfg.dataset}_{timestamp}_{cfg.training.learning_rate}"
+    exp_name = build_experiment_name(cfg, timestamp)
+    # exp_name = cfg.experiment.name or f"{cfg.model.name}_{cfg.branches}_{cfg.dataset}_{timestamp}_{cfg.training.learning_rate}"
     output_dir = os.path.join(cfg.output.experiments_dir, exp_name)
     os.makedirs(output_dir, exist_ok=True)
 

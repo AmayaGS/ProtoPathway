@@ -205,3 +205,56 @@ def stratify_risk_groups(risk_scores, num_groups=2):
         raise ValueError("num_groups must be either 2 or 4")
 
     return risk_groups
+
+
+def debug_inversion(risks, times, events):
+    """
+    Diagnostic to find where inversion happens.
+    Call this after computing risks, times, events in validate().
+    """
+    import numpy as np
+    from sksurv.metrics import concordance_index_censored
+
+    event_indicator = events.astype(bool)
+
+    # Test 1: Normal c-index
+    c_idx_normal = concordance_index_censored(event_indicator, times, risks)[0]
+
+    # Test 2: Inverted risk
+    c_idx_inverted_risk = concordance_index_censored(event_indicator, times, -risks)[0]
+
+    # Test 3: Inverted event
+    c_idx_inverted_event = concordance_index_censored(~event_indicator, times, risks)[0]
+
+    # Test 4: Both inverted
+    c_idx_both_inverted = concordance_index_censored(~event_indicator, times, -risks)[0]
+
+    print(f"""
+=== INVERSION DIAGNOSTIC ===
+C-index (normal):           {c_idx_normal:.4f}
+C-index (inverted risk):    {c_idx_inverted_risk:.4f}
+C-index (inverted event):   {c_idx_inverted_event:.4f}
+C-index (both inverted):    {c_idx_both_inverted:.4f}
+
+INTERPRETATION:
+- If 'inverted risk' is high (~0.5+): Your risk calculation is backwards
+- If 'inverted event' is high: Event/censorship labels are flipped
+- If 'both inverted' is high: Multiple inversions canceling out
+
+Additional checks:
+- Event rate: {events.mean():.3f} (should be ~0.3-0.7 typically)
+- Risk range: [{risks.min():.3f}, {risks.max():.3f}]
+- Risk-time correlation: {np.corrcoef(risks, times)[0, 1]:.3f}
+  (should be NEGATIVE: higher risk = shorter time)
+""")
+
+    # Check for constant predictions (model collapse)
+    if np.std(risks) < 0.001:
+        print("WARNING: Risk scores have near-zero variance - model may have collapsed!")
+
+    return {
+        'normal': c_idx_normal,
+        'inverted_risk': c_idx_inverted_risk,
+        'inverted_event': c_idx_inverted_event,
+        'both_inverted': c_idx_both_inverted
+    }
