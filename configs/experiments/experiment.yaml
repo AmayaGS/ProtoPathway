@@ -13,10 +13,9 @@
 # -----------------------------------------------------------------------------
 # Dataset Configuration
 # -----------------------------------------------------------------------------
-dataset: TCGA-COADREAD
+dataset: TCGA-BRCA
 
 paths:
-  base_data_dir: C:/Users/Amaya/Documents/PhD/Data/TGCA_data
   output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
   processed_dir: ${paths.output_dir}/processed/${dataset}
 
@@ -63,23 +62,25 @@ model:
     gene: true
     wsi: true
 
-  # Gene encoder (PathwayEmbeddingModel) settings
+  # Gene encoder settings
   gene_encoder:
-    hidden_dim: 128
-    hidden_dims: [128, 64]  # For SNN/MLP
+    hidden_dim: 128 # for protopath
+    hidden_dims: [256, 256]  # For SNN/MLP baselines
     num_layers: 3
-    dropout: 0
+    dropout: 0.0
     num_heads: 1  # GATv2 attention heads
+    lr_gene: 0.0001
 
   # WSI encoder (PrototypeMIL) settings
   wsi_encoder:
     hidden_dim: 128
     num_prototypes: 16
     tau: 10.0  # Softmax temperature
-    dropout: 0.1
+    dropout: 0.25
     num_layers: 2  # For TransMIL
     num_heads: 1  # For TransMIL
     use_precomputed_centroids: false
+    lr_wsi: 0.00001
 
   # Fusion settings
   fusion:
@@ -100,7 +101,7 @@ model:
 training:
   debug_survival: false
   # Optimization
-  learning_rate: 0.0001
+  learning_rate: 0.00001
   weight_decay: 0.0  # L2 regularization
   l1_lambda: 0.0  # L1 regularization
 

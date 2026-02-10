@@ -129,7 +129,7 @@ class ProtoPathway(nn.Module):
         # Storage for visualization outputs
         self.last_attention_weights = None
 
-    def forward(self, data, return_attention=False):
+    def forward(self, data, return_attention=False, return_embeddings=False):
         """
         Forward pass through ProtoPathway.
 
@@ -181,6 +181,9 @@ class ProtoPathway(nn.Module):
         # Classification
         logits = self.classifier(embedding.unsqueeze(0))  # [1, num_classes]
 
+        if return_embeddings:
+            return logits, pathway_mean, wsi_embedding
+
         return logits
 
     def get_attention_outputs(self):
@@ -209,44 +212,3 @@ class ProtoPathway(nn.Module):
         return outputs
 
 
-def build_protopath(cfg, wsi_centroids=None):
-    """
-    Build ProtoPathway model from config.
-
-    Args:
-        cfg: OmegaConf config object
-        wsi_centroids: Optional pre-computed centroids tensor
-
-    Returns:
-        ProtoPathway model instance
-    """
-    # Determine number of classes
-    if cfg.task == 'survival':
-        num_classes = cfg.survival.num_bins
-    else:
-        num_classes = cfg.classification.num_classes
-
-    model_cfg = cfg.model
-
-    model = ProtoPathway(
-        num_classes=num_classes,
-        # Gene encoder
-        gene_hidden_dim=model_cfg.gene_encoder.hidden_dim,
-        gene_num_layers=model_cfg.gene_encoder.num_layers,
-        gene_dropout=model_cfg.gene_encoder.dropout,
-        gene_num_heads=model_cfg.gene_encoder.num_heads,
-        gene_enabled=model_cfg.branches.gene,
-        # WSI encoder
-        wsi_input_dim=1536,  # UNI2-h
-        wsi_hidden_dim=model_cfg.wsi_encoder.hidden_dim,
-        wsi_num_prototypes=model_cfg.wsi_encoder.num_prototypes,
-        wsi_tau=model_cfg.wsi_encoder.tau,
-        wsi_centroids=wsi_centroids,
-        wsi_enabled=model_cfg.branches.wsi,
-        # Fusion
-        fusion_type=model_cfg.fusion.type,
-        fusion_num_heads=model_cfg.fusion.num_heads,
-        fusion_dropout=model_cfg.fusion.dropout
-    )
-
-    return model

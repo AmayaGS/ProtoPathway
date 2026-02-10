@@ -2,8 +2,10 @@
 Gene Expression Baseline Models for ProtoPathway.
 
 Implements:
-- SNN: Survival Neural Network (works with bipartite graph structure)
-- MLP: Simple Multi-Layer Perceptron (flattened gene expression)
+- SNN: Self Normalising Neural Network
+- MLP: Simple Multi-Layer Perceptron
+
+Take as input the bipartite graph and extract the gene expression
 
 All models follow the same interface:
     logits = model(data)  # data.x: node features, data.edge_index: graph
@@ -17,66 +19,36 @@ from torch_geometric.nn import global_mean_pool, global_max_pool
 
 class SNN(nn.Module):
     """
-    Survival Neural Network for gene expression.
+Implement a self normalizing network to handle tabular omics data
 
-    This model works with the bipartite graph structure but uses a simpler
-    architecture than ProtoPathway's GATv2-based pathway embedding.
-
-    Architecture:
-        gene_features -> pathway_aggregation -> MLP -> survival_logits
-
-    Reference:
-        Katzman et al. "DeepSurv" (BMC Medical Research Methodology 2018)
-        Extended for discrete survival bins (NLL loss compatible)
+Klambauer, Günter, et al.
+"Self-normalizing neural networks." Advances in neural information processing systems 30 (2017).
     """
 
     def __init__(
         self,
         num_genes: int,
-        hidden_dims: list = [256, 128],
+        hidden_dims: list = [256, 256],
         n_classes: int = 4,
-        dropout: float = 0.2
+        dropout: float = 0.25
     ):
         super().__init__()
 
+        layers = []
+        in_dim = num_genes
+
         self.num_genes = num_genes
 
-        # Gene embedding layer
-        self.gene_embed = nn.Sequential(
-            nn.Linear(1, hidden_dims[0] // 4),
-            nn.ReLU(),
-            nn.Dropout(dropout)
-        )
-
-        # Build MLP layers (LayerNorm for batch_size=1 compatibility)
-        layers = []
-        in_dim = num_genes * (hidden_dims[0] // 4)  # Flattened gene embeddings
-
-        for i, out_dim in enumerate(hidden_dims):
+        for out_dim in hidden_dims:
             layers.append(nn.Linear(in_dim, out_dim))
-            layers.append(nn.LayerNorm(out_dim))
-            layers.append(nn.SELU())  # SELU for self-normalizing
-            layers.append(nn.Dropout(dropout))
+            layers.append(nn.ELU())
+            layers.append(nn.AlphaDropout(p=dropout, inplace=False))
             in_dim = out_dim
 
-        self.mlp = nn.Sequential(*layers)
+        self.snn = nn.Sequential(*layers)
 
-        # Output layer
         self.classifier = nn.Linear(hidden_dims[-1], n_classes)
 
-        # Weight initialization for SELU
-        self._init_weights()
-
-        # Storage for interpretability
-        self._gene_importance = None
-
-    def _init_weights(self):
-        """Initialize weights for SELU activation."""
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='linear')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
 
     def forward(self, data, return_attention: bool = False):
         """
@@ -86,7 +58,6 @@ class SNN(nn.Module):
             data: PyG Data object with:
                 - x: [num_nodes, 1] node features (genes + pathways)
                 - num_genes: number of gene nodes
-            return_attention: Whether to compute gene importance
 
         Returns:
             logits: [batch_size, n_classes]
@@ -105,43 +76,25 @@ class SNN(nn.Module):
             for b in range(batch_size):
                 mask = batch == b
                 # Get first num_genes nodes for this sample
-                sample_x = x[mask][:num_genes]  # [num_genes, 1]
+                sample_x = x[mask][:num_genes].squeeze(-1)  # [num_genes]
                 gene_features_list.append(sample_x)
 
             gene_features = torch.stack(gene_features_list)  # [B, num_genes, 1]
         else:
-            gene_features = x[:num_genes].unsqueeze(0)  # [1, num_genes, 1]
+            gene_features = x[:num_genes].squeeze(-1).unsqueeze(0)  # [1, num_genes]
 
-        B, G, _ = gene_features.shape
-
-        # Embed each gene
-        h = self.gene_embed(gene_features)  # [B, num_genes, hidden//4]
-
-        # Flatten
-        h = h.view(B, -1)  # [B, num_genes * hidden//4]
-
-        # MLP
-        h = self.mlp(h)  # [B, hidden_dims[-1]]
-
-        # Classifier
-        logits = self.classifier(h)  # [B, n_classes]
-
-        if return_attention:
-            # Compute gradient-based gene importance
-            self._gene_importance = gene_features.detach()
+        h = self.snn(gene_features)
+        logits = self.classifier(h)
 
         return logits
 
-    def get_attention_outputs(self):
-        """Return gene importance scores."""
-        return {'gene_importance': self._gene_importance}
 
 
 class GeneExpressionMLP(nn.Module):
     """
     Simple MLP baseline for gene expression classification/survival.
 
-    Takes flattened gene expression as input (ignores graph structure).
+    Takes gene expression as input.
 
     Architecture:
         gene_expression_vector -> MLP -> logits
@@ -150,9 +103,9 @@ class GeneExpressionMLP(nn.Module):
     def __init__(
         self,
         num_genes: int,
-        hidden_dims: list = [512, 256, 128],
+        hidden_dims: list = [256, 256],
         n_classes: int = 4,
-        dropout: float = 0.3
+        dropout: float = 0.25
     ):
         super().__init__()
 
@@ -170,16 +123,6 @@ class GeneExpressionMLP(nn.Module):
 
         self.mlp = nn.Sequential(*layers)
         self.classifier = nn.Linear(hidden_dims[-1], n_classes)
-
-        self._init_weights()
-
-    def _init_weights(self):
-        """Xavier initialization."""
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
 
     def forward(self, data, return_attention: bool = False):
         """
@@ -215,9 +158,6 @@ class GeneExpressionMLP(nn.Module):
 
         return logits
 
-    def get_attention_outputs(self):
-        """No attention in MLP."""
-        return {}
 
 
 class PathwayMLP(nn.Module):
@@ -235,7 +175,7 @@ class PathwayMLP(nn.Module):
         self,
         num_genes: int,
         num_pathways: int,
-        hidden_dims: list = [256, 128],
+        hidden_dims: list = [256, 256],
         n_classes: int = 4,
         dropout: float = 0.2
     ):
@@ -245,7 +185,7 @@ class PathwayMLP(nn.Module):
         self.num_pathways = num_pathways
 
         # Gene projection
-        self.gene_proj = nn.Linear(1, 32)
+        self.gene_proj = nn.Linear(1, 128)
 
         # Pathway MLP (after aggregation)
         layers = []
@@ -270,7 +210,7 @@ class PathwayMLP(nn.Module):
 
         # Project gene features
         gene_x = x[:num_genes]  # [num_genes, 1]
-        gene_h = self.gene_proj(gene_x)  # [num_genes, 32]
+        gene_h = self.gene_proj(gene_x)  # [num_genes, 128]
 
         # Aggregate genes to pathways using edge_index
         # edge_index[0] = gene indices, edge_index[1] = pathway indices

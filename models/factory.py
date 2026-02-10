@@ -72,12 +72,53 @@ def get_available_models():
 # -----------------------------------------------------------------------------
 # ProtoPathway (main model)
 # -----------------------------------------------------------------------------
-@register_model("protopath")
-def build_protopath(cfg, wsi_centroids=None, **kwargs):
-    """Build ProtoPathway model."""
-    from models.protopath import build_protopath as _build_protopath
-    return _build_protopath(cfg, wsi_centroids=wsi_centroids)
 
+@register_model("protopath")
+def build_protopath(cfg, **kwargs):
+    """
+    Build ProtoPathway model from config.
+
+    Args:
+        cfg: OmegaConf config object
+        wsi_centroids: Optional pre-computed centroids tensor
+
+    Returns:
+        ProtoPathway model instance
+    """
+    from models.protopath import ProtoPathway
+
+    wsi_centroids = kwargs.get('wsi_centroids')
+
+    # Determine number of classes
+    if cfg.task == 'survival':
+        num_classes = cfg.survival.num_bins
+    else:
+        num_classes = cfg.classification.num_classes
+
+    model_cfg = cfg.model
+
+    model = ProtoPathway(
+        num_classes=num_classes,
+        # Gene encoder
+        gene_hidden_dim=model_cfg.gene_encoder.hidden_dim,
+        gene_num_layers=model_cfg.gene_encoder.num_layers,
+        gene_dropout=model_cfg.gene_encoder.dropout,
+        gene_num_heads=model_cfg.gene_encoder.num_heads,
+        gene_enabled=model_cfg.branches.gene,
+        # WSI encoder
+        wsi_input_dim=1536,
+        wsi_hidden_dim=model_cfg.wsi_encoder.hidden_dim,
+        wsi_num_prototypes=model_cfg.wsi_encoder.num_prototypes,
+        wsi_tau=model_cfg.wsi_encoder.tau,
+        wsi_centroids=wsi_centroids,
+        wsi_enabled=model_cfg.branches.wsi,
+        # Fusion
+        fusion_type=model_cfg.fusion.type,
+        fusion_num_heads=model_cfg.fusion.num_heads,
+        fusion_dropout=model_cfg.fusion.dropout
+    )
+
+    return model
 
 # -----------------------------------------------------------------------------
 # WSI Baselines
@@ -141,9 +182,9 @@ def build_snn(cfg, **kwargs):
 
     return SNN(
         num_genes=kwargs.get('num_genes', cfg.model.gene_encoder.get('num_genes')),
-        hidden_dims=cfg.model.gene_encoder.get('hidden_dims', [256, 128]),
+        hidden_dims=cfg.model.gene_encoder.get('hidden_dims', [256, 256]),
         n_classes=n_classes,
-        dropout=cfg.model.gene_encoder.dropout
+        dropout=cfg.model.wsi_encoder.dropout
     )
 
 
@@ -159,9 +200,9 @@ def build_mlp(cfg, **kwargs):
 
     return GeneExpressionMLP(
         num_genes=kwargs.get('num_genes', cfg.model.gene_encoder.get('num_genes')),
-        hidden_dims=cfg.model.gene_encoder.get('hidden_dims', [512, 256, 128]),
+        hidden_dims=cfg.model.gene_encoder.get('hidden_dims', [256, 256]),
         n_classes=n_classes,
-        dropout=cfg.model.gene_encoder.dropout
+        dropout=cfg.model.wsi_encoder.dropout # I'm using this because it's set to 0.25
     )
 
 # -----------------------------------------------------------------------------
@@ -189,7 +230,7 @@ def build_survpath(cfg, **kwargs):
         hidden_dim=cfg.model.wsi_encoder.get('hidden_dim', 256),
         num_heads=cfg.model.wsi_encoder.get('num_heads', 1),
         n_classes=n_classes,
-        dropout=cfg.model.fusion.get('dropout', 0.1),
+        dropout=cfg.model.fusion.get('dropout', 0.25),
     )
 
 @register_model("porpoise")
@@ -208,7 +249,7 @@ def build_porpoise(cfg, **kwargs):
         fusion='bilinear',
         hidden_dim=cfg.model.wsi_encoder.get('hidden_dim', 256),
         n_classes=n_classes,
-        dropout=cfg.model.wsi_encoder.get('dropout', 0.25),
+        dropout=cfg.model.fusion.get('dropout', 0.25),
         drop_input=0.10,
         gate_wsi=True,
         gate_omic=True,
@@ -260,7 +301,7 @@ def build_mmp_model(cfg, **kwargs):
         hidden_dim=cfg.model.wsi_encoder.get('hidden_dim', 256),
         num_heads=cfg.model.wsi_encoder.get('num_heads', 1),
         n_classes=n_classes,
-        dropout=cfg.model.wsi_encoder.get('dropout', 0.25),
+        dropout=cfg.model.fusion.get('dropout', 0.25),
         n_em_iters=1,
         tau=10
     )
@@ -279,7 +320,7 @@ def build_mcat_model(cfg, **kwargs):
         hidden_dim= cfg.model.wsi_encoder.get('hidden_dim', 256),
         num_heads= cfg.model.wsi_encoder.get('num_heads', 1),
         n_classes=n_classes,
-        dropout= cfg.model.wsi_encoder.get('dropout', 0.25),
+        dropout= cfg.model.fusion.get('dropout', 0.25),
         fusion= 'concat',
         n_transformer_layers= 1
     )

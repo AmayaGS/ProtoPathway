@@ -344,12 +344,20 @@ def train_fold(
     else:
         criterion = nn.CrossEntropyLoss()
 
-    # Optimizer
-    optimizer = AdamW(
-        model.parameters(),
-        lr=cfg.training.learning_rate,
-        weight_decay=cfg.training.weight_decay
-    )
+    if cfg.model.name == 'protopath':
+        optimizer = AdamW([
+            {'params': model.gene_encoder.parameters(), 'lr': cfg.model.gene_encoder.lr_gene},  # Needs higher LR
+            {'params': model.wsi_encoder.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi, 'weight_decay': cfg.training.weight_decay},  # Needs lower LR
+            {'params': model.fusion.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi, 'weight_decay': cfg.training.weight_decay},  # Tied to WSI pace
+            {'params': model.classifier.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,'weight_decay': cfg.training.weight_decay},  # Tied to fusion
+        ])
+    else:
+        optimizer = AdamW(
+            model.parameters(),
+            lr=cfg.training.learning_rate,
+            weight_decay=cfg.training.weight_decay
+        )
+
 
     # Scheduler
     scheduler = None

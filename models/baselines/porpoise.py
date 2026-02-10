@@ -190,7 +190,7 @@ class PORPOISE(nn.Module):
         Block = MLP_Block if use_mlp else SNN_Block
         self.fc_omic = nn.Sequential(
             Block(num_genes, hidden_dim),
-            Block(hidden_dim, hidden_dim, dropout=0.25),
+            Block(hidden_dim, hidden_dim, dropout=dropout),
         )
 
         # --- Fusion ---

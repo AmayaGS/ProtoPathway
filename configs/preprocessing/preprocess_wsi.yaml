@@ -6,7 +6,7 @@
 # Output: wsi_features.pkl, data_splits.pkl
 # =============================================================================
 
-dataset: TCGA-COADREAD  # choices: [BLCA, HNSC, STAD, COADREAD]
+dataset: TCGA-BLCA  # choices: [BLCA, BRCA, HNSC, STAD, COADREAD]
 
 # -----------------------------------------------------------------------------
 # Paths

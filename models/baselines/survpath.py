@@ -100,10 +100,10 @@ class SurvPath(nn.Module):
 
         # --- Post-attention processing ---
         self.feed_forward = FeedForward(hidden_dim, mult=2, dropout=dropout)
-        self.layer_norm = nn.LayerNorm(hidden_dim // 2)
-
         # Project down before layer norm
         self.post_proj = nn.Linear(hidden_dim, hidden_dim // 2)
+
+        self.layer_norm = nn.LayerNorm(hidden_dim // 2)
 
         # --- Classifier (pathway_pooled + wsi_pooled) ---
         self.classifier = nn.Sequential(

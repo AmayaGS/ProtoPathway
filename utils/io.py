@@ -169,10 +169,26 @@ def build_experiment_name(cfg, timestamp):
     if "wsi" in modality and cfg.model.name == "protopath":
         parts.append(f"P{cfg.model.wsi_encoder.num_prototypes}")
 
-    parts.extend([
-        f"lr{cfg.training.learning_rate:g}",
-        f"s{cfg.experiment.seed}",
-        timestamp,
-    ])
+    if cfg.model.name == "protopath":
+        parts.extend([
+            f"lr_gene{cfg.model.gene_encoder.lr_gene:g}",
+            f"lr_wsi{cfg.model.wsi_encoder.lr_wsi:g}",
+            f"l2{cfg.training.weight_decay:g}",
+            f"dr_gene{cfg.model.gene_encoder.dropout:g}",
+            f"dr_fusion{cfg.model.fusion.dropout:g}",
+            f"hd{cfg.model.gene_encoder.hidden_dim:g}",
+            f"tau{cfg.model.wsi_encoder.tau:g}",
+            f"s{cfg.experiment.seed}",
+            timestamp
+        ])
+    else:
+        parts.extend([
+            f"lr{cfg.training.learning_rate:g}",
+            f"l2{cfg.training.weight_decay:g}",
+            f"dr{cfg.model.wsi_encoder.dropout:g}",
+            f"hd{cfg.model.gene_encoder.hidden_dim:g}",
+            f"s{cfg.experiment.seed}",
+            timestamp
+        ])
 
     return "_".join(parts)

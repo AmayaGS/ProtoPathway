@@ -9,7 +9,7 @@
 # Usage: python main.py preprocess splits --config configs/preprocessing/create_splits.yaml
 # =============================================================================
 
-dataset: TCGA-COADREAD  # choices: [TCGA-BLCA, TCGA-HNSC, TCGA-STAD, TCGA-COADREAD]
+dataset: TCGA-BLCA  # choices: [TCGA-BLCA, TCGA-BRCA, TCGA-HNSC, TCGA-STAD, TCGA-COADREAD]
 
 # -----------------------------------------------------------------------------
 # Paths

@@ -98,7 +98,8 @@ class PrototypeMIL(nn.Module):
         similarity = torch.einsum("bpd,nd->bpn", x_norm, proto_norm)  # [1, P, N]
 
         # Soft assignment with temperature
-        alpha = F.softmax(self.tau * similarity, dim=2)  # [1, P, N]
+        # alpha = F.softmax(self.tau * similarity, dim=2)  # [1, P, N]
+        alpha = F.softmax(similarity, dim=2)  # [1, P, N]
 
         # Apply learnable gates
         gates = F.softplus(self.logit_g)  # [N], non-negative
