@@ -1,0 +1,66 @@
+# =============================================================================
+# WSI Preprocessing Configuration
+# =============================================================================
+# For pre-extracted features (UNI2-h from Mahmood lab HuggingFace).
+# Loads h5 files, integrates clinical data, creates splits.
+# Output: wsi_features.pkl, data_splits.pkl
+# =============================================================================
+
+dataset: TCGA-STAD  # choices: [BLCA, BRCA, HNSC, STAD, COADREAD]
+
+# -----------------------------------------------------------------------------
+# Paths
+# -----------------------------------------------------------------------------
+paths:
+  base_data_dir: C:/Users/Amaya/Documents/PhD/Data/TGCA_data
+  output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
+
+# -----------------------------------------------------------------------------
+# Input
+# -----------------------------------------------------------------------------
+input:
+  # Directory containing h5 files (one per slide)
+  features_dir: ${paths.base_data_dir}/${dataset}/${dataset}
+  # Clinical data with survival info
+  labels: ${paths.base_data_dir}/${dataset}/${dataset}.csv
+
+# -----------------------------------------------------------------------------
+# Output
+# -----------------------------------------------------------------------------
+output:
+  dir: ${paths.output_dir}/processed/${dataset}/
+  figures_dir: ${paths.output_dir}/processed/${dataset}/figures/
+  generate_figures: true
+
+# Feature extractor info (for metadata)
+feature_extractor:
+  name: UNI2-h  # or UNI, CONCH, etc.
+  dim: 1536     # UNI2-h: 1536, UNI: 1024
+
+# -----------------------------------------------------------------------------
+# Patient ID Parsing
+# -----------------------------------------------------------------------------
+# How to extract patient ID from h5 filename
+# TCGA format: TCGA-XX-XXXX-01Z-00-DX1.h5 -> TCGA-XX-XXXX
+parsing:
+  patient_id_expression: "'-'.join(filename.replace('.h5', '').split('-')[:3])"
+    # Set to null to include all slides
+  slide_type_filter: "DX"  # Diagnostic slides only (excludes frozen sections, etc.)
+
+columns:
+  patient_id: case_id
+
+max_slides_per_patient: 2
+
+## For survival analysis
+#survival:
+#  enabled: true  # Set to true to enable survival analysis
+#  target_column: "survival_months"  # Column name for survival time
+#  censorship_column: "censorship"      # Column name for censorship/event (1=event occurred, 0=censored)
+#  survival_bins: 4          # Number of risk groups for stratification (optional)
+#  alpha: 0.5
+
+# -----------------------------------------------------------------------------
+# Options
+# -----------------------------------------------------------------------------
+force_preprocess: false  # Re-run even if output exists

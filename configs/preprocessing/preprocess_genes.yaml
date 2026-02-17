@@ -1,0 +1,50 @@
+# Gene Expression Preprocessing Configuration
+# Run per dataset: python main.py preprocess genes --config configs/preprocessing/preprocess_genes.yaml
+#
+# This takes the Reactome base pathways and creates dataset-specific:
+# - Filtered gene expression matrix
+# - Dataset-specific pathway set (genes present in this dataset)
+# - Bipartite graph structure for the model
+
+dataset: TCGA-COADREAD  # Dataset name - used for input/output paths
+
+paths:
+  base_data_dir: C:/Users/Amaya/Documents/PhD/Data/TGCA_data
+  output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
+  generate_figures: true
+
+input:
+  expression: ${paths.base_data_dir}/${dataset}/rna_clean.csv # (patients × genes)
+  reactome_base: ${paths.output_dir}/processed/pathways/pathways_base_d5_g3-200_j90.pkl # Reactome base pathways (check the parameters used)
+  # GTF file for protein-coding gene annotations (optional, for filtering)
+  gtf: ${paths.base_data_dir}/Reactome/Homo_sapiens.GRCh38.113.gtf
+
+output:
+  dir: ${paths.output_dir}/processed/${dataset}/
+  figures_dir: ${paths.output_dir}/processed/${dataset}/figures/
+  generate_figures: true
+
+# Expression filtering (for datasets that need preprocessing)
+# Set enabled: false for TCGA data which is already preprocessed
+expression_filtering:
+  enabled: false
+  min_expression: 1 # Minimum expression threshold (e.g., CPM > 1)
+  min_proportion: 0.10 # Minimum proportion of patients that must express the gene
+  variance_proportion: 0.80 # Keep top X% most variable genes (after other filters)
+  log_transform: true # Log2 transform the data
+  center: true # Center genes (subtract mean)
+
+# Pathway filtering (applied per-dataset)
+pathway_filtering:
+  min_genes_present: 2 # Minimum genes from pathway that must be present in expression data
+  variance_filter: # Pathway variance filtering - remove low-variance pathways
+    enabled: true
+    # Keep top X% most variable pathways (by pathway activity score)
+    keep_percentile: 100  # Keep top 85%, remove bottom 15%
+
+visualization:
+  bipartite:
+    max_pathways: 30
+    max_genes_per_pathway: 15
+  hypergraph:
+    max_pathways: 60

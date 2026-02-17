@@ -1,0 +1,171 @@
+# =============================================================================
+# ProtoPathway Training Configuration
+# =============================================================================
+# Unified config for training ProtoPathway and baseline models.
+# Supports ablation studies through branch enable/disable.
+#
+# Usage:
+#   python main.py train --config configs/experiments/experiment.yaml
+#   python main.py train --config configs/experiments/experiment.yaml model.fusion=concat
+#   python main.py train --config configs/experiments/experiment.yaml branches.wsi=false
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Dataset Configuration
+# -----------------------------------------------------------------------------
+dataset: TCGA-COADREAD
+
+paths:
+  output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
+  processed_dir: ${paths.output_dir}/processed/${dataset}
+  code_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway
+
+# Input files (outputs from preprocessing)
+input:
+  gene_expression: ${paths.processed_dir}/gene_expression.csv
+  bipartite_graph: ${paths.processed_dir}/bipartite_graph.pt
+#  wsi_features: ${paths.processed_dir}/wsi_features.pkl
+  wsi_features_dir: ${paths.processed_dir}/wsi_features_per_patient
+  labels: ${paths.processed_dir}/labels.csv
+  splits: ${paths.processed_dir}/data_splits.pkl
+
+# Output directory for experiments
+output:
+  experiments_dir: ${paths.output_dir}/experiments/${dataset}
+
+# -----------------------------------------------------------------------------
+# Task Configuration
+# -----------------------------------------------------------------------------
+task: survival  # choices: [survival, classification]
+
+# Survival task settings
+survival:
+  num_bins: 4
+  time_col: survival_time
+  event_col: censorship # 1=censored (alive), 0=death
+
+# Classification task settings
+classification:
+  num_classes: 2
+
+# Column names
+patient_id_col: case_id
+
+# -----------------------------------------------------------------------------
+# Model Configuration
+# -----------------------------------------------------------------------------
+model:
+  name: protopath  # choices: [protopath, abmil, transmil, dsmil, mlp, snn, survpath, porpoise, mcat, motcat, pibd, mmp]
+
+  wsi_input_dim: 1536
+
+  # Branch enable/disable for ablation
+  branches:
+    gene: true
+    wsi: true
+
+  # Gene encoder settings
+  gene_encoder:
+    hidden_dim: 128 # for protopath
+    hidden_dims: [256, 256]  # For SNN/MLP baselines
+    num_layers: 3
+    dropout: 0.25
+    num_heads: 4  # GATv2 attention heads
+    lr_gene: 0.0001
+
+  # WSI encoder (PrototypeMIL) settings
+  wsi_encoder:
+    hidden_dim: 128
+    num_prototypes: 16
+    tau: 0.1  # Softmax temperature
+    dropout: 0.1
+    num_layers: 2  # For TransMIL
+    num_heads: 1  # For TransMIL
+    use_precomputed_centroids: true
+    lr_wsi: 0.0001
+
+  # Fusion settings
+  fusion:
+    type: cross_attention  # choices: [concat, cross_attention, bilinear, gated]
+    hidden_dim: 128
+    num_heads: 2
+    dropout: 0.25
+
+  pibd:
+    gamma: 1 # gamma for PIBD model
+    sigma: 0.1
+    num_patches: 4096
+
+
+# -----------------------------------------------------------------------------
+# Training Configuration
+# -----------------------------------------------------------------------------
+training:
+  debug_survival: false
+  # Optimization
+  learning_rate: 0.00001
+  weight_decay: 0.00001  # L2 regularization
+  l1_lambda: 0.0  # L1 regularization
+
+  # Batching (batch_size=1 for MIL)
+  batch_size: 1
+  num_workers: 0
+
+  # Training duration
+  max_epochs: 100
+  patience: 50  # Early stopping patience
+
+  # Learning rate scheduler
+  scheduler:
+    type: null  # choices: [cosine, step, plateau, none]
+    # Step scheduler settings
+    step_size: 10
+    gamma: 0.5
+    # Plateau scheduler settings
+    factor: 0.5
+    plateau_patience: 5
+
+  # Gradient clipping
+  grad_clip: 0  # 0 = disabled
+
+  # Loss weighting for survival
+  nll_alpha: 0.0  # Weight on uncensored samples in NLL loss
+
+  # Model selection metric
+  monitor_metric: c_index  # For survival: c_index, For classification: acc
+  monitor_mode: max  # max for c_index/acc, min for loss
+
+# -----------------------------------------------------------------------------
+# Cross-Validation Configuration
+# -----------------------------------------------------------------------------
+cv:
+  enabled: true
+  # If false, uses Train/Test split from preprocessing
+
+# -----------------------------------------------------------------------------
+# Experiment Settings
+# -----------------------------------------------------------------------------
+experiment:
+  name: null  # Auto-generated if null
+  seed: 42
+  deterministic: true
+
+# -----------------------------------------------------------------------------
+# Logging and Checkpointing
+# -----------------------------------------------------------------------------
+logging:
+  log_every_n_steps: 10
+  save_predictions: true  # Save patient-level predictions
+
+checkpointing:
+  save_best_only: true
+  save_last: true
+
+# -----------------------------------------------------------------------------
+# Visualization (computed during evaluation, not training)
+# -----------------------------------------------------------------------------
+visualization:
+  # These are computed during evaluation mode, not during training
+  enabled: false
+  save_attention_weights: false
+  save_prototype_assignments: false
