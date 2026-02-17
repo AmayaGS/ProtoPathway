@@ -203,7 +203,7 @@ def save_source_snapshot(output_dir, project_root,
 
     project_root = Path(project_root)
     exclude_dirs = {'__pycache__', '.git', 'outputs', 'data',
-                    'experiments_out', '.venv', 'node_modules', '.idea', 'legacy_code'}
+                    'experiments_out', '.venv', 'node_modules', '.idea', 'legacy_code', 'protopath'}
 
     for pattern in patterns:
         for filepath in project_root.rglob(pattern):

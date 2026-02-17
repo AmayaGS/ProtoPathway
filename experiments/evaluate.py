@@ -13,6 +13,7 @@ import json
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import torch
 from torch_geometric.loader import DataLoader as PyGDataLoader
@@ -25,7 +26,7 @@ from sklearn.metrics import (
 
 from utils.dataset import load_dataset_components, MultimodalDataset
 from utils.survival import calculate_risk
-from utils.losses import NLLSurvLoss
+# from utils.losses import NLLSurvLoss
 
 # Use factory instead of direct import
 from models.factory import build_model, get_model_requirements
@@ -266,133 +267,211 @@ def generate_metrics_report(results, output_path, cfg):
 def run(cfg):
     """
     Main evaluation entry point.
-
-    Expects cfg to have:
-    - checkpoint: Path to model checkpoint
-    - All other config fields from training
+    Iterates all fold checkpoints, evaluates each, saves per-fold outputs,
+    and computes aggregate CV metrics.
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f"Using device: {device}")
 
-    # Load checkpoint
-    checkpoint_path = cfg.checkpoint
-    logging.info(f"Loading checkpoint: {checkpoint_path}")
+    exp_dir = Path(cfg.checkpoint_dir)
 
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    # Find all fold checkpoints
+    checkpoint_paths = sorted(exp_dir.glob('best_model_fold_*.pt'))
+    if not checkpoint_paths:
+        checkpoint_paths = sorted(exp_dir.glob('*fold*.pt'))
+    if not checkpoint_paths:
+        raise FileNotFoundError(f"No fold checkpoints found in {exp_dir}")
 
-    # Get experiment directory
-    exp_dir = Path(checkpoint_path).parent
-    output_dir = exp_dir / 'evaluation'
-    os.makedirs(output_dir, exist_ok=True)
+    logging.info(f"Found {len(checkpoint_paths)} fold checkpoints")
 
-    # Load data
+    # Load data components once (shared across folds)
     data_components = load_dataset_components(cfg)
     splits = data_components['splits']
 
-    # Determine which patients to evaluate
-    checkpoint_name = Path(checkpoint_path).stem
-    if 'fold' in checkpoint_name:
-        fold_idx = int(checkpoint_name.split('_')[-1])
+    return_attention = True
+
+    output_dir = exp_dir / 'evaluation'
+    os.makedirs(output_dir, exist_ok=True)
+
+    fold_results = []
+
+    for ckpt_path in checkpoint_paths:
+        # Parse fold index from filename
+        fold_idx = int(ckpt_path.stem.split('_')[-1])
         fold_name = f"Fold {fold_idx}"
+        logging.info(f"\n{'='*60}")
+        logging.info(f"Evaluating {fold_name}")
+        logging.info(f"Checkpoint: {ckpt_path}")
+        logging.info(f"{'='*60}")
+
+        checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
+
+        # Get validation patients for this fold
         patient_ids = splits['CV'][fold_name]['Val']
-        logging.info(f"Evaluating fold {fold_idx} validation set: {len(patient_ids)} patients")
-    elif len(splits['Test']) > 0:
-        patient_ids = splits['Test']
-        fold_idx = None
-        logging.info(f"Evaluating test set: {len(patient_ids)} patients")
-    else:
-        fold_name = list(splits['CV'].keys())[0]
-        patient_ids = splits['CV'][fold_name]['Val']
-        fold_idx = 0
-        logging.info(f"Evaluating first fold validation set: {len(patient_ids)} patients")
+        logging.info(f"  Patients: {len(patient_ids)}")
 
-    # Create dataset
-    eval_dataset = MultimodalDataset(
-        patient_ids=patient_ids,
-        gene_expression_df=data_components['gene_expression_df'],
-        graph_data=data_components['graph_data'],
-        wsi_features=data_components['wsi_features'],
-        labels_df=data_components['labels_df'],
-        task=cfg.task,
-        patient_id_col=cfg.patient_id_col
-    )
-
-    eval_loader = PyGDataLoader(
-        eval_dataset,
-        batch_size=cfg.training.batch_size,
-        shuffle=False,
-        num_workers=cfg.training.num_workers
-    )
-
-    # Prepare model kwargs
-    model_kwargs = {
-        'num_genes': data_components['graph_data']['num_genes'],
-        'num_pathways': data_components['graph_data']['num_pathways']
-    }
-
-    # Load centroids if needed
-    model_reqs = get_model_requirements(cfg.model.name)
-    if model_reqs.get('needs_centroids') and cfg.model.get('branches', {}).get('wsi', False):
-        centroid_path = exp_dir / f'centroids_fold_{fold_idx if fold_idx is not None else 0}.pt'
-        if centroid_path.exists():
-            model_kwargs['wsi_centroids'] = torch.load(centroid_path, weights_only=True)
-            logging.info("Loaded pre-computed centroids")
-
-    # Build model using factory
-    model = build_model(cfg, **model_kwargs)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model = model.to(device)
-    model.eval()
-
-    logging.info(f"Model loaded from epoch {checkpoint.get('epoch', 'unknown')}")
-
-    # Evaluate
-    return_attention = cfg.visualization.enabled if hasattr(cfg, 'visualization') else False
-    results = evaluate_model(model, eval_loader, cfg, device, return_attention=return_attention)
-
-    # Print summary
-    logging.info("\n" + "=" * 60)
-    logging.info("Evaluation Results")
-    logging.info("=" * 60)
-
-    if cfg.task == 'survival':
-        logging.info(f"  C-index: {results['c_index']:.4f}")
-        logging.info(f"  Events: {results['n_events']}, Censored: {results['n_censored']}")
-    else:
-        logging.info(f"  Accuracy: {results['accuracy']:.2f}%")
-        logging.info(f"  AUC: {results['auc']:.4f}")
-        logging.info(f"  F1 Score: {results['f1']:.4f}")
-
-    # Save outputs
-    save_predictions(results, output_dir, cfg, fold_idx)
-
-    report_path = output_dir / 'metrics_report.txt'
-    generate_metrics_report(results, report_path, cfg)
-
-    # Save attention weights if requested
-    if return_attention and 'attention_outputs' in results:
-        save_attention_weights(
-            results['attention_outputs'],
-            results['patient_ids'],
-            output_dir,
-            fold_idx
+        # Create dataset and loader
+        eval_dataset = MultimodalDataset(
+            patient_ids=patient_ids,
+            gene_expression_df=data_components['gene_expression_df'],
+            graph_data=data_components['graph_data'],
+            wsi_features=data_components['wsi_features'],
+            labels_df=data_components['labels_df'],
+            task=cfg.task,
+            patient_id_col=cfg.patient_id_col
         )
 
-    # Save metrics as JSON
-    metrics_json = {
-        k: v for k, v in results.items()
-        if k not in ['risks', 'times', 'events', 'bins', 'probs', 'targets',
-                     'preds', 'attention_outputs', 'patient_ids', 'confusion_matrix',
-                     'classification_report']
-    }
+        eval_loader = PyGDataLoader(
+            eval_dataset,
+            batch_size=cfg.training.batch_size,
+            shuffle=False,
+            num_workers=cfg.training.num_workers
+        )
 
-    if 'confusion_matrix' in results:
-        metrics_json['confusion_matrix'] = results['confusion_matrix']
+        # Build model
+        model_kwargs = {
+            'num_genes': data_components['graph_data']['num_genes'],
+            'num_pathways': data_components['graph_data']['num_pathways']
+        }
 
-    json_path = output_dir / 'metrics.json'
+        model_reqs = get_model_requirements(cfg.model.name)
+        if model_reqs.get('needs_centroids') and cfg.model.get('branches', {}).get('wsi', False):
+            centroid_path = exp_dir / f'centroids_fold_{fold_idx}.pt'
+            if centroid_path.exists():
+                model_kwargs['wsi_centroids'] = torch.load(centroid_path, weights_only=True)
+                logging.info("  Loaded pre-computed centroids")
+
+        model = build_model(cfg, **model_kwargs)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model = model.to(device)
+
+        logging.info(f"  Model loaded from epoch {checkpoint.get('epoch', 'unknown')}")
+
+        # Evaluate
+        results = evaluate_model(model, eval_loader, cfg, device, return_attention=return_attention)
+
+        # Log fold summary
+        if cfg.task == 'survival':
+            logging.info(f"  C-index: {results['c_index']:.4f}")
+            logging.info(f"  Events: {results['n_events']}, Censored: {results['n_censored']}")
+        else:
+            logging.info(f"  Accuracy: {results['accuracy']:.2f}%")
+            logging.info(f"  AUC: {results['auc']:.4f}")
+
+        # Save per-fold outputs
+        save_predictions(results, output_dir, cfg, fold_idx=fold_idx)
+        generate_metrics_report(results, output_dir / f'metrics_report_fold_{fold_idx}.txt', cfg)
+
+        if return_attention and 'attention_outputs' in results:
+            save_attention_weights(
+                results['attention_outputs'],
+                results['patient_ids'],
+                output_dir,
+                fold_idx=fold_idx
+            )
+
+        # Store for aggregation
+        fold_results.append({'fold_idx': fold_idx, **results})
+
+        # Free GPU memory
+        del model
+        torch.cuda.empty_cache()
+
+    # ---- Aggregate CV metrics ----
+    logging.info(f"\n{'='*60}")
+    logging.info("Cross-Validation Summary")
+    logging.info(f"{'='*60}")
+
+    cv_summary = aggregate_cv_results(fold_results, cfg)
+
+    json_path = output_dir / 'cv_metrics.json'
     with open(json_path, 'w') as f:
-        json.dump(metrics_json, f, indent=2)
+        json.dump(cv_summary, f, indent=2)
 
-    logging.info(f"\nResults saved to {output_dir}")
+    report_path = output_dir / 'cv_summary.txt'
+    write_cv_summary_report(cv_summary, report_path, cfg)
 
-    return results
+    logging.info(f"\nAll results saved to {output_dir}")
+
+    return fold_results, cv_summary
+
+
+def aggregate_cv_results(fold_results, cfg):
+    """Compute mean ± std across folds."""
+    summary = {'n_folds': len(fold_results)}
+
+    if cfg.task == 'survival':
+        c_indices = [r['c_index'] for r in fold_results]
+        event_rates = [r['event_rate'] for r in fold_results]
+
+        summary.update({
+            'mean_c_index': float(np.mean(c_indices)),
+            'std_c_index': float(np.std(c_indices)),
+            'per_fold': {
+                f"fold_{r['fold_idx']}": {
+                    'c_index': r['c_index'],
+                    'n_events': r['n_events'],
+                    'n_censored': r['n_censored'],
+                    'event_rate': r['event_rate'],
+                    'n_patients': r['n_events'] + r['n_censored']
+                }
+                for r in fold_results
+            },
+            'mean_event_rate': float(np.mean(event_rates))
+        })
+
+        logging.info(f"  C-index: {summary['mean_c_index']:.4f} ± {summary['std_c_index']:.4f}")
+        for fold_key, fold_data in summary['per_fold'].items():
+            logging.info(f"    {fold_key}: {fold_data['c_index']:.4f} "
+                        f"(n={fold_data['n_patients']}, events={fold_data['n_events']})")
+    else:
+        metrics = ['accuracy', 'auc', 'f1', 'precision', 'recall']
+        for m in metrics:
+            vals = [r[m] for r in fold_results]
+            summary[f'mean_{m}'] = float(np.mean(vals))
+            summary[f'std_{m}'] = float(np.std(vals))
+
+        summary['per_fold'] = {
+            f"fold_{r['fold_idx']}": {m: r[m] for m in metrics}
+            for r in fold_results
+        }
+
+        logging.info(f"  Accuracy: {summary['mean_accuracy']:.2f} ± {summary['std_accuracy']:.2f}")
+        logging.info(f"  AUC: {summary['mean_auc']:.4f} ± {summary['std_auc']:.4f}")
+        logging.info(f"  F1:  {summary['mean_f1']:.4f} ± {summary['std_f1']:.4f}")
+
+    return summary
+
+
+def write_cv_summary_report(cv_summary, output_path, cfg):
+    """Write human-readable CV summary."""
+    with open(output_path, 'w') as f:
+        f.write("=" * 60 + "\n")
+        f.write("ProtoPathway Cross-Validation Summary\n")
+        f.write("=" * 60 + "\n\n")
+
+        f.write(f"Dataset: {cfg.dataset}\n")
+        f.write(f"Task: {cfg.task}\n")
+        f.write(f"Model: {cfg.model.name}\n")
+        f.write(f"Number of folds: {cv_summary['n_folds']}\n\n")
+
+        if cfg.task == 'survival':
+            f.write(f"C-index: {cv_summary['mean_c_index']:.4f} ± {cv_summary['std_c_index']:.4f}\n\n")
+            f.write("Per-fold breakdown:\n")
+            for fold_key, fold_data in cv_summary['per_fold'].items():
+                f.write(f"  {fold_key}: C-index={fold_data['c_index']:.4f}  "
+                       f"n={fold_data['n_patients']}  "
+                       f"events={fold_data['n_events']}  "
+                       f"censored={fold_data['n_censored']}\n")
+        else:
+            f.write(f"Accuracy:  {cv_summary['mean_accuracy']:.2f} ± {cv_summary['std_accuracy']:.2f}\n")
+            f.write(f"AUC:       {cv_summary['mean_auc']:.4f} ± {cv_summary['std_auc']:.4f}\n")
+            f.write(f"F1:        {cv_summary['mean_f1']:.4f} ± {cv_summary['std_f1']:.4f}\n")
+            f.write(f"Precision: {cv_summary['mean_precision']:.4f} ± {cv_summary['std_precision']:.4f}\n")
+            f.write(f"Recall:    {cv_summary['mean_recall']:.4f} ± {cv_summary['std_recall']:.4f}\n\n")
+            f.write("Per-fold breakdown:\n")
+            for fold_key, fold_data in cv_summary['per_fold'].items():
+                f.write(f"  {fold_key}: Acc={fold_data['accuracy']:.2f}  "
+                       f"AUC={fold_data['auc']:.4f}  F1={fold_data['f1']:.4f}\n")
+
+    logging.info(f"Saved CV summary to {output_path}")

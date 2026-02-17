@@ -28,6 +28,7 @@ Usage:
 """
 
 import argparse
+import os
 import logging
 from omegaconf import OmegaConf
 
@@ -86,10 +87,11 @@ def parse_args():
     # -------------------------------------------------------------------------
     # Evaluate
     # -------------------------------------------------------------------------
-    eval_p = subparsers.add_parser('evaluate', help='Evaluate a trained model')
-    eval_p.add_argument('--checkpoint', required=True)
-    eval_p.add_argument('--config', default=None, help='Config file (inferred from checkpoint if not provided)')
-    eval_p.add_argument('--device', default='cuda')
+    eval_parser = subparsers.add_parser('evaluate', help='Evaluate trained model')
+    eval_parser.add_argument('--checkpoint-dir', type=str, required=True,
+                             help='Experiment directory containing fold checkpoints')
+    eval_parser.add_argument('--config', type=str, default=None,
+                             help='Config file (auto-loads from checkpoint-dir if not provided)')
 
     # -------------------------------------------------------------------------
     # Visualize
@@ -186,19 +188,17 @@ def main():
     elif args.command == 'evaluate':
         from experiments.evaluate import run
 
-        # Load config from checkpoint directory if not provided
         if args.config is None:
-            import os
-            checkpoint_dir = os.path.dirname(args.checkpoint)
-            config_path = os.path.join(checkpoint_dir, 'config.yaml')
+            config_path = os.path.join(args.checkpoint_dir, 'config.yaml')
             if not os.path.exists(config_path):
-                raise FileNotFoundError(f"No config found at {config_path}. Please provide --config.")
+                raise FileNotFoundError(
+                    f"No config found at {config_path}. Please provide --config."
+                )
             cfg = load_config(config_path)
         else:
             cfg = load_config(args.config)
 
-        cfg.checkpoint = args.checkpoint
-        cfg.device = args.device
+        cfg.checkpoint_dir = args.checkpoint_dir
         run(cfg)
 
     elif args.command == 'visualize':

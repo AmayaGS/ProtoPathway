@@ -129,9 +129,10 @@ class PrototypeMIL(nn.Module):
         return self.patch_assignments
 
     def get_gate_weights(self):
-        """Get normalized gate weights for each prototype."""
-        gates = F.softplus(self.logit_g)
-        return (gates / gates.sum()).detach()
+        """Get gate weights from last forward pass."""
+        if self.patch_assignments is not None and 'gate_weights' in self.patch_assignments:
+            return self.patch_assignments['gate_weights']
+        return None
 
 
 class WSIEncoderUnimodal(nn.Module):

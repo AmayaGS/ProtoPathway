@@ -166,6 +166,6 @@ checkpointing:
 # -----------------------------------------------------------------------------
 visualization:
   # These are computed during evaluation mode, not during training
-  enabled: false
-  save_attention_weights: false
-  save_prototype_assignments: false
+  enabled: true
+  save_attention_weights: true
+  save_prototype_assignments: true

@@ -15,7 +15,10 @@ import pickle
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+
+import torch
 
 
 def plot_kaplan_meier(times, events, risk_scores, output_path, n_groups=2):
@@ -174,7 +177,6 @@ def run(results_dir, output_dir=None):
         logging.warning("No predictions file found")
         return
 
-    import pandas as pd
     predictions = pd.read_csv(pred_files[0])
 
     # Check task type

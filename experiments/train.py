@@ -187,20 +187,6 @@ def validate(model, loader, criterion, cfg, device):
 
     avg_loss = total_loss / len(loader)
 
-    # if hasattr(model.gene_encoder, '_gate_summary'):
-    #     s = model.gene_encoder._gate_summary
-    #     logging.info(
-    #         f"  [Gates] mean={s['mean']:.3f} std={s['std']:.3f} | "
-    #         f"saturated: {s['pct_high']:.1f}% high, {s['pct_low']:.1f}% low"
-    #     )
-
-    # if hasattr(model.gene_encoder, '_rank_summary'):
-    #     s = model.gene_encoder._rank_summary
-    #     logging.info(
-    #         f"  [Rank] top_ratio mean={s['mean_top_ratio']:.2f}, "
-    #         f"max={s['max_top_ratio']:.2f} | "
-    #         f"dominated(>3x): {s['pct_dominated']:.1f}%"
-    #     )
 
     if cfg.task == 'survival':
         risks = torch.cat(all_risks).numpy()

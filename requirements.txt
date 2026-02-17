@@ -10,10 +10,10 @@ huggingface_hub==0.28.1
 timm==1.0.14
 
 # Scientific computing and data processing
-numpy==2.0.2
+numpy==2.2.6
 pandas==2.2.3
 scipy==1.13.1
-scikit-learn==1.6.1
+scikit-learn==1.7.2
 einops==0.8.0
 nystrom_attention==0.0.12
 POT==0.9.6.post1
@@ -27,10 +27,10 @@ openslide-bin==4.0.0.6
 openslide-python==1.4.1
 
 # Survival analysis
-scikit-survival==0.23.1
+scikit-survival==0.25.0
 
 # Graph processing
-networkx==3.2.1
+networkx==3.4.2
 
 # System utilities
 psutil==5.9.8

@@ -70,9 +70,6 @@ class CrossAttentionFusion(nn.Module):
         self.norm_wsi = nn.LayerNorm(hidden_dim)
         self.norm_pp = nn.LayerNorm(hidden_dim)
 
-        # Final projection (combines 3 embeddings)
-        # self.projection = nn.Linear(hidden_dim * 3, hidden_dim)
-
         self.projection = nn.Sequential(
                           nn.Linear(hidden_dim * 3, 64),
                           nn.ReLU(),
@@ -102,15 +99,12 @@ class CrossAttentionFusion(nn.Module):
             need_weights=True,
             average_attn_weights=True
         )
-        # attended_proto: [1, num_prototypes, hidden_dim]
-        # attn_weights: [1, num_prototypes, num_pathways]
-
-        # Mean pool attended prototypes
-        # attended_proto_mean = attended_proto.mean(dim=1).squeeze(0)  # [hidden_dim]
 
         gates_proto = self.gate_pp(attended_proto) # [1, N, 1]
         gates_proto = F.softmax(gates_proto, dim=1)
         weighted_proto = (gates_proto * attended_proto).sum(dim=1)  # [1, hidden_dim]
+
+        self.proto_pathway_gate_weights = gates_proto.squeeze(0).detach()
 
         # Combine all three embeddings
         combined = torch.cat([

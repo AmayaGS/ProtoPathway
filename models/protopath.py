@@ -34,22 +34,22 @@ class ProtoPathway(nn.Module):
         self,
         num_classes,
         # Gene encoder params
-        gene_hidden_dim=256,
+        gene_hidden_dim=128,
         gene_num_layers=3,
         gene_dropout=0.25,
         gene_num_heads=4,
         gene_enabled=True,
         # WSI encoder params
         wsi_input_dim=1536,
-        wsi_hidden_dim=256,
+        wsi_hidden_dim=128,
         wsi_num_prototypes=16,
-        wsi_tau=10.0,
+        wsi_tau=0.1,
         wsi_centroids=None,
         wsi_enabled=True,
         # Fusion params
         fusion_type='cross_attention',
         fusion_num_heads=2,
-        fusion_dropout=0.5
+        fusion_dropout=0.25
     ):
         """
         Initialize ProtoPathway.
@@ -204,7 +204,7 @@ class ProtoPathway(nn.Module):
 
         if self.wsi_enabled:
             outputs['patch_assignments'] = self.wsi_encoder.get_prototype_assignments()
-            outputs['prototype_gate_weights'] = self.wsi_encoder.get_gate_weights()
+            outputs['fusion_gate_weights'] = self.fusion.proto_pathway_gate_weights
 
         if self.last_attention_weights is not None:
             outputs['cross_modal_attention'] = self.last_attention_weights
