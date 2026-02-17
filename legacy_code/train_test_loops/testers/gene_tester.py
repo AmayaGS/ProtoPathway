@@ -10,10 +10,10 @@ from sklearn.metrics import roc_curve, precision_recall_curve, auc
 
 from torch.utils.data import DataLoader
 
-from train_test_loops.testers.base_tester import BaseTester
-from utils.dataset_utils import GeneExpressionDataset, HypergraphDataset, build_incidence_matrix
-from models.ProtoPathway import PathwayEmbeddingModel
-from models.GeneExpressionMLP import MLPBaseline
+from legacy_code.train_test_loops.testers.base_tester import BaseTester
+from legacy_code.utils.dataset_utils import GeneExpressionDataset, HypergraphDataset, build_incidence_matrix
+from legacy_code.models.ProtoPathway import PathwayEmbeddingModel
+from legacy_code.models.GeneExpressionMLP import MLPBaseline
 
 
 class GeneExpressionTester(BaseTester):
@@ -171,7 +171,7 @@ class GeneExpressionTester(BaseTester):
             self.logger.logger.warning("Biomarker analysis only available for Hypergraph model")
             return None
 
-        from utils.biomarker_analysis import BiomarkerAnalysis
+        from legacy_code.utils.biomarker_analysis import BiomarkerAnalysis
 
         # Initialize biomarker analyzer
         analyzer = BiomarkerAnalysis(

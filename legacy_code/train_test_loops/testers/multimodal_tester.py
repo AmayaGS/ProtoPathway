@@ -1,5 +1,4 @@
 # train_test_loops/testers/multimodal_tester.py
-from email.policy import strict
 
 import pandas as pd
 
@@ -8,11 +7,11 @@ import torch.nn as nn
 
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
-from train_test_loops.testers.base_tester import BaseTester
+from legacy_code.train_test_loops.testers.base_tester import BaseTester
 
-from utils.dataset_utils import HypergraphDataset, build_incidence_matrix
-from utils.loss_utils import NLLSurvLoss
-from models.MM_fusion_vis import ProtoPathwayFusion
+from legacy_code.utils.dataset_utils import HypergraphDataset, build_incidence_matrix
+from legacy_code.utils.loss_utils import NLLSurvLoss
+from legacy_code.models.MM_fusion_vis import ProtoPathwayFusion
 
 
 

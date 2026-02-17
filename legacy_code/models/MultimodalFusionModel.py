@@ -1,12 +1,11 @@
 # models/MultimodalFusionModel.py
-from unittest.mock import patch
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.ProtoPathway import PathwayEmbeddingModel
-from models.Prototype import ProtoMIL_V1
+from legacy_code.models.ProtoPathway import PathwayEmbeddingModel
+from legacy_code.models.Prototype import ProtoMIL_V1
 
 
 class ProtoPathwayFusion(torch.nn.Module):

@@ -11,11 +11,11 @@ from sklearn.metrics import (roc_auc_score, precision_score, recall_score, f1_sc
 import torch
 import torch.nn.functional as F
 
-from train_test_loops.trainers.base_trainer import BaseTrainer
-from models.Prototype import ProtoMIL_V1
+from legacy_code.train_test_loops.trainers.base_trainer import BaseTrainer
+from legacy_code.models.Prototype import ProtoMIL_V1
 
-from utils.loss_utils import NLLSurvLoss
-from utils.survival_utils import calculate_risk
+from legacy_code.utils.loss_utils import NLLSurvLoss
+from legacy_code.utils.survival_utils import calculate_risk
 from sksurv.metrics import concordance_index_censored
 
 

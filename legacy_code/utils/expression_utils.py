@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from utils.helpers import ensure_directory
+from legacy_code.utils.helpers import ensure_directory
 
 
 def extract_gene_annotations(gtf_path, output_path):

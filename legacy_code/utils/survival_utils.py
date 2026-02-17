@@ -8,7 +8,7 @@ import pickle
 
 import torch
 
-from utils.helpers import ensure_directory
+from legacy_code.utils.helpers import ensure_directory
 
 def load_tcga_splits(config, splits_dir):
     """

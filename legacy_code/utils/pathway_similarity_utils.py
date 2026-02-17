@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
-from utils.helpers import ensure_directory
+from legacy_code.utils.helpers import ensure_directory
 
 
 def jaccard_similarity(set1, set2):

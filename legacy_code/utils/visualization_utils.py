@@ -12,10 +12,10 @@ from sklearn.metrics import roc_curve, precision_recall_curve, auc, average_prec
 
 from sklearn.preprocessing import label_binarize
 import itertools
-from typing import Dict, List, Tuple, Any, Optional, Union
+from typing import Dict, List, Tuple, Any, Optional
 
-from utils.helpers import ensure_directory
-from utils.survival_utils import stratify_risk_groups, prepare_km_data
+from legacy_code.utils.helpers import ensure_directory
+from legacy_code.utils.survival_utils import stratify_risk_groups, prepare_km_data
 
 # ============================== INDIVIDUAL PLOT FUNCTIONS ==============================
 

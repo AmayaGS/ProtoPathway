@@ -3,18 +3,14 @@
 import os
 import pickle
 from pathlib import Path
-import pandas as pd
 
-from utils.helpers import ensure_directory
-from utils.model_utils import load_wsi_folds, load_wsi_folds
+from legacy_code.utils.helpers import ensure_directory
+from legacy_code.utils.model_utils import load_wsi_folds
 
-from utils.kmeans_init import sample_embeddings, init_prototypes
+from legacy_code.utils.kmeans_init import sample_embeddings, init_prototypes
 
-import torch
-
-from utils.model_utils import load_wsi_h5_embeddings
-from train_test_loops.trainers.wsi_trainer import WSITrainer
-from utils.visualization_utils import (
+from legacy_code.train_test_loops.trainers.wsi_trainer import WSITrainer
+from legacy_code.utils.visualization_utils import (
     visualize_fold_results,
     visualize_aggregated_results,
     visualize_full_training_results
