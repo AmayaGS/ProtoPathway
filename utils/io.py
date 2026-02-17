@@ -4,6 +4,8 @@ I/O utilities for file handling.
 
 import os
 import logging
+import shutil
+from pathlib import Path
 
 from models.factory import get_model_requirements
 
@@ -192,3 +194,26 @@ def build_experiment_name(cfg, timestamp):
         ])
 
     return "_".join(parts)
+
+
+def save_source_snapshot(output_dir, project_root,
+                         patterns=('*.py', '*.yaml')):
+    """Save a snapshot of all source files with the experiment."""
+    snapshot_dir = os.path.join(output_dir, 'source_snapshot')
+
+    project_root = Path(project_root)
+    exclude_dirs = {'__pycache__', '.git', 'outputs', 'data',
+                    'experiments_out', '.venv', 'node_modules', '.idea', 'legacy_code'}
+
+    for pattern in patterns:
+        for filepath in project_root.rglob(pattern):
+            # Skip excluded directories
+            if any(ex in filepath.parts for ex in exclude_dirs):
+                continue
+
+            rel_path = filepath.relative_to(project_root)
+            dest = Path(snapshot_dir) / rel_path
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(filepath, dest)
+
+    logging.info(f"Source snapshot saved to {snapshot_dir}")

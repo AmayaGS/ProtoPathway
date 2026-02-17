@@ -9,6 +9,7 @@ Handles loading and combining:
 Designed to work with preprocessed outputs from the pipeline.
 """
 
+import os
 import pickle
 import logging
 import numpy as np
@@ -116,9 +117,9 @@ class MultimodalDataset(Dataset):
         x[:self.num_genes] = gene_expr_tensor
 
         # --- WSI Features ---
-        wsi_feat = self.wsi_features[patient_id]
-        if not isinstance(wsi_feat, torch.Tensor):
-            wsi_feat = torch.tensor(wsi_feat, dtype=torch.float32)
+        wsi_path = self.wsi_features[patient_id]
+        if isinstance(wsi_path, str):
+            wsi_feat = torch.load(wsi_path, weights_only=True)
 
         # --- Labels ---
         label_row = self.labels_df.loc[patient_id]
@@ -192,11 +193,18 @@ def load_dataset_components(cfg):
     logging.info(f"  Graph: {graph_data['num_genes']} genes, {graph_data['num_pathways']} pathways")
 
     # WSI features
-    with open(cfg.input.wsi_features, 'rb') as f:
-        wsi_features = pickle.load(f)
-    # Ensure keys are strings
-    wsi_features = {str(k): v for k, v in wsi_features.items()}
-    logging.info(f"  WSI features: {len(wsi_features)} patients")
+    # with open(cfg.input.wsi_features, 'rb') as f:
+    #     wsi_features = pickle.load(f)
+    # # Ensure keys are strings
+    # wsi_features = {str(k): v for k, v in wsi_features.items()}
+    # logging.info(f"  WSI features: {len(wsi_features)} patients")
+    wsi_dir = cfg.input.wsi_features_dir  # new config field pointing to the directory
+    wsi_features = {}
+    for f in os.listdir(wsi_dir):
+        if f.endswith('.pt'):
+            pid = f.replace('.pt', '')
+            wsi_features[pid] = os.path.join(wsi_dir, f)  # store PATH, not tensor
+    logging.info(f"  WSI features: {len(wsi_features)} patients (lazy loading)")
 
     # Labels
     labels_df = pd.read_csv(cfg.input.labels)
@@ -265,8 +273,12 @@ def sample_wsi_embeddings(wsi_features, max_samples=100000, seed=42):
     """
     np.random.seed(seed)
 
-    tensors = list(wsi_features.values())
-    patch_counts = torch.tensor([t.shape[0] for t in tensors])
+    keys = list(wsi_features.keys())
+    patch_counts = []
+    for k in keys:
+        t = torch.load(wsi_features[k], weights_only=True)
+        patch_counts.append(t.shape[0])
+    patch_counts = torch.tensor(patch_counts)
     total_patches = int(patch_counts.sum())
 
     if total_patches <= max_samples:
@@ -276,17 +288,17 @@ def sample_wsi_embeddings(wsi_features, max_samples=100000, seed=42):
         keep_counts = torch.clamp((patch_counts * ratio).long(), min=1)
 
     sampled = []
-    for t, k in zip(tensors, keep_counts.tolist()):
-        idx = np.random.choice(len(t), size=min(k, len(t)), replace=False)
+    for k, n_keep in zip(keys, keep_counts.tolist()):
+        t = torch.load(wsi_features[k], weights_only=True)
+        idx = np.random.choice(len(t), size=min(n_keep, len(t)), replace=False)
         sampled.append(t[idx])
 
     out = torch.cat(sampled)
-
     if len(out) > max_samples:
         idx = np.random.choice(len(out), max_samples, replace=False)
         out = out[idx]
 
-    logging.info(f"Sampled {len(out)} patches from {len(tensors)} patients")
+    logging.info(f"Sampled {len(out)} patches from {len(keys)} patients")
     return out
 
 

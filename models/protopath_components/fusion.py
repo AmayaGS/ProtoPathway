@@ -64,8 +64,19 @@ class CrossAttentionFusion(nn.Module):
             batch_first=True
         )
 
+        self.gate_pp = nn.Linear(hidden_dim, 1)
+
+        self.norm_gene = nn.LayerNorm(hidden_dim)
+        self.norm_wsi = nn.LayerNorm(hidden_dim)
+        self.norm_pp = nn.LayerNorm(hidden_dim)
+
         # Final projection (combines 3 embeddings)
-        self.projection = nn.Linear(hidden_dim * 3, hidden_dim)
+        # self.projection = nn.Linear(hidden_dim * 3, hidden_dim)
+
+        self.projection = nn.Sequential(
+                          nn.Linear(hidden_dim * 3, 64),
+                          nn.ReLU(),
+                          nn.Dropout(0.3))
 
     def forward(self, pathway_mean, wsi_embedding, pathway_embeddings, proto_tokens):
         """
@@ -95,13 +106,17 @@ class CrossAttentionFusion(nn.Module):
         # attn_weights: [1, num_prototypes, num_pathways]
 
         # Mean pool attended prototypes
-        attended_proto_mean = attended_proto.mean(dim=1).squeeze(0)  # [hidden_dim]
+        # attended_proto_mean = attended_proto.mean(dim=1).squeeze(0)  # [hidden_dim]
+
+        gates_proto = self.gate_pp(attended_proto) # [1, N, 1]
+        gates_proto = F.softmax(gates_proto, dim=1)
+        weighted_proto = (gates_proto * attended_proto).sum(dim=1)  # [1, hidden_dim]
 
         # Combine all three embeddings
         combined = torch.cat([
-            pathway_mean,  # Pathway-aggregated gene embedding
-            attended_proto_mean,  # Cross-modal attended prototype embedding
-            wsi_embedding  # Prototype-aggregated WSI embedding
+            self.norm_gene(pathway_mean),  # Pathway-aggregated gene embedding
+            self.norm_pp(weighted_proto.squeeze(0)),  # Cross-modal attended prototype embedding
+            self.norm_wsi(wsi_embedding)  # Prototype-aggregated WSI embedding
         ], dim=-1)
 
         fused = self.projection(combined)

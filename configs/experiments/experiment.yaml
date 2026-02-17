@@ -13,17 +13,19 @@
 # -----------------------------------------------------------------------------
 # Dataset Configuration
 # -----------------------------------------------------------------------------
-dataset: TCGA-BRCA
+dataset: TCGA-COADREAD
 
 paths:
   output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
   processed_dir: ${paths.output_dir}/processed/${dataset}
+  code_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway
 
 # Input files (outputs from preprocessing)
 input:
   gene_expression: ${paths.processed_dir}/gene_expression.csv
   bipartite_graph: ${paths.processed_dir}/bipartite_graph.pt
-  wsi_features: ${paths.processed_dir}/wsi_features.pkl
+#  wsi_features: ${paths.processed_dir}/wsi_features.pkl
+  wsi_features_dir: ${paths.processed_dir}/wsi_features_per_patient
   labels: ${paths.processed_dir}/labels.csv
   splits: ${paths.processed_dir}/data_splits.pkl
 
@@ -67,27 +69,27 @@ model:
     hidden_dim: 128 # for protopath
     hidden_dims: [256, 256]  # For SNN/MLP baselines
     num_layers: 3
-    dropout: 0.0
-    num_heads: 1  # GATv2 attention heads
+    dropout: 0.25
+    num_heads: 4  # GATv2 attention heads
     lr_gene: 0.0001
 
   # WSI encoder (PrototypeMIL) settings
   wsi_encoder:
     hidden_dim: 128
     num_prototypes: 16
-    tau: 10.0  # Softmax temperature
-    dropout: 0.25
+    tau: 0.1  # Softmax temperature
+    dropout: 0.1
     num_layers: 2  # For TransMIL
     num_heads: 1  # For TransMIL
-    use_precomputed_centroids: false
-    lr_wsi: 0.00001
+    use_precomputed_centroids: true
+    lr_wsi: 0.0001
 
   # Fusion settings
   fusion:
     type: cross_attention  # choices: [concat, cross_attention, bilinear, gated]
     hidden_dim: 128
-    num_heads: 1
-    dropout: 0.1
+    num_heads: 2
+    dropout: 0.25
 
   pibd:
     gamma: 1 # gamma for PIBD model
@@ -102,7 +104,7 @@ training:
   debug_survival: false
   # Optimization
   learning_rate: 0.00001
-  weight_decay: 0.0  # L2 regularization
+  weight_decay: 0.00001  # L2 regularization
   l1_lambda: 0.0  # L1 regularization
 
   # Batching (batch_size=1 for MIL)

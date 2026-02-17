@@ -29,8 +29,8 @@ from utils.io import (
     get_model_schema,
     format_model_schema,
     setup_logging_to_file,
-    get_modality_tag,
-    build_experiment_name
+    build_experiment_name,
+    save_source_snapshot
 )
 
 from utils.dataset import (
@@ -76,7 +76,7 @@ def train_epoch(model, loader, optimizer, criterion, cfg, device):
         if cfg.model.name == 'pibd':
             logits, aux_losses = model(batch)
         else:
-            logits = model(batch, return_attention=True) # I've set attention to true to check entropy
+            logits = model(batch, return_attention=False)
 
         if cfg.task == 'survival':
 
@@ -159,7 +159,7 @@ def validate(model, loader, criterion, cfg, device):
 
     for batch in loader:
         batch = batch.to(device)
-        logits = model(batch)
+        logits = model(batch, return_attention=False)
 
         if cfg.task == 'survival':
             target = batch.y['bin']
@@ -186,6 +186,21 @@ def validate(model, loader, criterion, cfg, device):
             all_patient_ids.append(batch.patient_id)
 
     avg_loss = total_loss / len(loader)
+
+    # if hasattr(model.gene_encoder, '_gate_summary'):
+    #     s = model.gene_encoder._gate_summary
+    #     logging.info(
+    #         f"  [Gates] mean={s['mean']:.3f} std={s['std']:.3f} | "
+    #         f"saturated: {s['pct_high']:.1f}% high, {s['pct_low']:.1f}% low"
+    #     )
+
+    # if hasattr(model.gene_encoder, '_rank_summary'):
+    #     s = model.gene_encoder._rank_summary
+    #     logging.info(
+    #         f"  [Rank] top_ratio mean={s['mean_top_ratio']:.2f}, "
+    #         f"max={s['max_top_ratio']:.2f} | "
+    #         f"dominated(>3x): {s['pct_dominated']:.1f}%"
+    #     )
 
     if cfg.task == 'survival':
         risks = torch.cat(all_risks).numpy()
@@ -345,6 +360,20 @@ def train_fold(
         criterion = nn.CrossEntropyLoss()
 
     if cfg.model.name == 'protopath':
+        # score_params = list(model.gene_encoder.conv_final.score_nn.parameters())
+        # score_ids = {id(p) for p in score_params}
+        # gene_backbone_params = [p for p in model.gene_encoder.parameters() if id(p) not in score_ids]
+        #
+        # optimizer = AdamW([
+        #     {'params': gene_backbone_params, 'lr': cfg.model.gene_encoder.lr_gene},
+        #     {'params': score_params, 'lr': cfg.model.gene_encoder.lr_gene * 0.1},  # 10x slower
+        #     {'params': model.wsi_encoder.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,
+        #      'weight_decay': cfg.training.weight_decay},
+        #     {'params': model.fusion.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,
+        #      'weight_decay': cfg.training.weight_decay},
+        #     {'params': model.classifier.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,
+        #      'weight_decay': cfg.training.weight_decay},
+        # ])
         optimizer = AdamW([
             {'params': model.gene_encoder.parameters(), 'lr': cfg.model.gene_encoder.lr_gene},  # Needs higher LR
             {'params': model.wsi_encoder.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi, 'weight_decay': cfg.training.weight_decay},  # Needs lower LR
@@ -492,12 +521,13 @@ def run(cfg):
     # Create experiment directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     exp_name = build_experiment_name(cfg, timestamp)
-    # exp_name = cfg.experiment.name or f"{cfg.model.name}_{cfg.branches}_{cfg.dataset}_{timestamp}_{cfg.training.learning_rate}"
     output_dir = os.path.join(cfg.output.experiments_dir, exp_name)
     os.makedirs(output_dir, exist_ok=True)
 
     # console log
     log_path, file_handler = setup_logging_to_file(output_dir)
+
+    save_source_snapshot(output_dir, cfg.paths.code_dir)
 
     # Save config
     config_path = os.path.join(output_dir, 'config.yaml')

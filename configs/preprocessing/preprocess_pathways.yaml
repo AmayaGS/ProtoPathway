@@ -51,14 +51,14 @@ filtering:
     - "Muscle contraction"
     - "Digestion and absorption"
     - "Reproduction"
-    - "Circadian clock"
+#    - "Circadian clock"
 
-    # Mixed - excluding, will add specific Hallmarks
-    - "Metabolism"
-    - "Developmental Biology"
+#    # Mixed - excluding, will add specific Hallmarks
+#    - "Metabolism"
+#    - "Developmental Biology"
 
   # Hallmark gene sets to add (fills gaps from excluded categories)
-  hallmark_additions: null
+  hallmark_additions: false
 #    # Metabolism gap-fill (Warburg effect, metabolic reprogramming)
 #    - "HALLMARK_GLYCOLYSIS"
 #    - "HALLMARK_OXIDATIVE_PHOSPHORYLATION"
@@ -70,7 +70,7 @@ filtering:
 
   # Redundancy removal
   redundancy:
-    jaccard_threshold: 1.00  # Remove pathways with >100% gene overlap
+    jaccard_threshold: 0.9 # Remove pathways with >100% gene overlap
 
   # Generate diagnostic plots
   generate_figures: true

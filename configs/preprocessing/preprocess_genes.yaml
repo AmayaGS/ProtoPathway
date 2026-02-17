@@ -6,7 +6,7 @@
 # - Dataset-specific pathway set (genes present in this dataset)
 # - Bipartite graph structure for the model
 
-dataset: TCGA-BLCA  # Dataset name - used for input/output paths
+dataset: TCGA-COADREAD  # Dataset name - used for input/output paths
 
 paths:
   base_data_dir: C:/Users/Amaya/Documents/PhD/Data/TGCA_data
@@ -15,7 +15,7 @@ paths:
 
 input:
   expression: ${paths.base_data_dir}/${dataset}/rna_clean.csv # (patients × genes)
-  reactome_base: ${paths.output_dir}/processed/pathways/pathways_base_d5_g3-200_j100.pkl # Reactome base pathways (check the parameters used)
+  reactome_base: ${paths.output_dir}/processed/pathways/pathways_base_d5_g3-200_j90.pkl # Reactome base pathways (check the parameters used)
   # GTF file for protein-coding gene annotations (optional, for filtering)
   gtf: ${paths.base_data_dir}/Reactome/Homo_sapiens.GRCh38.113.gtf
 

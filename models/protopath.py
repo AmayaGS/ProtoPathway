@@ -35,21 +35,21 @@ class ProtoPathway(nn.Module):
         num_classes,
         # Gene encoder params
         gene_hidden_dim=256,
-        gene_num_layers=2,
-        gene_dropout=0.3,
-        gene_num_heads=1,
+        gene_num_layers=3,
+        gene_dropout=0.25,
+        gene_num_heads=4,
         gene_enabled=True,
         # WSI encoder params
-        wsi_input_dim=1536,  # UNI2-h default
+        wsi_input_dim=1536,
         wsi_hidden_dim=256,
-        wsi_num_prototypes=64,
+        wsi_num_prototypes=16,
         wsi_tau=10.0,
         wsi_centroids=None,
         wsi_enabled=True,
         # Fusion params
         fusion_type='cross_attention',
-        fusion_num_heads=4,
-        fusion_dropout=0.3
+        fusion_num_heads=2,
+        fusion_dropout=0.5
     ):
         """
         Initialize ProtoPathway.
@@ -115,7 +115,7 @@ class ProtoPathway(nn.Module):
                 num_heads=fusion_num_heads,
                 dropout=fusion_dropout
             )
-            self.classifier = nn.Linear(hidden_dim, num_classes)
+            self.classifier = nn.Linear(64, num_classes) # TODO need to set same behaviour everywhere
             logging.info(f"Fusion: {fusion_type}, classifier dim={hidden_dim}")
         else:
             # Unimodal - no fusion needed

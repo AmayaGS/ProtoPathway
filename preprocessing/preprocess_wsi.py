@@ -304,14 +304,17 @@ def run(cfg):
     # -------------------------------------------------------------------------
     logging.info("\n[Step 5/5] Saving outputs...")
 
+    features_path = os.path.join(output_dir, 'wsi_features_per_patient')
+    os.makedirs(features_path, exist_ok=True)
+
     # Convert to tensors
     for pid in patient_features:
         patient_features[pid] = torch.tensor(patient_features[pid], dtype=torch.float32)
+        torch.save(patient_features[pid], os.path.join(features_path, f"{pid}.pt"))
 
-    features_path = os.path.join(output_dir, 'wsi_features.pkl')
-    with open(features_path, 'wb') as f:
-        pickle.dump(patient_features, f)
-    logging.info(f"Saved WSI features to {features_path}")
+    # with open(features_path, 'wb') as f:
+    #     pickle.dump(patient_features, f)
+    # logging.info(f"Saved WSI features to {features_path}")
 
     # Save patient IDs as CSV
     patient_ids_path = os.path.join(output_dir, 'wsi_patient_ids.csv')

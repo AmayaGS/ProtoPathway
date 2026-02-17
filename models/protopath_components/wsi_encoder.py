@@ -29,7 +29,7 @@ class PrototypeMIL(nn.Module):
             input_dim,
             hidden_dim=256,
             num_prototypes=64,
-            tau=10.0,
+            tau=0.1,
             init_centroids=None
     ):
         """
@@ -60,8 +60,7 @@ class PrototypeMIL(nn.Module):
         # Dimension reduction (shared for patches and prototypes)
         self.dim_reducer = nn.Linear(input_dim, hidden_dim)
 
-        # Learnable gates for prototype weighting (softplus ensures non-negative)
-        self.logit_g = nn.Parameter(torch.zeros(num_prototypes))
+        self.gate_nn = nn.Linear(hidden_dim, 1)
 
         # Storage for visualization
         self.patch_assignments = None
@@ -98,28 +97,20 @@ class PrototypeMIL(nn.Module):
         similarity = torch.einsum("bpd,nd->bpn", x_norm, proto_norm)  # [1, P, N]
 
         # Soft assignment with temperature
-        # alpha = F.softmax(self.tau * similarity, dim=2)  # [1, P, N]
-        alpha = F.softmax(similarity, dim=2)  # [1, P, N]
-
-        # Apply learnable gates
-        gates = F.softplus(self.logit_g)  # [N], non-negative
-        alpha_gated = alpha * gates  # [1, P, N]
+        alpha = F.softmax(similarity / self.tau, dim=2)  # [1, P, N]
 
         # Prototype-wise pooling
-        # proto_token[n] = sum_p(alpha_gated[p,n] * x_reduced[p]) / sum_p(alpha_gated[p,n])
-        numerator = torch.einsum("bpn,bpd->bnd", alpha_gated, x_reduced)  # [1, N, hidden_dim]
-        denominator = alpha_gated.sum(dim=1, keepdim=False).clamp(min=1e-6)  # [1, N]
+        numerator = torch.einsum("bpn,bpd->bnd", alpha, x_reduced)  # [1, N, hidden_dim]
+        denominator = alpha.sum(dim=1, keepdim=False).clamp(min=1e-6)  # [1, N]
         proto_tokens = numerator / denominator.unsqueeze(2)  # [1, N, hidden_dim]
 
-        # Weighted aggregation for slide-level embedding
-        gate_weights = gates / gates.sum()  # Normalize gates
-        proto_weighted = proto_tokens * gates.view(1, N, 1)
-        # bag_embedding = proto_weighted.sum(dim=1)  # [1, hidden_dim]
-        bag_embedding = proto_weighted.mean(dim=1)
+        gate_scores = self.gate_nn(proto_tokens)
+        gates = F.softmax(gate_scores, dim=1)
+        bag_embedding = (gates * proto_tokens).sum(dim=1)
 
         # Remove batch dimension
         bag_embedding = bag_embedding.squeeze(0)  # [hidden_dim]
-        proto_tokens = proto_weighted.squeeze(0)  # [N, hidden_dim]
+        proto_tokens = proto_tokens.squeeze(0)  # [N, hidden_dim]
 
         # Store assignments for visualization
         if return_assignments:
@@ -128,7 +119,7 @@ class PrototypeMIL(nn.Module):
                 'soft_assignments': alpha.squeeze(0).detach(),  # [P, N]
                 'hard_assignments': hard_assignments.detach(),  # [P]
                 'similarities': similarity.squeeze(0).detach(),  # [P, N]
-                'gate_weights': gate_weights.detach()  # [N]
+                'gate_weights': gates.detach()  # [N]
             }
 
         return bag_embedding, proto_tokens
