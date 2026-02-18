@@ -128,8 +128,8 @@ training:
   # Gradient clipping
   grad_clip: 0  # 0 = disabled
 
-  # Loss weighting for survival
-  nll_alpha: 0.0  # Weight on uncensored samples in NLL loss
+  # Loss weighting for survival `
+  nll_alpha: 0.5  # Weight on uncensored samples in NLL loss
 
   # Model selection metric
   monitor_metric: c_index  # For survival: c_index, For classification: acc

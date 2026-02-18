@@ -7,4 +7,7 @@ Modules:
 """
 
 from .fold_aggregation import pool_cv_results
-from .importance_analyzer import ImportanceAnalyzer, run_importance_analysis
+from .fold_stratified_analysis import (
+    FoldStratifiedAnalyzer,
+    run_fold_stratified_importance_analysis,
+)

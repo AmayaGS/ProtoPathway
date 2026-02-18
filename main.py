@@ -202,7 +202,7 @@ def main():
         run(cfg)
 
     elif args.command == 'visualize':
-        from experiments.visualize import run_visualization
+        from experiments.visualize import run_simplified_visualization
 
         eval_dir = args.eval_dir
         output_dir = args.output
@@ -228,7 +228,7 @@ def main():
                 "attention pickle metadata"
             )
 
-        run_visualization(
+        run_simplified_visualization(
             eval_dir=eval_dir,
             output_dir=output_dir,
             entity_names=entity_names,

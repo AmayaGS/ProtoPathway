@@ -131,6 +131,21 @@ def _pool_predictions(eval_dir: Path) -> pd.DataFrame:
         else:
             fold_idx = len(dfs)
         df['fold'] = fold_idx
+
+        # Normalise risk scores within each fold so that scores from
+        # different models (different folds) are on a comparable scale.
+        # Rank-percentile is robust to outliers and non-Gaussian shapes.
+        if 'risk_score' in df.columns and len(df) > 1:
+            raw = df['risk_score'].values
+            df['risk_score_raw'] = raw                        # keep original
+            df['risk_score'] = pd.Series(raw).rank(pct=True).values
+
+            logger.info(
+                f"  Fold {fold_idx}: {len(df)} patients, "
+                f"raw risk [{raw.min():.4f}, {raw.max():.4f}] → "
+                f"rank-normalised [0, 1]"
+            )
+
         dfs.append(df)
 
     predictions = pd.concat(dfs, ignore_index=True)
@@ -155,6 +170,42 @@ def _pool_predictions(eval_dir: Path) -> pd.DataFrame:
     return predictions
 
 
+# Canonical group names — importable by other modules
+GROUP_NAMES_2 = ['Low Risk', 'High Risk']
+GROUP_NAMES_4 = ['Very Low Risk', 'Low Risk', 'High Risk', 'Very High Risk']
+
+
+def stratify_risk_scores(risk_scores: np.ndarray, n_groups: int = 2):
+    """
+    Assign patients to risk groups.  Single source of truth used by both
+    importance analysis and KM plotting.
+
+    Uses np.searchsorted(side='right') so that a value exactly on a
+    boundary is placed in the lower group, matching pd.cut's default
+    right-inclusive behaviour: (q1, q2] → group 1.
+
+    Args:
+        risk_scores: 1-D array of (normalised) risk scores.
+        n_groups: 2 (median split) or 4 (quartile split).
+
+    Returns:
+        groups: int array of group indices (0 … n_groups-1).
+        group_names: list of display labels.
+    """
+    if n_groups == 2:
+        threshold = np.median(risk_scores)
+        groups = (risk_scores > threshold).astype(int)
+        return groups, GROUP_NAMES_2
+    elif n_groups == 4:
+        quartiles = np.percentile(risk_scores, [25, 50, 75])
+        # searchsorted(side='right'): value == boundary → stays in lower bin
+        groups = np.searchsorted(quartiles, risk_scores, side='right')
+        groups = np.clip(groups, 0, 3)
+        return groups, GROUP_NAMES_4
+    else:
+        raise ValueError(f"n_groups must be 2 or 4, got {n_groups}")
+
+
 def _assign_risk_groups(
     predictions: pd.DataFrame,
     stratification: str = 'median'
@@ -163,25 +214,19 @@ def _assign_risk_groups(
     risk_scores = predictions['risk_score'].values
 
     if stratification == 'median':
-        threshold = np.median(risk_scores)
-        predictions['risk_group'] = np.where(
-            risk_scores > threshold, 'High Risk', 'Low Risk'
-        )
+        n_groups = 2
     elif stratification == 'quartile':
-        quartiles = np.percentile(risk_scores, [25, 50, 75])
-        labels = ['Very Low Risk', 'Low Risk', 'High Risk', 'Very High Risk']
-        bins = [-np.inf] + list(quartiles) + [np.inf]
-        predictions['risk_group'] = pd.cut(
-            risk_scores, bins=bins, labels=labels
-        )
+        n_groups = 4
     else:
         raise ValueError(
             f"Unknown stratification: {stratification}. "
             f"Use 'median' or 'quartile'."
         )
 
-    return predictions
+    groups, group_names = stratify_risk_scores(risk_scores, n_groups)
+    predictions['risk_group'] = [group_names[g] for g in groups]
 
+    return predictions
 
 def _pool_attention(
     eval_dir: Path

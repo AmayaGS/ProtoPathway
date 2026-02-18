@@ -20,11 +20,11 @@ from matplotlib.lines import Line2D
 
 logger = logging.getLogger(__name__)
 
+from utils.analysis.fold_aggregation import stratify_risk_scores, GROUP_NAMES_2, GROUP_NAMES_4
+
 # Consistent style
 COLORS_2 = ['#2ca02c', '#d62728']               # green, red
 COLORS_4 = ['#1a6e1a', '#66bb6a', '#ff9800', '#d62728']  # dk green, lt green, orange, red
-GROUP_NAMES_2 = ['Low Risk', 'High Risk']
-GROUP_NAMES_4 = ['Very Low Risk', 'Low Risk', 'High Risk', 'Very High Risk']
 
 
 def plot_kaplan_meier(
@@ -166,17 +166,10 @@ def plot_kaplan_meier_both(
 # ---- Internal helpers ----
 
 def _stratify(risk_scores, n_groups):
-    """Assign patients to risk groups."""
-    if n_groups == 2:
-        threshold = np.median(risk_scores)
-        groups = (risk_scores > threshold).astype(int)
-        return groups, GROUP_NAMES_2, COLORS_2
-    elif n_groups == 4:
-        quartiles = np.percentile(risk_scores, [25, 50, 75])
-        groups = np.digitize(risk_scores, quartiles)
-        return groups, GROUP_NAMES_4, COLORS_4
-    else:
-        raise ValueError(f"n_groups must be 2 or 4, got {n_groups}")
+    """Assign patients to risk groups (delegates to shared implementation)."""
+    groups, group_names = stratify_risk_scores(risk_scores, n_groups)
+    colors = COLORS_2 if n_groups == 2 else COLORS_4
+    return groups, group_names, colors
 
 
 def _compute_logrank(times, events, groups, n_groups):
