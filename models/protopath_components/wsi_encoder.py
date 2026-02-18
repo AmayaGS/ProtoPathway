@@ -119,7 +119,7 @@ class PrototypeMIL(nn.Module):
                 'soft_assignments': alpha.squeeze(0).detach(),  # [P, N]
                 'hard_assignments': hard_assignments.detach(),  # [P]
                 'similarities': similarity.squeeze(0).detach(),  # [P, N]
-                'gate_weights': gates.detach()  # [N]
+                'gate_weights': gates.squeeze(0).squeeze(-1).detach()  # [N]
             }
 
         return bag_embedding, proto_tokens

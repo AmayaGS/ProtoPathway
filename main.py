@@ -21,10 +21,10 @@ Usage:
     python main.py train --config configs/experiments/experiment.yaml model.name=mlp
 
     # Evaluation
-    python main.py evaluate --checkpoint output/BLCA/exp_001/best_model.pt
+    python main.py evaluate --checkpoint-dir output/BLCA/exp_001
 
     # Visualization
-    python main.py visualize --results output/BLCA/exp_001/
+    python main.py visualize --eval_dir output/BLCA/exp_001/evaluate
 """
 
 import argparse
@@ -97,7 +97,7 @@ def parse_args():
     # Visualize
     # -------------------------------------------------------------------------
     vis_p = subparsers.add_parser('visualize', help='Generate visualizations')
-    vis_p.add_argument('--results', required=True, help='Path to experiment results directory')
+    vis_p.add_argument('--eval_dir', required=True, help='Path to experiment results directory')
     vis_p.add_argument('--output', default=None, help='Output directory (defaults to results/figures)')
 
     return parser.parse_args()
@@ -202,8 +202,37 @@ def main():
         run(cfg)
 
     elif args.command == 'visualize':
-        from experiments.visualize import run
-        run(args.results, args.output)
+        from experiments.visualize import run_visualization
+
+        eval_dir = args.eval_dir
+        output_dir = args.output
+
+        # Try loading entity names from experiment config
+        # (fallback: they'll be read from attention pickle metadata)
+        entity_names = None
+        parent_dir = os.path.dirname(eval_dir.rstrip('/'))
+        config_path = os.path.join(parent_dir, 'config.yaml')
+
+        if os.path.exists(config_path):
+            from utils.dataset import load_dataset_components
+            cfg = load_config(config_path)
+            data_components = load_dataset_components(cfg)
+            graph_data = data_components['graph_data']
+            entity_names = {
+                'gene_names': graph_data.get('gene_names', []),
+                'pathway_names': graph_data.get('pathway_names', []),
+            }
+        else:
+            logging.info(
+                "No config.yaml found — entity names will be loaded from "
+                "attention pickle metadata"
+            )
+
+        run_visualization(
+            eval_dir=eval_dir,
+            output_dir=output_dir,
+            entity_names=entity_names,
+        )
 
 
 if __name__ == '__main__':

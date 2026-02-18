@@ -75,6 +75,8 @@ class CrossAttentionFusion(nn.Module):
                           nn.ReLU(),
                           nn.Dropout(0.3))
 
+        self.proto_pathway_gate_weights = None
+
     def forward(self, pathway_mean, wsi_embedding, pathway_embeddings, proto_tokens):
         """
         Args:
@@ -104,7 +106,7 @@ class CrossAttentionFusion(nn.Module):
         gates_proto = F.softmax(gates_proto, dim=1)
         weighted_proto = (gates_proto * attended_proto).sum(dim=1)  # [1, hidden_dim]
 
-        self.proto_pathway_gate_weights = gates_proto.squeeze(0).detach()
+        self.proto_pathway_gate_weights = gates_proto.squeeze(0).squeeze(-1).detach()
 
         # Combine all three embeddings
         combined = torch.cat([

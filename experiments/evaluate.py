@@ -209,7 +209,8 @@ def save_predictions(results, output_dir, cfg, fold_idx=None):
     return csv_path
 
 
-def save_attention_weights(attention_outputs, patient_ids, output_dir, fold_idx=None):
+def save_attention_weights(attention_outputs, patient_ids, output_dir, fold_idx=None, gene_names=None,
+                           pathway_names=None):
     """Save attention weights for visualization."""
     suffix = f"_fold_{fold_idx}" if fold_idx is not None else ""
     attention_dir = os.path.join(output_dir, f'attention{suffix}')
@@ -219,7 +220,9 @@ def save_attention_weights(attention_outputs, patient_ids, output_dir, fold_idx=
 
     attention_data = {
         'patient_ids': patient_ids,
-        'attention_outputs': attention_outputs
+        'attention_outputs': attention_outputs,
+        'gene_names': gene_names,
+        'pathway_names': pathway_names
     }
 
     pkl_path = os.path.join(attention_dir, 'attention_weights.pkl')
@@ -363,12 +366,12 @@ def run(cfg):
         generate_metrics_report(results, output_dir / f'metrics_report_fold_{fold_idx}.txt', cfg)
 
         if return_attention and 'attention_outputs' in results:
-            save_attention_weights(
-                results['attention_outputs'],
-                results['patient_ids'],
-                output_dir,
-                fold_idx=fold_idx
-            )
+            save_attention_weights(results['attention_outputs'],
+                                   results['patient_ids'],
+                                   output_dir,
+                                   fold_idx=fold_idx,
+                                   gene_names=eval_dataset.gene_names,
+                                   pathway_names=eval_dataset.pathway_names)
 
         # Store for aggregation
         fold_results.append({'fold_idx': fold_idx, **results})
