@@ -13,7 +13,7 @@
 # -----------------------------------------------------------------------------
 # Dataset Configuration
 # -----------------------------------------------------------------------------
-dataset: TCGA-COADREAD
+dataset: TCGA-STAD
 
 paths:
   output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
@@ -147,8 +147,8 @@ cv:
 # -----------------------------------------------------------------------------
 experiment:
   name: null  # Auto-generated if null
-  seed: 42
-  deterministic: true
+  seed: 1
+  deterministic: false
 
 # -----------------------------------------------------------------------------
 # Logging and Checkpointing

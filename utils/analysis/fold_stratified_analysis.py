@@ -45,10 +45,11 @@ logger = logging.getLogger(__name__)
 # Core: fold-stratified rank analysis
 # ============================================================================
 
+
 def _per_fold_mann_whitney(
     importance_matrix: np.ndarray,
     groups: np.ndarray,
-    n_entities: int,
+    n_entities: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int, int]:
     """
     Run Mann-Whitney U per entity within a single fold.

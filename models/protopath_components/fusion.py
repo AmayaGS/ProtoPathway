@@ -56,10 +56,10 @@ class CrossAttentionFusion(nn.Module):
 
         self.hidden_dim = hidden_dim
 
-        self.pre_q_norm = nn.LayerNorm(hidden_dim)
-        self.pre_k_norm = nn.LayerNorm(hidden_dim)
+        # self.pre_q_norm = nn.LayerNorm(hidden_dim)
+        # self.pre_k_norm = nn.LayerNorm(hidden_dim)
 
-        self.raw_temperature = nn.Parameter(torch.tensor(0.0))
+        # self.raw_temperature = nn.Parameter(torch.tensor(0.0))
 
         # Multi-head cross attention: prototypes (query) attend to pathways (key, value)
         self.cross_attention = nn.MultiheadAttention(
@@ -95,16 +95,19 @@ class CrossAttentionFusion(nn.Module):
             attention_weights: [num_prototypes, num_pathways] cross-modal attention
         """
         # Add batch dimension for attention
-        pathways = self.pre_k_norm(pathway_embeddings).unsqueeze(0)  # [1, num_pathways, hidden_dim]
-        prototypes = self.pre_q_norm(proto_tokens).unsqueeze(0)  # [1, num_prototypes, hidden_dim]
+        # pathways = self.pre_k_norm(pathway_embeddings).unsqueeze(0)  # [1, num_pathways, hidden_dim]
+        # prototypes = self.pre_q_norm(proto_tokens).unsqueeze(0)  # [1, num_prototypes, hidden_dim]
+        #
+        pathways = pathway_embeddings.unsqueeze(0)  # [1, num_pathways, hidden_dim]
+        prototypes = proto_tokens.unsqueeze(0)  # [1, num_prototypes, hidden_dim]
 
-        temperature = 1.0 + F.softplus(self.raw_temperature)
+        # temperature = 1.0 + F.softplus(self.raw_temperature)
 
-        scaled_prototypes = prototypes / temperature
+        # scaled_prototypes = prototypes / temperature
 
         # Cross attention: prototypes query pathways
         attended_proto, attn_weights = self.cross_attention(
-            query=scaled_prototypes,
+            query=prototypes,
             key=pathways,
             value=pathways,
             need_weights=True,

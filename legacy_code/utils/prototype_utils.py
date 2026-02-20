@@ -251,7 +251,7 @@ def create_prototype_legend(ax, patches, prototype_to_color, unique_prototypes, 
                 transform=ax.transAxes)
 
 
-def analyze_prototype_distribution(patient_id, patch_assignments, output_dir, use_binning=True):
+def analyze_prototype_distribution(patient_id, patch_assignments, output_dir, use_binning=False):
     """Analyze and visualize prototype distribution for a patient"""
 
     from collections import Counter

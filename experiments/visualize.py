@@ -389,6 +389,12 @@ def run_simplified_visualization(
         str(eval_dir), risk_stratification=risk_stratification
     )
 
+    from utils.visualization.diagnose_cross_modal_entropy import diagnose_crossmodal_entropy
+
+    results = diagnose_crossmodal_entropy(
+        attention_by_patient, predictions, logger=logger
+    )
+
     if entity_names is None:
         entity_names = {}
     if not entity_names.get('gene_names') and 'gene_names' in metadata:
