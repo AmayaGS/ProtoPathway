@@ -119,7 +119,15 @@ class MultimodalDataset(Dataset):
         # --- WSI Features ---
         wsi_path = self.wsi_features[patient_id]
         if isinstance(wsi_path, str):
-            wsi_feat = torch.load(wsi_path, weights_only=True)
+            wsi_data = torch.load(wsi_path, weights_only=False)
+        else:
+            wsi_data = wsi_path
+
+        # Handle both old format (bare tensor) and new format (dict)
+        if isinstance(wsi_data, dict):
+            wsi_feat = wsi_data['features']
+        else:
+            wsi_feat = wsi_data
 
         # --- Labels ---
         label_row = self.labels_df.loc[patient_id]
@@ -145,6 +153,11 @@ class MultimodalDataset(Dataset):
         data.wsi_features = wsi_feat
         data.y = target
         data.pathway_gene_indices = self.pathway_gene_indices
+        if isinstance(wsi_data, dict):
+            if 'coords' in wsi_data:
+                data.wsi_coords = wsi_data['coords']
+            if 'slide_info' in wsi_data:
+                data.wsi_slide_info = wsi_data['slide_info']
 
         if self.return_patient_id:
             data.patient_id = patient_id
@@ -192,12 +205,6 @@ def load_dataset_components(cfg):
 
     logging.info(f"  Graph: {graph_data['num_genes']} genes, {graph_data['num_pathways']} pathways")
 
-    # WSI features
-    # with open(cfg.input.wsi_features, 'rb') as f:
-    #     wsi_features = pickle.load(f)
-    # # Ensure keys are strings
-    # wsi_features = {str(k): v for k, v in wsi_features.items()}
-    # logging.info(f"  WSI features: {len(wsi_features)} patients")
     wsi_dir = cfg.input.wsi_features_dir  # new config field pointing to the directory
     wsi_features = {}
     for f in os.listdir(wsi_dir):

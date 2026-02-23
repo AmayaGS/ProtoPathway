@@ -526,6 +526,7 @@ def run_fold_stratified_importance_analysis(
     output_dir: str,
     pathways_of_interest: Optional[List[str]] = None,
     top_k_pathways: int = 10,
+    skip_prototype_signals: bool = False,
 ) -> Dict[str, FoldStratifiedAnalyzer]:
     """
     Drop-in replacement for run_importance_analysis() using fold stratification.
@@ -624,47 +625,48 @@ def run_fold_stratified_importance_analysis(
         )
 
     # ---- 3. Raw prototype importance (Signal E) ----
-    if has_wsi_gate and proto_names:
-        logger.info("  [Fold-stratified] Prototype raw importance...")
-        analyzers['prototype_raw'] = _make_analyzer(
-            proto_names, 'prototype_raw',
-            lambda a: a['patch_assignments']['gate_weights'],
-        )
-
-    # ---- 4. Pathway-attended prototype importance (Signal H) ----
-    if has_fusion_gate and proto_names:
-        logger.info("  [Fold-stratified] Prototype attended importance...")
-        analyzers['prototype_attended'] = _make_analyzer(
-            proto_names, 'prototype_attended',
-            lambda a: a['fusion_gate_weights'],
-        )
-
-    # ---- 5. Prototype shift (E → H) ----
-    # Keep as-is (PrototypeShiftAnalyzer uses paired Wilcoxon, less
-    # affected by cross-fold issues since it's within-patient)
-    if has_wsi_gate and has_fusion_gate and proto_names:
-        logger.info("  Prototype importance shift (E → H)...")
-        shift_analyzer = PrototypeShiftAnalyzer(proto_names)
-        for pid in valid_patients:
-            attn = attention_by_patient[pid]
-            shift_analyzer.add_patient(
-                pid,
-                wsi_gate=attn['patch_assignments']['gate_weights'],
-                fusion_gate=attn['fusion_gate_weights'],
-                risk_group=risk_map[pid],
+    if not skip_prototype_signals:
+        if has_wsi_gate and proto_names:
+            logger.info("  [Fold-stratified] Prototype raw importance...")
+            analyzers['prototype_raw'] = _make_analyzer(
+                proto_names, 'prototype_raw',
+                lambda a: a['patch_assignments']['gate_weights'],
             )
-        shift_analyzer.save_results(output_dir)
-        analyzers['prototype_shift'] = shift_analyzer
 
-    # ---- 6. Cross-modal per-prototype pathway ranking (Signal G) ----
-    if has_cross_modal and pathway_names and proto_names:
-        logger.info("  [Fold-stratified] Per-prototype pathway attention...")
-        for proto_idx in range(n_protos):
-            name = f'crossmodal_proto_{proto_idx}'
-            analyzers[name] = _make_analyzer(
-                pathway_names, name,
-                lambda a, idx=proto_idx: a['cross_modal_attention'][idx],
+        # ---- 4. Pathway-attended prototype importance (Signal H) ----
+        if has_fusion_gate and proto_names:
+            logger.info("  [Fold-stratified] Prototype attended importance...")
+            analyzers['prototype_attended'] = _make_analyzer(
+                proto_names, 'prototype_attended',
+                lambda a: a['fusion_gate_weights'],
             )
+
+        # ---- 5. Prototype shift (E → H) ----
+        # Keep as-is (PrototypeShiftAnalyzer uses paired Wilcoxon, less
+        # affected by cross-fold issues since it's within-patient)
+        if has_wsi_gate and has_fusion_gate and proto_names:
+            logger.info("  Prototype importance shift (E → H)...")
+            shift_analyzer = PrototypeShiftAnalyzer(proto_names)
+            for pid in valid_patients:
+                attn = attention_by_patient[pid]
+                shift_analyzer.add_patient(
+                    pid,
+                    wsi_gate=attn['patch_assignments']['gate_weights'],
+                    fusion_gate=attn['fusion_gate_weights'],
+                    risk_group=risk_map[pid],
+                )
+            shift_analyzer.save_results(output_dir)
+            analyzers['prototype_shift'] = shift_analyzer
+
+        # ---- 6. Cross-modal per-prototype pathway ranking (Signal G) ----
+        if has_cross_modal and pathway_names and proto_names:
+            logger.info("  [Fold-stratified] Per-prototype pathway attention...")
+            for proto_idx in range(n_protos):
+                name = f'crossmodal_proto_{proto_idx}'
+                analyzers[name] = _make_analyzer(
+                    pathway_names, name,
+                    lambda a, idx=proto_idx: a['cross_modal_attention'][idx],
+                )
 
     # ---- 7. Within-pathway gene analysis ----
     if has_gene_pathway and gene_names and pathway_names:

@@ -6,13 +6,13 @@
 # Output: wsi_features.pkl, data_splits.pkl
 # =============================================================================
 
-dataset: TCGA-STAD  # choices: [BLCA, BRCA, HNSC, STAD, COADREAD]
+dataset: TCGA-BLCA  # choices: [BLCA, BRCA, HNSC, STAD, COADREAD]
 
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
 paths:
-  base_data_dir: C:/Users/Amaya/Documents/PhD/Data/TGCA_data
+  base_data_dir: D:/TCGA
   output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
 
 # -----------------------------------------------------------------------------
@@ -20,9 +20,11 @@ paths:
 # -----------------------------------------------------------------------------
 input:
   # Directory containing h5 files (one per slide)
-  features_dir: ${paths.base_data_dir}/${dataset}/${dataset}
+#  features_dir: ${paths.base_data_dir}/${dataset}/${dataset}
+  features_dir: ${paths.base_data_dir}/${dataset}
   # Clinical data with survival info
-  labels: ${paths.base_data_dir}/${dataset}/${dataset}.csv
+#  labels: ${paths.base_data_dir}/${dataset}/${dataset}.csv
+  labels: C:/Users/Amaya/Documents/PhD/Data/TGCA_data/${dataset}/${dataset}.csv
 
 # -----------------------------------------------------------------------------
 # Output
@@ -34,7 +36,7 @@ output:
 
 # Feature extractor info (for metadata)
 feature_extractor:
-  name: UNI2-h  # or UNI, CONCH, etc.
+  name: UNI2-h  # or UNI, etc.
   dim: 1536     # UNI2-h: 1536, UNI: 1024
 
 # -----------------------------------------------------------------------------

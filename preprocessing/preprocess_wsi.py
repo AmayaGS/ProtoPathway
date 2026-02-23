@@ -20,7 +20,7 @@ Usage:
 import os
 import json
 import logging
-import pickle
+
 from pathlib import Path
 from collections import defaultdict
 
@@ -54,35 +54,46 @@ def extract_patient_id(filename, expression):
     return eval(expression)
 
 
-def load_h5_features(h5_path):
+def load_h5_features_and_coords(h5_path):
     """
-    Load features from an H5 file.
+    Load features and patch coordinates from an H5 file.
+
+    Coordinates are (x, y) top-left corners at the extraction
+    magnification level (typically 20x). Index-aligned with features.
 
     Args:
-        h5_path: Path to H5 file
+        h5_path: Path to H5 file.
 
     Returns:
-        numpy array of shape [num_patches, feature_dim]
+        features: numpy array [num_patches, feature_dim]
+        coords: numpy array [num_patches, 2] or None if no coords key
     """
+
     with h5py.File(h5_path, 'r') as f:
-        # Try common key names
+
         if 'features' in f:
             features = f['features'][:]
         elif 'feats' in f:
             features = f['feats'][:]
         else:
-            # Use first available dataset
             key = list(f.keys())[0]
             features = f[key][:]
 
-        # Squeeze if needed (some extractors add extra dimensions)
         features = features.squeeze()
-
-        # Ensure 2D: [num_patches, feature_dim]
         if features.ndim == 1:
             features = features.reshape(1, -1)
 
-        return features
+        # Load coordinates
+        if 'coords' in f:
+            coords = f['coords'][:]  # [N, 2]
+        else:
+            coords = None
+
+        coords = coords.squeeze()
+        if coords.ndim == 1:
+            coords = coords.reshape(1, -1)
+
+    return features, coords
 
 
 def plot_feature_statistics(patient_features, output_path):
@@ -225,9 +236,12 @@ def run(cfg):
     max_slides = cfg.get('max_slides_per_patient', 2)
 
     patient_features = {}
+    patient_coords = {}
+    patient_slide_info = {}
     feature_dim = None
     load_errors = 0
     slides_truncated = 0
+    coords_available = True  # Track if all h5 files have coords
 
     for i, (patient_id, files) in enumerate(patient_files.items()):
         if (i + 1) % 50 == 0:
@@ -235,39 +249,78 @@ def run(cfg):
 
         try:
             # Load all slides for this patient
-            slide_features = []
+            slide_data = []
             for h5_path in files:
-                features = load_h5_features(h5_path)
-                slide_features.append((h5_path, features))
+                features, coords = load_h5_features_and_coords(h5_path)
+                slide_data.append((h5_path, features, coords))
 
-            # If more than max_slides, keep only the largest ones (by patch count)
-            if len(slide_features) > max_slides:
+            # If more than max_slides, keep only the largest (by patch count)
+            if len(slide_data) > max_slides:
                 slides_truncated += 1
-                # Sort by number of patches (descending) and keep top max_slides
-                slide_features.sort(key=lambda x: x[1].shape[0], reverse=True)
-                slide_features = slide_features[:max_slides]
-                logging.debug(f"Patient {patient_id}: truncated to {max_slides} largest slides")
+                slide_data.sort(key=lambda x: x[1].shape[0], reverse=True)
+                slide_data = slide_data[:max_slides]
+                logging.debug(
+                    f"Patient {patient_id}: truncated to "
+                    f"{max_slides} largest slides"
+                )
 
-            # Concatenate patches from selected slides
-            all_patches = [sf[1] for sf in slide_features]
-            if len(all_patches) > 1:
-                combined = np.concatenate(all_patches, axis=0)
+            # Concatenate features (and coords if available)
+            all_features = [sd[1] for sd in slide_data]
+            all_coords = [sd[2] for sd in slide_data]
+
+            if len(all_features) > 1:
+                combined_features = np.concatenate(all_features, axis=0)
             else:
-                combined = all_patches[0]
+                combined_features = all_features[0]
+
+            # Coords: concatenate if all slides have them
+            has_all_coords = all(c is not None for c in all_coords)
+            if has_all_coords:
+                if len(all_coords) > 1:
+                    combined_coords = np.concatenate(all_coords, axis=0)
+                else:
+                    combined_coords = all_coords[0]
+            else:
+                combined_coords = None
+                if coords_available:
+                    logging.warning(
+                        f"Patient {patient_id}: some slides missing coords"
+                    )
+                    coords_available = False
+
+            # Build slide boundary metadata
+            slide_info = []
+            offset = 0
+            for h5_path, feats, coords in slide_data:
+                n = feats.shape[0]
+                slide_info.append({
+                    'slide_id': h5_path.stem,
+                    'h5_filename': h5_path.name,
+                    'n_patches': n,
+                    'feature_offset': offset,
+                })
+                offset += n
 
             # Verify feature dimension
             if feature_dim is None:
-                feature_dim = combined.shape[1]
-            elif combined.shape[1] != feature_dim:
-                logging.warning(f"Feature dimension mismatch for {patient_id}: "
-                                f"expected {feature_dim}, got {combined.shape[1]}")
+                feature_dim = combined_features.shape[1]
+            elif combined_features.shape[1] != feature_dim:
+                logging.warning(
+                    f"Feature dimension mismatch for {patient_id}: "
+                    f"expected {feature_dim}, "
+                    f"got {combined_features.shape[1]}"
+                )
                 load_errors += 1
                 continue
 
-            patient_features[patient_id] = combined
+            patient_features[patient_id] = combined_features
+            patient_coords[patient_id] = combined_coords
+            patient_slide_info[patient_id] = slide_info
 
         except Exception as e:
-            logging.warning(f"Error loading features for {patient_id}: {e}")
+            logging.warning(
+                f"Error loading features for {patient_id}: {e}"
+            )
             load_errors += 1
 
     logging.info(f"Successfully loaded features for {len(patient_features)} patients")
@@ -307,10 +360,24 @@ def run(cfg):
     features_path = os.path.join(output_dir, 'wsi_features_per_patient')
     os.makedirs(features_path, exist_ok=True)
 
-    # Convert to tensors
     for pid in patient_features:
-        patient_features[pid] = torch.tensor(patient_features[pid], dtype=torch.float32)
-        torch.save(patient_features[pid], os.path.join(features_path, f"{pid}.pt"))
+        save_dict = {
+            'features': torch.tensor(
+                patient_features[pid], dtype=torch.float32
+            ),
+        }
+
+        # Add coords if available
+        if patient_coords.get(pid) is not None:
+            save_dict['coords'] = torch.tensor(
+                patient_coords[pid], dtype=torch.int64
+            )
+
+        # Add slide boundary metadata
+        if pid in patient_slide_info:
+            save_dict['slide_info'] = patient_slide_info[pid]
+
+        torch.save(save_dict, os.path.join(features_path, f"{pid}.pt"))
 
     # with open(features_path, 'wb') as f:
     #     pickle.dump(patient_features, f)
