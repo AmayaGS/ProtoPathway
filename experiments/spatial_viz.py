@@ -1,9 +1,8 @@
 """
-Spatial Visualization Usage Guide
-==================================
+Spatial Visualization for ProtoPathway.
 
-This script demonstrates how to generate spatial prototype and pathway
-overlay figures for selected patients. Run it after training + evaluation.
+Generates spatial prototype and pathway overlay figures for selected
+patients. Run after training + evaluation + visualization pipeline.
 
 Prerequisites:
     1. Training complete (checkpoints saved)
@@ -15,29 +14,23 @@ Prerequisites:
 Directory structure assumed:
     experiments/COADREAD_protopath/
         best_model_fold_0.pt
-        best_model_fold_1.pt
         ...
         config.yaml
         evaluation/
             predictions_fold_0.csv
-            predictions_fold_1.csv
-            ...
             attention_fold_0/attention_weights.pkl
-            attention_fold_1/attention_weights.pkl
             ...
         figures/
             per_fold/
                 fold_0/analysis/
                     crossmodal_proto_0_rank_analysis.csv
-                    crossmodal_proto_1_rank_analysis.csv
                     ...
 
     processed/COADREAD/
         wsi_features_per_patient/
-            TCGA-A6-2671.pt     # new format: dict with features + coords + slide_info
-            ...
+            TCGA-A6-2671.pt
 
-    wsi_slides/                  # optional, for tissue backdrop
+    wsi_slides/                  # optional
         TCGA-A6-2671-01Z-00-DX1.svs
 """
 
@@ -60,24 +53,19 @@ EXPERIMENT_DIR = r'C:\Users\Amaya\Documents\PhD\ProtoPathway_results\experiments
 WSI_FEATURES_DIR = r'C:\Users\Amaya\Documents\PhD\ProtoPathway_results\processed\TCGA-BLCA\wsi_features_per_patient'
 
 # Optional: directory containing downloaded .svs files
-# Set to None if you don't have WSI files — you'll get coordinate-based
-# canvases instead of tissue backdrops
 WSI_SLIDES_DIR = r'C:\Users\Amaya\Documents\PhD\Data\TGCA_data\TCGA-BLCA\slides'  # or None
 
 # Which fold to use for prototype-level analysis
-# (pick your best-performing fold, or the one whose biology makes most sense)
 FOLD_IDX = 1
 
 # Patch size at extraction magnification (256 for UNI-2h default)
 PATCH_SIZE = 256
 
-# Downsample factor for rendering (4 = quarter resolution, good balance
-# of detail vs file size; use 1 for full resolution)
+# Downsample factor for rendering
 DOWNSAMPLE = 6
 
 # Optional: a single pathway to render as a continuous "IHC" heatmap
-# Set to None to skip, or use a pathway name from your analysis
-SINGLE_PATHWAY = 'R-HSA-8857538'  # e.g., 'HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION'
+SINGLE_PATHWAY = 'R-HSA-8857538'
 
 
 # =====================================================================
@@ -105,34 +93,22 @@ def load_experiment_data():
 
 
 # =====================================================================
-# 2. SELECT PATIENTS (choose interesting cases to visualize)
+# 2. SELECT PATIENTS
 # =====================================================================
 
 def select_patients(predictions, attention_by_patient, n_per_group=2):
     """
     Select clear high-risk and low-risk patients for visualization.
 
-    Strategy: pick patients with the most extreme risk scores who also
-    have attention data available (i.e., were in the validation set for
-    some fold).
-
-    Args:
-        predictions: Pooled predictions DataFrame.
-        attention_by_patient: Attention dict.
-        n_per_group: Number of patients per risk group.
-
-    Returns:
-        Dict with 'high_risk' and 'low_risk' patient ID lists.
+    Picks patients with the most extreme risk scores who also have
+    attention data available.
     """
-    # Filter to patients with attention data
     available = predictions[
         predictions['patient_id'].isin(attention_by_patient.keys())
     ].copy()
 
-    # Sort by risk score
     available = available.sort_values('risk_score')
 
-    # Pick extremes
     low_risk = available.head(n_per_group)['patient_id'].tolist()
     high_risk = available.tail(n_per_group)['patient_id'].tolist()
 
@@ -148,21 +124,13 @@ def select_patients(predictions, attention_by_patient, n_per_group=2):
 
 
 # =====================================================================
-# 3. VERIFY DATA (check coords are available and patches align)
+# 3. VERIFY DATA
 # =====================================================================
 
 def verify_patient_data(patient_id, attention_by_patient):
-    """
-    Check that a patient's data is complete for spatial visualization.
-
-    Verifies:
-        - .pt file exists and has coords
-        - Attention data has required signals
-        - Patch counts match between .pt and attention data
-    """
+    """Check that a patient's data is complete for spatial visualization."""
     import torch
 
-    # Check .pt file
     pt_path = os.path.join(WSI_FEATURES_DIR, f'{patient_id}.pt')
     if not os.path.exists(pt_path):
         logger.error(f"  {patient_id}: missing .pt file at {pt_path}")
@@ -191,7 +159,6 @@ def verify_patient_data(patient_id, attention_by_patient):
         logger.error(f"  {patient_id}: feature/coord count mismatch!")
         return False
 
-    # Check attention data
     attn = attention_by_patient.get(patient_id)
     if attn is None:
         logger.error(f"  {patient_id}: no attention data")
@@ -207,8 +174,7 @@ def verify_patient_data(patient_id, attention_by_patient):
     if n_patches_attn != n_patches_pt:
         logger.warning(
             f"  {patient_id}: PATCH MISMATCH — "
-            f".pt has {n_patches_pt}, attention has {n_patches_attn}. "
-            f"Check max_slides / slide_type_filter settings."
+            f".pt has {n_patches_pt}, attention has {n_patches_attn}."
         )
         return False
 
@@ -261,12 +227,64 @@ def generate_for_patient(patient_id, risk_group, attention_by_patient, pathway_n
         patch_size=PATCH_SIZE,
         downsample=DOWNSAMPLE,
         single_pathway_name=SINGLE_PATHWAY,
-        rank_transform=True
+        rank_transform=True,
     )
 
 
 # =====================================================================
-# 5. MAIN
+# 5. PROTOTYPE PANELS (cohort-level)
+# =====================================================================
+
+def generate_prototype_panels(attention_by_patient):
+    """
+    Generate cohort-level prototype importance and exemplar figures.
+
+    Produces:
+        - WSI gate (Signal E) importance bars: overall, high-risk, low-risk
+        - Fusion gate (Signal H) importance bars: overall, high-risk, low-risk
+        - Top-by-risk-level comparison figure
+        - Cohort exemplar patches for overall, high-risk, low-risk
+    """
+    from utils.visualization.prototype_panels import (
+        plot_prototype_importance,
+        plot_cohort_prototype_exemplars,
+    )
+
+    proto_output = os.path.join(
+        EXPERIMENT_DIR, 'figures', 'spatial', 'prototype_panels'
+    )
+
+    # Prototype importance bar charts — both gates
+    logger.info("  Generating prototype importance bars (E + H)...")
+    try:
+        plot_prototype_importance(
+            attention_by_patient=attention_by_patient,
+            output_dir=proto_output,
+            top_k=5,
+            dpi=300,
+        )
+    except Exception as e:
+        logger.error(f"  Failed prototype importance: {e}")
+
+    # Cohort-level exemplar patches
+    logger.info("  Generating cohort exemplar patches...")
+    try:
+        plot_cohort_prototype_exemplars(
+            attention_by_patient=attention_by_patient,
+            wsi_features_dir=WSI_FEATURES_DIR,
+            output_dir=proto_output,
+            top_k_protos=5,
+            n_patches_per_proto=8,
+            wsi_dir=WSI_SLIDES_DIR,
+            downsample=DOWNSAMPLE,
+            patch_size=PATCH_SIZE,
+        )
+    except Exception as e:
+        logger.error(f"  Failed cohort exemplars: {e}")
+
+
+# =====================================================================
+# 6. MAIN
 # =====================================================================
 
 def main():
@@ -293,7 +311,6 @@ def main():
 
     # Select patients
     selected = select_patients(predictions, attention_by_patient, n_per_group=2)
-
     all_patients = selected['low_risk'] + selected['high_risk']
 
     # Verify data for each patient
@@ -309,7 +326,7 @@ def main():
 
     logger.info(f"\n{len(verified)}/{len(all_patients)} patients verified")
 
-    # Generate visualizations
+    # Generate per-patient spatial visualizations
     risk_map = dict(zip(predictions['patient_id'], predictions['risk_group']))
 
     for pid in verified:
@@ -317,45 +334,14 @@ def main():
         logger.info(f"\n{'─'*40}")
         logger.info(f"Generating: {pid} ({risk_group})")
         logger.info(f"{'─'*40}")
-
         generate_for_patient(pid, risk_group, attention_by_patient, pathway_names)
 
-    # ── Cohort-level prototype visualizations ────────────────────
-    logger.info("\\n" + "=" * 60)
+    # ── Cohort-level prototype panels ────────────────────────────────
+    logger.info("\n" + "=" * 60)
     logger.info("Generating cohort-level prototype panels...")
     logger.info("=" * 60)
 
-    from utils.visualization.prototype_panels import (
-        plot_prototype_importance,
-        plot_cohort_prototype_exemplars,
-    )
-
-    proto_output = os.path.join(
-        EXPERIMENT_DIR, 'figures', 'spatial', 'prototype_panels'
-    )
-
-    # Prototype importance bar charts (overall, high-risk, low-risk)
-    plot_prototype_importance(
-        attention_by_patient=attention_by_patient,
-        output_dir=proto_output,
-        top_k=5,
-        use_fusion_gate=True,
-    )
-
-    # Cohort-level exemplar patches (top prototypes, most similar patches)
-    plot_cohort_prototype_exemplars(
-        attention_by_patient=attention_by_patient,
-        wsi_features_dir=WSI_FEATURES_DIR,
-        output_dir=proto_output,
-        top_k_protos=5,
-        n_patches_per_proto=8,
-        wsi_dir=WSI_SLIDES_DIR,
-        downsample=DOWNSAMPLE,
-        patch_size=PATCH_SIZE,
-        use_fusion_gate=True,
-    )
-
-    logger.info("Prototype panel generation complete.")
+    generate_prototype_panels(attention_by_patient)
 
     # Summary
     output_base = os.path.join(EXPERIMENT_DIR, 'figures', 'spatial')
@@ -366,17 +352,82 @@ def main():
     for pid in verified:
         patient_dir = os.path.join(output_base, pid)
         if os.path.exists(patient_dir):
-            files = [f for f in os.listdir(patient_dir) if f.endswith('.pdf')]
-            for f in files:
+            files = [f for f in os.listdir(patient_dir)
+                     if f.endswith(('.pdf', '.svg', '.png'))]
+            for f in sorted(files):
                 logger.info(f"  {pid}/{f}")
+
+    proto_dir = os.path.join(output_base, 'prototype_panels')
+    if os.path.exists(proto_dir):
+        logger.info(f"\n  Prototype panels:")
+        for root, dirs, files in os.walk(proto_dir):
+            for f in sorted(files):
+                rel = os.path.relpath(os.path.join(root, f), output_base)
+                logger.info(f"  {rel}")
+
+
+def run_single_patient(patient_id):
+    """
+    Run spatial viz + prototype panels for a single patient.
+
+    Use this when you have one WSI and want all outputs.
+    """
+    logger.info("=" * 60)
+    logger.info(f"ProtoPathway Spatial Viz — Single Patient: {patient_id}")
+    logger.info("=" * 60)
+
+    # Load data
+    predictions, attention_by_patient, pathway_names = load_experiment_data()
+
+    # Verify
+    if not verify_patient_data(patient_id, attention_by_patient):
+        logger.error(f"Verification failed for {patient_id}")
+        return
+
+    # Risk group
+    risk_map = dict(zip(predictions['patient_id'], predictions['risk_group']))
+    risk_group = risk_map.get(patient_id, 'Unknown')
+    logger.info(f"Risk group: {risk_group}")
+
+    # Generate spatial overlays
+    logger.info(f"\n{'─'*40}")
+    logger.info(f"Generating spatial overlays...")
+    logger.info(f"{'─'*40}")
+    generate_for_patient(patient_id, risk_group, attention_by_patient, pathway_names)
+
+    # Generate prototype panels (uses all patients for cohort context)
+    logger.info(f"\n{'─'*40}")
+    logger.info(f"Generating prototype panels (cohort-level)...")
+    logger.info(f"{'─'*40}")
+    generate_prototype_panels(attention_by_patient)
+
+    # Summary
+    output_base = os.path.join(EXPERIMENT_DIR, 'figures', 'spatial')
+    logger.info(f"\n{'='*60}")
+    logger.info(f"Done! Outputs in: {output_base}")
+    logger.info(f"{'='*60}")
+
+    patient_dir = os.path.join(output_base, patient_id)
+    if os.path.exists(patient_dir):
+        files = [f for f in os.listdir(patient_dir)
+                 if f.endswith(('.pdf', '.svg', '.png'))]
+        for f in sorted(files):
+            logger.info(f"  {patient_id}/{f}")
+
+    proto_dir = os.path.join(output_base, 'prototype_panels')
+    if os.path.exists(proto_dir):
+        logger.info(f"\n  Prototype panels:")
+        for root, dirs, files in os.walk(proto_dir):
+            for f in sorted(files):
+                rel = os.path.relpath(os.path.join(root, f), output_base)
+                logger.info(f"  {rel}")
 
 
 if __name__ == '__main__':
-    predictions, attention_by_patient, pathway_names = load_experiment_data()
-
-    patient_id = 'TCGA-FD-A3B4'  # your specific patient
-
-    verify_patient_data(patient_id, attention_by_patient)
-
-    risk_map = dict(zip(predictions['patient_id'], predictions['risk_group']))
-    generate_for_patient(patient_id, risk_map[patient_id], attention_by_patient, pathway_names)
+    # ── Choose one: ──────────────────────────────────────────────────
+    #
+    # Option A: Single patient (when you have one WSI downloaded)
+    run_single_patient('TCGA-FD-A3B4')
+    #
+    # Option B: Full cohort mode (auto-selects extreme patients)
+    # main()

@@ -202,7 +202,7 @@ def main():
         run(cfg)
 
     elif args.command == 'visualize':
-        from experiments.visualize import run_simplified_visualization
+        from experiments.visualize_v3 import run_simplified_visualization
 
         eval_dir = args.eval_dir
         output_dir = args.output

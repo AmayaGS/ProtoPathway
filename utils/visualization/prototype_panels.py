@@ -67,15 +67,19 @@ def plot_prototype_importance(
     attention_by_patient: Dict[str, Dict],
     output_dir: str,
     top_k: int = 5,
-    use_fusion_gate: bool = True,
     dpi: int = 300,
 ):
     """
-    Bar charts of prototype importance: overall, high-risk, low-risk.
+    Bar charts of prototype importance for BOTH gate types.
 
-    For each group, averages the gate weights across patients and shows
-    the top-K prototypes. Produces three separate figures (one per group)
-    saved in PDF, SVG, and PNG.
+    Produces figures for:
+        1. WSI Gate (Signal E) — raw morphological importance
+        2. Fusion Gate (Signal H) — pathway-attended importance
+        3. Top-by-risk comparison — which prototypes are specifically
+           most important for high-risk vs low-risk predictions
+
+    For each gate type, three figures: overall, high-risk, low-risk.
+    All saved in PDF, SVG, and PNG.
 
     Args:
         attention_by_patient: Dict pid -> {
@@ -85,38 +89,73 @@ def plot_prototype_importance(
         }
         output_dir: Output directory for figures.
         top_k: Number of top prototypes to show.
-        use_fusion_gate: If True, use Signal H (fusion_gate_weights)
-            when available; otherwise fall back to Signal E (gate_weights).
         dpi: Output DPI for PNG.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Collect gate weights by risk group
-    groups = {'Overall': [], 'High Risk': [], 'Low Risk': []}
+    # Collect gate weights by risk group for both signal types
+    groups_e = {'Overall': [], 'High Risk': [], 'Low Risk': []}
+    groups_h = {'Overall': [], 'High Risk': [], 'Low Risk': []}
 
     for pid, attn in attention_by_patient.items():
-        weights = _get_importance_weights(attn, use_fusion_gate)
-        if weights is None:
-            continue
-
         risk = attn.get('risk_group', 'Unknown')
-        groups['Overall'].append(weights)
-        if 'High' in risk:
-            groups['High Risk'].append(weights)
-        elif 'Low' in risk:
-            groups['Low Risk'].append(weights)
 
-    # Generate one figure per group
-    for group_name, weight_list in groups.items():
+        # Signal E: WSI gate
+        weights_e = _get_importance_weights(attn, use_fusion_gate=False)
+        if weights_e is not None:
+            groups_e['Overall'].append(weights_e)
+            if 'High' in risk:
+                groups_e['High Risk'].append(weights_e)
+            elif 'Low' in risk:
+                groups_e['Low Risk'].append(weights_e)
+
+        # Signal H: fusion gate
+        weights_h = _get_importance_weights(attn, use_fusion_gate=True)
+        if weights_h is not None:
+            groups_h['Overall'].append(weights_h)
+            if 'High' in risk:
+                groups_h['High Risk'].append(weights_h)
+            elif 'Low' in risk:
+                groups_h['Low Risk'].append(weights_h)
+
+    # ── Signal E figures ─────────────────────────────────────────────
+    e_dir = output_dir / 'wsi_gate_E'
+    e_dir.mkdir(parents=True, exist_ok=True)
+    for group_name, weight_list in groups_e.items():
         if len(weight_list) == 0:
-            logger.warning(f"No patients in {group_name}, skipping")
             continue
-
-        mean_weights = np.stack(weight_list).mean(axis=0)  # [K]
+        mean_weights = np.stack(weight_list).mean(axis=0)
         _plot_importance_bars(
-            mean_weights, group_name, top_k, output_dir, dpi,
-            use_fusion_gate,
+            mean_weights, group_name, top_k, e_dir, dpi,
+            use_fusion_gate=False,
+        )
+
+    # ── Signal H figures ─────────────────────────────────────────────
+    has_fusion = any(len(v) > 0 for v in groups_h.values())
+    if has_fusion:
+        h_dir = output_dir / 'fusion_gate_H'
+        h_dir.mkdir(parents=True, exist_ok=True)
+        for group_name, weight_list in groups_h.items():
+            if len(weight_list) == 0:
+                continue
+            mean_weights = np.stack(weight_list).mean(axis=0)
+            _plot_importance_bars(
+                mean_weights, group_name, top_k, h_dir, dpi,
+                use_fusion_gate=True,
+            )
+
+    # ── Top-by-risk-level comparison ─────────────────────────────────
+    # Shows which prototypes are specifically important for each risk
+    # group, side by side. Uses fusion gate if available, else WSI gate.
+    groups = groups_h if has_fusion else groups_e
+    gate_label = 'Fusion Gate (H)' if has_fusion else 'WSI Gate (E)'
+
+    if len(groups['High Risk']) > 0 and len(groups['Low Risk']) > 0:
+        mean_high = np.stack(groups['High Risk']).mean(axis=0)
+        mean_low = np.stack(groups['Low Risk']).mean(axis=0)
+        _plot_top_by_risk_comparison(
+            mean_high, mean_low, top_k, output_dir, dpi, gate_label,
         )
 
 
@@ -201,6 +240,92 @@ def _plot_importance_bars(
     logger.info(f"Saved prototype importance ({group_name}) to {base}.*")
 
 
+def _plot_top_by_risk_comparison(
+    mean_high: np.ndarray,
+    mean_low: np.ndarray,
+    top_k: int,
+    output_dir: Path,
+    dpi: int,
+    gate_label: str,
+):
+    """
+    Side-by-side comparison: which prototypes are specifically most
+    important for high-risk vs low-risk predictions.
+
+    Shows:
+        - Left panel: top-K prototypes ranked by high-risk mean weight
+        - Right panel: top-K prototypes ranked by low-risk mean weight
+        - Center panel: rank difference (high - low) for all prototypes
+
+    This answers the question: "Are different tissue patterns associated
+    with good vs poor prognosis?"
+    """
+    K = len(mean_high)
+    top_k = min(top_k, K)
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, max(4, top_k * 0.5)))
+
+    # Left: top-K by high-risk
+    ax = axes[0]
+    order_h = np.argsort(mean_high)[::-1][:top_k]
+    values_h = mean_high[order_h]
+    labels_h = [f'Proto {i}' for i in order_h]
+    ax.barh(range(top_k), values_h, color=COLOR_HIGH, alpha=0.85,
+            edgecolor='white', linewidth=0.5)
+    ax.set_yticks(range(top_k))
+    ax.set_yticklabels(labels_h, fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel(f'Mean {gate_label} Weight', fontsize=9)
+    ax.set_title('Top Prototypes — High Risk', fontsize=11, fontweight='bold')
+    ax.grid(axis='x', alpha=0.3)
+
+    # Right: top-K by low-risk
+    ax = axes[2]
+    order_l = np.argsort(mean_low)[::-1][:top_k]
+    values_l = mean_low[order_l]
+    labels_l = [f'Proto {i}' for i in order_l]
+    ax.barh(range(top_k), values_l, color=COLOR_LOW, alpha=0.85,
+            edgecolor='white', linewidth=0.5)
+    ax.set_yticks(range(top_k))
+    ax.set_yticklabels(labels_l, fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel(f'Mean {gate_label} Weight', fontsize=9)
+    ax.set_title('Top Prototypes — Low Risk', fontsize=11, fontweight='bold')
+    ax.grid(axis='x', alpha=0.3)
+
+    # Center: rank difference (all prototypes)
+    ax = axes[1]
+    diff = mean_high - mean_low
+    sort_idx = np.argsort(diff)  # ascending: most low-risk at top
+    diff_sorted = diff[sort_idx]
+    labels_diff = [f'Proto {i}' for i in sort_idx]
+    colors = [COLOR_HIGH if d > 0 else COLOR_LOW for d in diff_sorted]
+
+    ax.barh(range(K), diff_sorted, color=colors, alpha=0.85,
+            edgecolor='white', linewidth=0.5)
+    ax.set_yticks(range(K))
+    ax.set_yticklabels(labels_diff, fontsize=7 if K > 12 else 9)
+    ax.axvline(x=0, color='grey', linewidth=0.8)
+    ax.set_xlabel('Weight Difference (High − Low)', fontsize=9)
+    ax.set_title('Prototype Importance Difference', fontsize=11, fontweight='bold')
+    ax.grid(axis='x', alpha=0.3)
+
+    fig.suptitle(
+        f'Prototype Importance by Risk Level ({gate_label})',
+        fontsize=13, fontweight='bold', y=1.02,
+    )
+
+    plt.tight_layout()
+    base = output_dir / 'prototype_importance_by_risk_level'
+    for fmt in _FORMATS:
+        fig.savefig(
+            str(base) + f'.{fmt}', dpi=dpi,
+            bbox_inches='tight', facecolor='white',
+        )
+    plt.close(fig)
+    logger.info(f"Saved top-by-risk comparison to {base}.*")
+
+
 # =====================================================================
 # 2. Prototype exemplar patches
 # =====================================================================
@@ -217,6 +342,8 @@ def extract_exemplar_patches(
     use_fusion_gate: bool = True,
     wsi_path: Optional[str] = None,
     patch_size: int = 256,
+    slide_offset: Optional[int] = None,
+    slide_n_patches: Optional[int] = None,
 ) -> Dict[int, List[np.ndarray]]:
     """
     Extract the most similar patch images for the top-K prototypes.
@@ -225,11 +352,23 @@ def extract_exemplar_patches(
     patches most similar to each prototype. Reads patch images from the
     WSI file if available, otherwise crops from the pre-built canvas.
 
+    IMPORTANT — slide scoping:
+        The similarities matrix in attention_data is [P_total, K] where
+        P_total spans ALL slides concatenated for this patient. When
+        called from the per-slide loop, you MUST pass slide_offset and
+        slide_n_patches so that the search is restricted to patches
+        belonging to the current slide. Without these, the top-similarity
+        indices could point to patches on a different slide, causing
+        wrong crops or index-out-of-bounds errors.
+
+        For cohort-level extraction (outside the per-slide loop), leave
+        both as None to search across all slides.
+
     Args:
         patient_id: Patient ID (for logging).
         attention_data: Patient attention dict with patch_assignments.
-        coords: [N, 2] patch coordinates at level 0.
-        canvas: Pre-built RGB canvas [H, W, 3] (fallback if no WSI).
+        coords: [N_slide, 2] patch coordinates for the current slide.
+        canvas: Pre-built RGB canvas [H, W, 3] for the current slide.
         downsample: Downsample factor used for canvas.
         coord_spacing: Patch footprint in coordinate space.
         top_k_protos: Number of top prototypes to extract for.
@@ -237,6 +376,10 @@ def extract_exemplar_patches(
         use_fusion_gate: Use fusion gate for importance ranking.
         wsi_path: Optional path to WSI for high-res patch extraction.
         patch_size: Patch size at extraction level.
+        slide_offset: Start index of this slide's patches in the
+            concatenated similarity matrix. Required for per-slide use.
+        slide_n_patches: Number of patches belonging to this slide.
+            Required for per-slide use.
 
     Returns:
         Dict[proto_idx -> List[np.ndarray]] where each array is an
@@ -244,19 +387,37 @@ def extract_exemplar_patches(
         by importance.
     """
     pa = attention_data.get('patch_assignments', {})
-    similarities = pa.get('similarities')  # [P, K] cosine similarity
+    similarities_full = pa.get('similarities')  # [P_total, K] cosine similarity
 
-    if similarities is None:
+    if similarities_full is None:
         logger.warning(
             f"{patient_id}: no similarities in attention data, "
             f"cannot extract exemplar patches"
         )
         return {}
 
-    similarities = np.asarray(similarities)
-    if similarities.ndim != 2:
+    similarities_full = np.asarray(similarities_full)
+    if similarities_full.ndim != 2:
         logger.warning(f"{patient_id}: unexpected similarities shape")
         return {}
+
+    # Slice to current slide's patches if offset is provided
+    if slide_offset is not None and slide_n_patches is not None:
+        similarities = similarities_full[slide_offset:slide_offset + slide_n_patches]
+        logger.debug(
+            f"Sliced similarities to slide range [{slide_offset}:"
+            f"{slide_offset + slide_n_patches}] "
+            f"(full matrix: {similarities_full.shape[0]} patches)"
+        )
+    else:
+        similarities = similarities_full
+        if len(coords) != similarities.shape[0]:
+            logger.warning(
+                f"{patient_id}: coords ({len(coords)}) vs similarities "
+                f"({similarities.shape[0]}) mismatch — exemplar indices "
+                f"may be incorrect. Pass slide_offset/slide_n_patches "
+                f"for per-slide extraction."
+            )
 
     # Determine top-K prototypes by importance
     weights = _get_importance_weights(attention_data, use_fusion_gate)
@@ -287,6 +448,7 @@ def extract_exemplar_patches(
     for proto_idx in top_proto_indices:
         proto_idx = int(proto_idx)
         # Sort patches by similarity to this prototype (descending)
+        # These indices are now relative to the slide slice, matching coords
         sims = similarities[:, proto_idx]
         top_patch_indices = np.argsort(sims)[::-1][:n_patches_per_proto]
 
@@ -306,7 +468,8 @@ def extract_exemplar_patches(
 
     logger.info(
         f"Extracted exemplars for {len(exemplars)} prototypes "
-        f"({patient_id})"
+        f"({patient_id}, "
+        f"{'slide slice' if slide_offset is not None else 'all slides'})"
     )
     return exemplars
 
