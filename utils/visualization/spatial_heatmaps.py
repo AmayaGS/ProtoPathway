@@ -51,8 +51,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import matplotlib.colors as mcolors
 from matplotlib.colors import Normalize
+
+from utils.visualization.prototype_panels import (
+    extract_exemplar_patches,
+    plot_prototype_exemplars,
+    plot_overlay_exemplar_strip,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +68,20 @@ try:
 except ImportError:
     HAS_OPENSLIDE = False
 
+SAVE_MULTI_FORMAT = ''
+_OUTPUT_FORMATS = ['pdf', 'svg', 'png']
+
+def _save_multi_format(fig, base_path, dpi=300, formats=None):
+    """Save a matplotlib figure in PDF, SVG, and PNG."""
+    if formats is None:
+        formats = _OUTPUT_FORMATS
+    base = Path(base_path)
+    base.parent.mkdir(parents=True, exist_ok=True)
+    for fmt in formats:
+        fig.savefig(
+            str(base) + f'.{fmt}', dpi=dpi,
+            bbox_inches='tight', facecolor='white',
+        )
 
 # =====================================================================
 # 0. Coordinate spacing detection
@@ -837,46 +856,93 @@ def plot_spatial_figure(
     overlay_alpha: float = 0.55,
 ):
     """
-    Compose a multi-panel spatial figure.
+    Save each overlay as a separate figure in PDF, SVG, PNG at 300 DPI.
 
-    Each overlay dict has:
-        'image': RGBA ndarray (rendered with full alpha=255)
-        'title': str
-        'legend': optional list of (color_tuple, label) for categorical
-        'colorbar': optional dict with 'cmap', 'vmin', 'vmax', 'label'
+    Also saves a combined multi-panel overview figure.
 
-    The overlay_alpha parameter controls how much the H&E shows through.
-    0.55 is a good default — overlay is dominant but tissue is visible.
-
-    Args:
-        canvas: RGB tissue image [H, W, 3].
-        overlays: List of overlay dicts.
-        output_path: Save path.
-        patient_id: For title.
-        slide_id: For title.
-        risk_group: For title.
-        dpi: Output DPI.
-        overlay_alpha: Global overlay transparency (0=invisible, 1=opaque).
+    Output structure:
+        {output_dir}/{slide_id}_HE.{pdf,svg,png}
+        {output_dir}/{slide_id}_{overlay_slug}.{pdf,svg,png}
+        {output_dir}/{slide_id}_spatial.pdf  (combined)
     """
-    n_panels = 1 + len(overlays)  # original + overlays
-    fig_width = 6 * n_panels
+    output_dir = Path(os.path.dirname(output_path) or '.')
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     aspect = canvas.shape[0] / canvas.shape[1]
-    fig_height = max(6, 6 * aspect) + 1.5  # extra for legends
+    panel_w = 6
+    panel_h = max(6, panel_w * aspect)
 
+    # ── Individual H&E panel ─────────────────────────────────────
+    fig_he, ax_he = plt.subplots(figsize=(panel_w, panel_h))
+    ax_he.imshow(canvas)
+    ax_he.set_title(f'H&E  |  {slide_id}', fontsize=11, fontweight='bold')
+    ax_he.axis('off')
+    plt.tight_layout()
+    _save_multi_format(fig_he, str(output_dir / f'{slide_id}_HE'), dpi=dpi)
+    plt.close(fig_he)
+    logger.info(f"Saved H&E panel to {output_dir / slide_id}_HE.*")
+
+    # ── Individual overlay panels ────────────────────────────────
+    for i, ov in enumerate(overlays):
+        title = ov.get('title', f'Overlay {i}')
+        slug = (
+            title.lower()
+            .replace(' ', '_')
+            .replace('(', '').replace(')', '')
+            .replace('/', '_')
+        )
+
+        fig_ov, ax_ov = plt.subplots(figsize=(panel_w, panel_h))
+        ax_ov.imshow(canvas)
+        ax_ov.imshow(ov['image'], alpha=overlay_alpha)
+        ax_ov.set_title(f'{title}  |  {risk_group}', fontsize=11, fontweight='bold')
+        ax_ov.axis('off')
+
+        # Categorical legend
+        if 'legend' in ov and ov['legend']:
+            handles = [
+                mpatches.Patch(
+                    facecolor=tuple(c / 255.0 for c in rgb),
+                    edgecolor='black', linewidth=0.5, label=lbl,
+                )
+                for rgb, lbl in ov['legend']
+            ]
+            ax_ov.legend(
+                handles=handles, loc='lower left',
+                fontsize=6, framealpha=0.85, ncol=1,
+                borderpad=0.3, handlelength=1.0, handletextpad=0.3,
+            )
+
+        # Continuous colorbar
+        if 'colorbar' in ov and ov['colorbar']:
+            cb = ov['colorbar']
+            sm = plt.cm.ScalarMappable(
+                cmap=cb['cmap'],
+                norm=Normalize(vmin=cb['vmin'], vmax=cb['vmax']),
+            )
+            sm.set_array([])
+            cbar = fig_ov.colorbar(sm, ax=ax_ov, fraction=0.046, pad=0.02)
+            cbar.set_label(cb.get('label', ''), fontsize=8)
+
+        plt.tight_layout()
+        _save_multi_format(fig_ov, str(output_dir / f'{slide_id}_{slug}'), dpi=dpi)
+        plt.close(fig_ov)
+        logger.info(f"Saved overlay panel '{title}' to {output_dir / slide_id}_{slug}.*")
+
+    # ── Combined multi-panel overview ────────────────────────────
+    n_panels = 1 + len(overlays)
     fig, axes = plt.subplots(
-        1, n_panels, figsize=(fig_width, fig_height),
-        gridspec_kw={'wspace': 0.05}
+        1, n_panels,
+        figsize=(panel_w * n_panels, panel_h + 1.5),
+        gridspec_kw={'wspace': 0.05},
     )
-
     if n_panels == 1:
         axes = [axes]
 
-    # Panel 0: Original tissue
     axes[0].imshow(canvas)
     axes[0].set_title('H&E', fontsize=11, fontweight='bold')
     axes[0].axis('off')
 
-    # Overlay panels
     for i, ov in enumerate(overlays):
         ax = axes[i + 1]
         ax.imshow(canvas)
@@ -884,43 +950,134 @@ def plot_spatial_figure(
         ax.set_title(ov.get('title', ''), fontsize=11, fontweight='bold')
         ax.axis('off')
 
-        # Categorical legend
         if 'legend' in ov and ov['legend']:
-            legend_handles = []
-            for color_rgb, label in ov['legend']:
-                color_norm = tuple(c / 255.0 for c in color_rgb)
-                legend_handles.append(
-                    mpatches.Patch(
-                        facecolor=color_norm, edgecolor='black',
-                        linewidth=0.5, label=label,
-                    )
+            handles = [
+                mpatches.Patch(
+                    facecolor=tuple(c / 255.0 for c in rgb),
+                    edgecolor='black', linewidth=0.5, label=lbl,
                 )
+                for rgb, lbl in ov['legend']
+            ]
             ax.legend(
-                handles=legend_handles, loc='lower left',
+                handles=handles, loc='lower left',
                 fontsize=6, framealpha=0.85, ncol=1,
                 borderpad=0.3, handlelength=1.0, handletextpad=0.3,
             )
 
-        # Continuous colorbar
         if 'colorbar' in ov and ov['colorbar']:
-            cb_info = ov['colorbar']
+            cb = ov['colorbar']
             sm = plt.cm.ScalarMappable(
-                cmap=cb_info['cmap'],
-                norm=Normalize(vmin=cb_info['vmin'], vmax=cb_info['vmax']),
+                cmap=cb['cmap'],
+                norm=Normalize(vmin=cb['vmin'], vmax=cb['vmax']),
             )
             sm.set_array([])
             cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.02)
-            cbar.set_label(cb_info.get('label', ''), fontsize=8)
+            cbar.set_label(cb.get('label', ''), fontsize=8)
 
     fig.suptitle(
         f'{patient_id}  |  {slide_id}  |  {risk_group}',
         fontsize=13, fontweight='bold', y=0.98,
     )
-
-    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     fig.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
     plt.close(fig)
-    logger.info(f"Saved spatial figure to {output_path}")
+    logger.info(f"Saved combined spatial figure to {output_path}")
+
+
+# def plot_spatial_figure(
+#     canvas: np.ndarray,
+#     overlays: List[Dict],
+#     output_path: str,
+#     patient_id: str,
+#     slide_id: str,
+#     risk_group: str,
+#     dpi: int = 300,
+#     overlay_alpha: float = 0.55,
+# ):
+#     """
+#     Compose a multi-panel spatial figure.
+#
+#     Each overlay dict has:
+#         'image': RGBA ndarray (rendered with full alpha=255)
+#         'title': str
+#         'legend': optional list of (color_tuple, label) for categorical
+#         'colorbar': optional dict with 'cmap', 'vmin', 'vmax', 'label'
+#
+#     The overlay_alpha parameter controls how much the H&E shows through.
+#     0.55 is a good default — overlay is dominant but tissue is visible.
+#
+#     Args:
+#         canvas: RGB tissue image [H, W, 3].
+#         overlays: List of overlay dicts.
+#         output_path: Save path.
+#         patient_id: For title.
+#         slide_id: For title.
+#         risk_group: For title.
+#         dpi: Output DPI.
+#         overlay_alpha: Global overlay transparency (0=invisible, 1=opaque).
+#     """
+#     n_panels = 1 + len(overlays)  # original + overlays
+#     fig_width = 6 * n_panels
+#     aspect = canvas.shape[0] / canvas.shape[1]
+#     fig_height = max(6, 6 * aspect) + 1.5  # extra for legends
+#
+#     fig, axes = plt.subplots(
+#         1, n_panels, figsize=(fig_width, fig_height),
+#         gridspec_kw={'wspace': 0.05}
+#     )
+#
+#     if n_panels == 1:
+#         axes = [axes]
+#
+#     # Panel 0: Original tissue
+#     axes[0].imshow(canvas)
+#     axes[0].set_title('H&E', fontsize=11, fontweight='bold')
+#     axes[0].axis('off')
+#
+#     # Overlay panels
+#     for i, ov in enumerate(overlays):
+#         ax = axes[i + 1]
+#         ax.imshow(canvas)
+#         ax.imshow(ov['image'], alpha=overlay_alpha)
+#         ax.set_title(ov.get('title', ''), fontsize=11, fontweight='bold')
+#         ax.axis('off')
+#
+#         # Categorical legend
+#         if 'legend' in ov and ov['legend']:
+#             legend_handles = []
+#             for color_rgb, label in ov['legend']:
+#                 color_norm = tuple(c / 255.0 for c in color_rgb)
+#                 legend_handles.append(
+#                     mpatches.Patch(
+#                         facecolor=color_norm, edgecolor='black',
+#                         linewidth=0.5, label=label,
+#                     )
+#                 )
+#             ax.legend(
+#                 handles=legend_handles, loc='lower left',
+#                 fontsize=6, framealpha=0.85, ncol=1,
+#                 borderpad=0.3, handlelength=1.0, handletextpad=0.3,
+#             )
+#
+#         # Continuous colorbar
+#         if 'colorbar' in ov and ov['colorbar']:
+#             cb_info = ov['colorbar']
+#             sm = plt.cm.ScalarMappable(
+#                 cmap=cb_info['cmap'],
+#                 norm=Normalize(vmin=cb_info['vmin'], vmax=cb_info['vmax']),
+#             )
+#             sm.set_array([])
+#             cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.02)
+#             cbar.set_label(cb_info.get('label', ''), fontsize=8)
+#
+#     fig.suptitle(
+#         f'{patient_id}  |  {slide_id}  |  {risk_group}',
+#         fontsize=13, fontweight='bold', y=0.98,
+#     )
+#
+#     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+#     fig.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
+#     plt.close(fig)
+#     logger.info(f"Saved spatial figure to {output_path}")
 
 
 # =====================================================================
@@ -1152,6 +1309,52 @@ def generate_patient_spatial_viz(
                         'label': 'Percentile',
                     },
                 })
+
+        # ── Extract and visualize prototype exemplar patches ─────
+        try:
+            exemplars = extract_exemplar_patches(
+                patient_id=patient_id,
+                attention_data=attention_data,
+                coords=coords,
+                canvas=canvas,
+                downsample=downsample,
+                coord_spacing=cs,
+                top_k_protos=5,
+                n_patches_per_proto=5,
+                wsi_path=slide_wsi_path,
+                patch_size=patch_size,
+            )
+
+            if exemplars:
+                weights = np.asarray(
+                    pa.get('gate_weights',
+                           attention_data.get('fusion_gate_weights', []))
+                )
+
+                # Full exemplar grid for this slide
+                plot_prototype_exemplars(
+                    exemplars=exemplars,
+                    importance_weights=weights,
+                    output_dir=str(output_dir),
+                    slide_id=slide_id,
+                    proto_colors=proto_colors,
+                    dpi=300,
+                )
+
+                # Exemplar strip for prototype assignment overlay
+                visible_protos = sorted(set(slide_assignments.astype(int)))
+                plot_overlay_exemplar_strip(
+                    exemplars=exemplars,
+                    visible_protos=visible_protos,
+                    importance_weights=weights,
+                    overlay_title='Prototype Assignments',
+                    output_dir=str(output_dir),
+                    slide_id=slide_id,
+                    proto_colors=proto_colors,
+                )
+
+        except Exception as e:
+            logger.warning(f"Exemplar extraction failed for {slide_id}: {e}")
 
         # ── Compose and save ─────────────────────────────────────────
         output_path = output_dir / f'{slide_id}_spatial.pdf'

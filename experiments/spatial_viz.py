@@ -320,6 +320,43 @@ def main():
 
         generate_for_patient(pid, risk_group, attention_by_patient, pathway_names)
 
+    # ── Cohort-level prototype visualizations ────────────────────
+    logger.info("\\n" + "=" * 60)
+    logger.info("Generating cohort-level prototype panels...")
+    logger.info("=" * 60)
+
+    from utils.visualization.prototype_panels import (
+        plot_prototype_importance,
+        plot_cohort_prototype_exemplars,
+    )
+
+    proto_output = os.path.join(
+        EXPERIMENT_DIR, 'figures', 'spatial', 'prototype_panels'
+    )
+
+    # Prototype importance bar charts (overall, high-risk, low-risk)
+    plot_prototype_importance(
+        attention_by_patient=attention_by_patient,
+        output_dir=proto_output,
+        top_k=5,
+        use_fusion_gate=True,
+    )
+
+    # Cohort-level exemplar patches (top prototypes, most similar patches)
+    plot_cohort_prototype_exemplars(
+        attention_by_patient=attention_by_patient,
+        wsi_features_dir=WSI_FEATURES_DIR,
+        output_dir=proto_output,
+        top_k_protos=5,
+        n_patches_per_proto=8,
+        wsi_dir=WSI_SLIDES_DIR,
+        downsample=DOWNSAMPLE,
+        patch_size=PATCH_SIZE,
+        use_fusion_gate=True,
+    )
+
+    logger.info("Prototype panel generation complete.")
+
     # Summary
     output_base = os.path.join(EXPERIMENT_DIR, 'figures', 'spatial')
     logger.info(f"\n{'='*60}")
