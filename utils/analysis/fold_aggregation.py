@@ -388,9 +388,14 @@ def _remap_patient_attention(
                 pa['gate_weights'] = gw[reorder]
 
         # Hard assignments: relabel prototype IDs per patch
-        if 'assignments' in pa:
-            old_assignments = np.asarray(pa['assignments'])
-            pa['assignments'] = np.array(
+        assign_key = (
+            'hard_assignments' if 'hard_assignments' in pa
+            else 'assignments' if 'assignments' in pa
+            else None
+        )
+        if assign_key is not None:
+            old_assignments = np.asarray(pa[assign_key])
+            pa[assign_key] = np.array(
                 [permutation.get(int(a), int(a)) for a in old_assignments]
             )
 

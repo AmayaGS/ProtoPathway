@@ -136,6 +136,11 @@ def parse_args():
         '--n-crossmodal-gene-drilldown', type=int, default=5,
         help='Number of pathways for cross-modal gene drill-down (default: 5)')
 
+    vis_p.add_argument(
+        '--force_recalculate', action='store_true', default=False,
+        help='Force recalculation of statistical analyses '
+             'even if CSVs already exist')
+
     # Spatial visualization (Step 6)
     vis_p.add_argument(
         '--wsi-features-dir', default=None,
@@ -153,7 +158,7 @@ def parse_args():
         '--spatial-n-per-group', type=int, default=2,
         help='Number of patients per risk group for auto-selection (default: 2)')
     vis_p.add_argument(
-        '--spatial-downsample', type=int, default=4,
+        '--spatial-downsample', type=int, default=8,
         help='Downsample factor for spatial rendering (default: 4)')
     vis_p.add_argument(
         '--spatial-patch-size', type=int, default=256,
@@ -309,6 +314,7 @@ def main():
             spatial_downsample=args.spatial_downsample,
             spatial_patch_size=args.spatial_patch_size,
             spatial_single_pathway=args.spatial_single_pathway,
+            force_recalculate=args.force_recalculate
         )
 
 

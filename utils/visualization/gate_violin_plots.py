@@ -238,7 +238,7 @@ def _plot_vertical_violin(
     ]
     ax.legend(handles=legend_elements, loc='upper right', fontsize=9)
 
-    plt.tight_layout()
+    fig.subplots_adjust(bottom=0.2)
     output_path = _ensure_pdf(output_path)
     fig.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close(fig)

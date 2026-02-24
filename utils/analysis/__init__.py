@@ -11,3 +11,4 @@ from .fold_stratified_analysis import (
     FoldStratifiedAnalyzer,
     run_fold_stratified_importance_analysis,
 )
+from .fold_stratified_analysis import SavedAnalyzerProxy, load_saved_analyzers

@@ -514,6 +514,95 @@ class FoldStratifiedAnalyzer:
                 index=False,
             )
 
+class SavedAnalyzerProxy:
+    """
+    Lightweight read-only proxy that loads a previously-saved analyzer
+    from CSVs. Provides the same interface that plotting functions need:
+
+        .rank_analysis()          -> DataFrame
+        .get_patient_level_data() -> DataFrame
+        .entity_names             -> List[str]
+        .analysis_name            -> str
+    """
+
+    def __init__(self, analysis_name, rank_df, patient_df, entity_names):
+        self.analysis_name = analysis_name
+        self._rank_df = rank_df
+        self._patient_df = patient_df
+        self.entity_names = entity_names
+
+    def rank_analysis(self, **kwargs):
+        return self._rank_df
+
+    def get_patient_level_data(self):
+        return self._patient_df
+
+    @classmethod
+    def load(cls, analysis_dir, analysis_name):
+        """
+        Load from saved CSVs. Returns None if rank_analysis CSV missing.
+
+        Expects:
+            {analysis_dir}/{analysis_name}_rank_analysis.csv
+            {analysis_dir}/{analysis_name}_patient_data.csv  (optional)
+        """
+        import os
+        import pandas as pd
+
+        rank_path = os.path.join(
+            analysis_dir, f'{analysis_name}_rank_analysis.csv'
+        )
+        if not os.path.exists(rank_path):
+            return None
+
+        rank_df = pd.read_csv(rank_path)
+
+        patient_path = os.path.join(
+            analysis_dir, f'{analysis_name}_patient_data.csv'
+        )
+        patient_df = (
+            pd.read_csv(patient_path)
+            if os.path.exists(patient_path) else None
+        )
+
+        entity_names = (
+            rank_df['entity'].tolist()
+            if 'entity' in rank_df.columns else []
+        )
+
+        return cls(analysis_name, rank_df, patient_df, entity_names)
+
+
+def load_saved_analyzers(analysis_dir, analysis_names=None):
+    """
+    Load saved analyzers from a directory.
+
+    Args:
+        analysis_dir: Directory containing *_rank_analysis.csv files.
+        analysis_names: Specific names to load (None = discover all).
+
+    Returns:
+        Dict[name -> SavedAnalyzerProxy]
+    """
+    import os
+    loaded = {}
+
+    if analysis_names is not None:
+        for name in analysis_names:
+            proxy = SavedAnalyzerProxy.load(analysis_dir, name)
+            if proxy is not None:
+                loaded[name] = proxy
+    else:
+        if not os.path.isdir(analysis_dir):
+            return loaded
+        for f in sorted(os.listdir(analysis_dir)):
+            if f.endswith('_rank_analysis.csv'):
+                name = f.replace('_rank_analysis.csv', '')
+                proxy = SavedAnalyzerProxy.load(analysis_dir, name)
+                if proxy is not None:
+                    loaded[name] = proxy
+
+    return loaded
 
 # ============================================================================
 # Drop-in replacement for run_importance_analysis

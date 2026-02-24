@@ -38,6 +38,9 @@ COLOR_LOW = '#2196F3'
 COLOR_HIGH = '#E53935'
 
 
+
+
+
 # =====================================================================
 # Main entry point
 # =====================================================================
@@ -61,6 +64,7 @@ def run_simplified_visualization(
     spatial_downsample: int = 4,
     spatial_patch_size: int = 256,
     spatial_single_pathway: Optional[str] = None,
+    force_recalculate: bool = False
 ):
     from pathlib import Path
     from utils.analysis.fold_aggregation import pool_cv_results, save_alignment_report
@@ -134,19 +138,41 @@ def run_simplified_visualization(
 
     # ── Step 3 ───────────────────────────────────────────────────────
     logger.info("Step 3: Cross-fold importance analysis")
-    if use_fold_stratified:
-        analyzers = run_fold_stratified_importance_analysis(
-            predictions=predictions, attention_by_patient=attention_by_patient,
-            entity_names=entity_names, output_dir=str(analysis_dir),
-            pathways_of_interest=[], top_k_pathways=0,
-            skip_prototype_signals=True,
-        )
+
+    _sample_attn = attention_by_patient[next(iter(attention_by_patient))]
+    _expected = []
+    if 'pathway_importance' in _sample_attn and entity_names.get('pathway_names'):
+        _expected.append('pathway_gate')
+    if ('gene_pathway_attention' in _sample_attn
+            and 'pathway_importance' in _sample_attn
+            and entity_names.get('gene_names')):
+        _expected.extend(['gene_average', 'gene_sum'])
+
+    if (not force_recalculate
+            and _expected
+            and _analysis_csvs_exist(analysis_dir, _expected)):
+        logger.info("  CSVs exist — loading from disk "
+                     "(use --force-recalculate to rerun)")
+        from utils.analysis.fold_stratified_analysis import load_saved_analyzers
+        analyzers = load_saved_analyzers(str(analysis_dir))
     else:
-        analyzers = run_importance_analysis(
-            predictions=predictions, attention_by_patient=attention_by_patient,
-            entity_names=entity_names, output_dir=str(analysis_dir),
-            pathways_of_interest=[], top_k_pathways=0,
-        )
+        if use_fold_stratified:
+            analyzers = run_fold_stratified_importance_analysis(
+                predictions=predictions,
+                attention_by_patient=attention_by_patient,
+                entity_names=entity_names,
+                output_dir=str(analysis_dir),
+                pathways_of_interest=[], top_k_pathways=0,
+                skip_prototype_signals=True,
+            )
+        else:
+            analyzers = run_importance_analysis(
+                predictions=predictions,
+                attention_by_patient=attention_by_patient,
+                entity_names=entity_names,
+                output_dir=str(analysis_dir),
+                pathways_of_interest=[], top_k_pathways=0,
+            )
 
     pathways_of_interest = []
     if 'pathway_gate' in analyzers:
@@ -154,20 +180,38 @@ def run_simplified_visualization(
             analyzers['pathway_gate'], n_pathways_per_direction)
 
     if pathways_of_interest:
-        logger.info(f"Step 3b: Gene drill-down ({len(pathways_of_interest)} pathways)")
-        if use_fold_stratified:
-            gene_a = run_fold_stratified_importance_analysis(
-                predictions=predictions, attention_by_patient=attention_by_patient,
-                entity_names=entity_names, output_dir=str(analysis_dir),
-                pathways_of_interest=pathways_of_interest, top_k_pathways=0,
-                skip_prototype_signals=True,
-            )
+        _gene_csv_names = []
+        for pw in pathways_of_interest:
+            safe = pw[:60].replace(' ', '_').replace('/', '_').replace(':', '_')
+            _gene_csv_names.append(f'genes_in_{safe}')
+
+        if (not force_recalculate
+                and _analysis_csvs_exist(analysis_dir, _gene_csv_names)):
+            logger.info("  Gene drill-down CSVs exist — loading from disk")
+            from utils.analysis.fold_stratified_analysis import load_saved_analyzers
+            gene_a = load_saved_analyzers(str(analysis_dir), _gene_csv_names)
         else:
-            gene_a = run_importance_analysis(
-                predictions=predictions, attention_by_patient=attention_by_patient,
-                entity_names=entity_names, output_dir=str(analysis_dir),
-                pathways_of_interest=pathways_of_interest, top_k_pathways=0,
-            )
+            logger.info(f"Step 3b: Gene drill-down "
+                         f"({len(pathways_of_interest)} pathways)")
+            if use_fold_stratified:
+                gene_a = run_fold_stratified_importance_analysis(
+                    predictions=predictions,
+                    attention_by_patient=attention_by_patient,
+                    entity_names=entity_names,
+                    output_dir=str(analysis_dir),
+                    pathways_of_interest=pathways_of_interest,
+                    top_k_pathways=0,
+                    skip_prototype_signals=True,
+                )
+            else:
+                gene_a = run_importance_analysis(
+                    predictions=predictions,
+                    attention_by_patient=attention_by_patient,
+                    entity_names=entity_names,
+                    output_dir=str(analysis_dir),
+                    pathways_of_interest=pathways_of_interest,
+                    top_k_pathways=0,
+                )
         analyzers.update(gene_a)
 
     # ── Step 4 ───────────────────────────────────────────────────────
@@ -203,6 +247,7 @@ def run_simplified_visualization(
             n_bar=n_bar, n_violin=n_violin,
             top_k_crossmodal_pathways=top_k_crossmodal_pathways,
             n_crossmodal_gene_drilldown=n_crossmodal_gene_drilldown,
+            force_recalculate=force_recalculate
         )
 
     # ── Step 6 ───────────────────────────────────────────────────────
@@ -405,6 +450,7 @@ def _run_per_fold(
     fold_idx, predictions, attention_by_patient, entity_names,
     output_dir, n_bar=30, n_violin=15,
     top_k_crossmodal_pathways=20, n_crossmodal_gene_drilldown=5,
+    force_recalculate=False
 ):
     from pathlib import Path
     from utils.analysis.fold_stratified_analysis import (
@@ -469,48 +515,76 @@ def _run_per_fold(
         a.save_results(str(dirs['analysis']))
         analyzers[key] = a
 
-    if has_e:
-        logger.info(f"  Signal E (WSI gate)...")
-        _build('prototype_raw', pnames,
-               lambda a: a['patch_assignments']['gate_weights'])
+    # Check if per-fold CSVs already exist
+    _expected_pf = []
+    if has_e: _expected_pf.append('prototype_raw')
+    if has_h: _expected_pf.append('prototype_attended')
 
-    if has_h:
-        logger.info(f"  Signal H (fusion gate)...")
-        _build('prototype_attended', pnames,
-               lambda a: a['fusion_gate_weights'])
+    if (not force_recalculate
+            and _expected_pf
+            and _analysis_csvs_exist(dirs['analysis'], _expected_pf)):
+        logger.info(f"  Per-fold CSVs exist — loading from disk")
+        from utils.analysis.fold_stratified_analysis import load_saved_analyzers
+        analyzers = load_saved_analyzers(str(dirs['analysis']))
+    else:
+        if has_e:
+            logger.info(f"  Signal E (WSI gate)...")
+            _build('prototype_raw', pnames,
+                   lambda a: a['patch_assignments']['gate_weights'])
 
-    if has_e and has_h:
-        logger.info(f"  Shift E→H...")
-        sa = PrototypeShiftAnalyzer(pnames)
-        for p in valid:
-            at = fold_attn[p]
-            sa.add_patient(p, wsi_gate=at['patch_assignments']['gate_weights'],
-                           fusion_gate=at['fusion_gate_weights'],
-                           risk_group=risk_map[p])
-        sa.save_results(str(dirs['analysis']))
-        analyzers['prototype_shift'] = sa
+        if has_h:
+            logger.info(f"  Signal H (fusion gate)...")
+            _build('prototype_attended', pnames,
+                   lambda a: a['fusion_gate_weights'])
 
-    if has_e and 'assignments' in sample.get('patch_assignments', {}):
-        logger.info(f"  Signal F (assignment freq)...")
-        fa = FoldStratifiedAnalyzer(pnames, 'prototype_assignment_freq')
-        for p in valid:
-            assigns = np.asarray(fold_attn[p]['patch_assignments']['assignments']).astype(int)
-            if len(assigns) == 0: continue
-            freq = np.array([(assigns == i).sum() / len(assigns) for i in range(K)])
-            fa.add_patient(p, freq, risk_map[p], fold_idx)
-        fa.save_results(str(dirs['analysis']))
-        analyzers['prototype_assignment_freq'] = fa
-
-    if has_g and pw_names:
-        logger.info(f"  Signal G (cross-modal, {K}×{len(pw_names)})...")
-        for ki in range(K):
-            nm = f'crossmodal_proto_{ki}'
-            a = FoldStratifiedAnalyzer(pw_names, nm)
+        if has_e and has_h:
+            logger.info(f"  Shift E->H...")
+            sa = PrototypeShiftAnalyzer(pnames)
             for p in valid:
-                a.add_patient(p, fold_attn[p]['cross_modal_attention'][ki],
-                              risk_map[p], fold_idx)
-            a.save_results(str(dirs['analysis']))
-            analyzers[nm] = a
+                at = fold_attn[p]
+                sa.add_patient(
+                    p,
+                    wsi_gate=at['patch_assignments']['gate_weights'],
+                    fusion_gate=at['fusion_gate_weights'],
+                    risk_group=risk_map[p],
+                )
+            sa.save_results(str(dirs['analysis']))
+            analyzers['prototype_shift'] = sa
+
+        # FIX: check 'hard_assignments' first, fall back to 'assignments'
+        _pa_sample = sample.get('patch_assignments', {})
+        _has_assigns = (
+                'hard_assignments' in _pa_sample or 'assignments' in _pa_sample
+        )
+        if has_e and _has_assigns:
+            logger.info(f"  Signal F (assignment freq)...")
+            fa = FoldStratifiedAnalyzer(pnames, 'prototype_assignment_freq')
+            for p in valid:
+                pa = fold_attn[p]['patch_assignments']
+                assigns = np.asarray(
+                    pa.get('hard_assignments', pa.get('assignments'))
+                ).astype(int)
+                if len(assigns) == 0:
+                    continue
+                freq = np.array([
+                    (assigns == i).sum() / len(assigns) for i in range(K)
+                ])
+                fa.add_patient(p, freq, risk_map[p], fold_idx)
+            fa.save_results(str(dirs['analysis']))
+            analyzers['prototype_assignment_freq'] = fa
+
+        if has_g and pw_names:
+            logger.info(f"  Signal G (cross-modal, {K}x{len(pw_names)})...")
+            for ki in range(K):
+                nm = f'crossmodal_proto_{ki}'
+                a = FoldStratifiedAnalyzer(pw_names, nm)
+                for p in valid:
+                    a.add_patient(
+                        p, fold_attn[p]['cross_modal_attention'][ki],
+                        risk_map[p], fold_idx,
+                    )
+                a.save_results(str(dirs['analysis']))
+                analyzers[nm] = a
 
         # ── Risk distribution by event ───────────────────────────────────
         logger.info(f"  Risk distribution by event status...")
@@ -965,3 +1039,14 @@ def _select_top_pathways(analyzer, n_per_dir=5):
 def _ensure_pdf(path):
     b, e = os.path.splitext(str(path))
     return b + '.pdf' if e.lower() != '.pdf' else str(path)
+
+
+def _analysis_csvs_exist(analysis_dir, expected_names):
+    """Check if rank_analysis CSVs exist for all expected signal names."""
+    import os
+    for name in expected_names:
+        if not os.path.exists(
+            os.path.join(str(analysis_dir), f'{name}_rank_analysis.csv')
+        ):
+            return False
+    return True
