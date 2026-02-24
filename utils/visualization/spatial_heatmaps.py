@@ -691,6 +691,7 @@ def render_single_pathway_heatmap(
     downsample: int = 1,
     cmap_name: str = 'inferno',
     coord_spacing: Optional[int] = None,
+    rank_transform: bool = False,
 ) -> Tuple[np.ndarray, float, float]:
     """
     Continuous heatmap for a single pathway — computational IHC stain.
@@ -707,11 +708,15 @@ def render_single_pathway_heatmap(
         downsample: Downsample factor.
         cmap_name: Matplotlib colormap name.
         coord_spacing: Patch footprint in coordinate space.
+        rank_transform: If True, map values to percentile ranks
+            before coloring. Spreads the full colormap across the
+            data regardless of the raw value distribution — useful
+            when attention magnitudes are near-uniform.
 
     Returns:
         overlay: RGBA image [H, W, 4].
-        vmin: Minimum attention value (for colorbar).
-        vmax: Maximum attention value (for colorbar).
+        vmin: Minimum value used for colorbar (raw or percentile).
+        vmax: Maximum value used for colorbar (raw or percentile).
     """
     if coord_spacing is None:
         coord_spacing = infer_coord_spacing(coords)
@@ -726,7 +731,15 @@ def render_single_pathway_heatmap(
     # Per-patch attention (via assignment)
     patch_attn = proto_pw_attn[assignments.astype(int)]  # [N]
 
-    vmin, vmax = float(patch_attn.min()), float(patch_attn.max())
+    if rank_transform:
+        from scipy.stats import rankdata
+        # Average rank, scaled to [0, 1] percentile
+        patch_values = (rankdata(patch_attn) - 1) / max(len(patch_attn) - 1, 1)
+        vmin, vmax = 0.0, 1.0
+    else:
+        patch_values = patch_attn
+        vmin, vmax = float(patch_attn.min()), float(patch_attn.max())
+
     norm = Normalize(vmin=vmin, vmax=vmax)
     cmap = plt.cm.get_cmap(cmap_name)
 
@@ -736,7 +749,7 @@ def render_single_pathway_heatmap(
         cx = int(x / downsample)
         cy = int(y / downsample)
 
-        rgba = cmap(norm(patch_attn[i]))
+        rgba = cmap(norm(patch_values[i]))
         overlay[cy:cy+effective_patch, cx:cx+effective_patch] = [
             int(rgba[0] * 255),
             int(rgba[1] * 255),
@@ -931,6 +944,7 @@ def generate_patient_spatial_viz(
     max_slides: int = 2,
     single_pathway_name: Optional[str] = None,
     single_pathway_idx: Optional[int] = None,
+    rank_transform: bool = False,
 ):
     """
     Generate all spatial visualizations for a patient.
@@ -1102,13 +1116,14 @@ def generate_patient_spatial_viz(
 
         # ── Overlay 3: Single-pathway heatmap ────────────────────────
         if single_pathway_idx is not None and len(slide_cross_modal) > 0:
+            display_name = single_pathway_name[:40]
+
+            # Raw attention version
             ihc_overlay, vmin, vmax = render_single_pathway_heatmap(
                 coords, slide_assignments, slide_cross_modal,
                 single_pathway_idx, patch_size, downsample,
-                coord_spacing=cs,
+                coord_spacing=cs, rank_transform=False,
             )
-
-            display_name = single_pathway_name[:40]
             overlays.append({
                 'image': ihc_overlay,
                 'title': f'{display_name}',
@@ -1116,9 +1131,27 @@ def generate_patient_spatial_viz(
                     'cmap': 'inferno',
                     'vmin': vmin,
                     'vmax': vmax,
-                    'label': 'Pathway Attention',
+                    'label': 'Attention',
                 },
             })
+
+            # Rank-transformed version (percentile)
+            if rank_transform:
+                rank_overlay, rvmin, rvmax = render_single_pathway_heatmap(
+                    coords, slide_assignments, slide_cross_modal,
+                    single_pathway_idx, patch_size, downsample,
+                    coord_spacing=cs, rank_transform=True,
+                )
+                overlays.append({
+                    'image': rank_overlay,
+                    'title': f'{display_name} (rank)',
+                    'colorbar': {
+                        'cmap': 'inferno',
+                        'vmin': rvmin,
+                        'vmax': rvmax,
+                        'label': 'Percentile',
+                    },
+                })
 
         # ── Compose and save ─────────────────────────────────────────
         output_path = output_dir / f'{slide_id}_spatial.pdf'

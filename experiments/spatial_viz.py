@@ -261,6 +261,7 @@ def generate_for_patient(patient_id, risk_group, attention_by_patient, pathway_n
         patch_size=PATCH_SIZE,
         downsample=DOWNSAMPLE,
         single_pathway_name=SINGLE_PATHWAY,
+        rank_transform=True
     )
 
 
