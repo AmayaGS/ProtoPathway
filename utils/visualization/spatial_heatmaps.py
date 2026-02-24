@@ -861,9 +861,9 @@ def plot_spatial_figure(
     Also saves a combined multi-panel overview figure.
 
     Output structure:
-        {output_dir}/{slide_id}_HE.{pdf,svg,png}
-        {output_dir}/{slide_id}_{overlay_slug}.{pdf,svg,png}
-        {output_dir}/{slide_id}_spatial.pdf  (combined)
+        {output_dir}/{patient_id}_HE.{pdf,svg,png}
+        {output_dir}/{patient_id}_{overlay_slug}.{pdf,svg,png}
+        {output_dir}/{patient_id}_spatial.pdf  (combined)
     """
     output_dir = Path(os.path.dirname(output_path) or '.')
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -875,12 +875,12 @@ def plot_spatial_figure(
     # ── Individual H&E panel ─────────────────────────────────────
     fig_he, ax_he = plt.subplots(figsize=(panel_w, panel_h))
     ax_he.imshow(canvas)
-    ax_he.set_title(f'H&E  |  {slide_id}', fontsize=11, fontweight='bold')
+    ax_he.set_title(f'H&E  |  {patient_id}', fontsize=11, fontweight='bold')
     ax_he.axis('off')
     plt.tight_layout()
-    _save_multi_format(fig_he, str(output_dir / f'{slide_id}_HE'), dpi=dpi)
+    _save_multi_format(fig_he, str(output_dir / f'{patient_id}_HE'), dpi=dpi)
     plt.close(fig_he)
-    logger.info(f"Saved H&E panel to {output_dir / slide_id}_HE.*")
+    logger.info(f"Saved H&E panel to {output_dir / patient_id}_HE.*")
 
     # ── Individual overlay panels ────────────────────────────────
     for i, ov in enumerate(overlays):
@@ -925,9 +925,9 @@ def plot_spatial_figure(
             cbar.set_label(cb.get('label', ''), fontsize=8)
 
         plt.tight_layout()
-        _save_multi_format(fig_ov, str(output_dir / f'{slide_id}_{slug}'), dpi=dpi)
+        _save_multi_format(fig_ov, str(output_dir / f'{patient_id}_{slug}'), dpi=dpi)
         plt.close(fig_ov)
-        logger.info(f"Saved overlay panel '{title}' to {output_dir / slide_id}_{slug}.*")
+        logger.info(f"Saved overlay panel '{title}' to {output_dir / patient_id}_{slug}.*")
 
     # ── Combined multi-panel overview ────────────────────────────
     n_panels = 1 + len(overlays)
@@ -975,7 +975,7 @@ def plot_spatial_figure(
             cbar.set_label(cb.get('label', ''), fontsize=8)
 
     fig.suptitle(
-        f'{patient_id}  |  {slide_id}  |  {risk_group}',
+        f'{patient_id} | {risk_group}',
         fontsize=13, fontweight='bold', y=0.98,
     )
     fig.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
@@ -1341,23 +1341,23 @@ def generate_patient_spatial_viz(
                     dpi=300,
                 )
 
-                # Exemplar strip for prototype assignment overlay
-                visible_protos = sorted(set(slide_assignments.astype(int)))
-                plot_overlay_exemplar_strip(
-                    exemplars=exemplars,
-                    visible_protos=visible_protos,
-                    importance_weights=weights,
-                    overlay_title='Prototype Assignments',
-                    output_dir=str(output_dir),
-                    slide_id=slide_id,
-                    proto_colors=proto_colors,
-                )
+                # # Exemplar strip for prototype assignment overlay
+                # visible_protos = sorted(set(slide_assignments.astype(int)))
+                # plot_overlay_exemplar_strip(
+                #     exemplars=exemplars,
+                #     visible_protos=visible_protos,
+                #     importance_weights=weights,
+                #     overlay_title='Prototype Assignments',
+                #     output_dir=str(output_dir),
+                #     slide_id=slide_id,
+                #     proto_colors=proto_colors,
+                # )
 
         except Exception as e:
             logger.warning(f"Exemplar extraction failed for {slide_id}: {e}")
 
         # ── Compose and save ─────────────────────────────────────────
-        output_path = output_dir / f'{slide_id}_spatial.pdf'
+        output_path = output_dir / f'{patient_id}_spatial.pdf'
         plot_spatial_figure(
             canvas, overlays, str(output_path),
             patient_id, slide_id, risk_group,

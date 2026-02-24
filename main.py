@@ -23,8 +23,18 @@ Usage:
     # Evaluation
     python main.py evaluate --checkpoint-dir output/BLCA/exp_001
 
-    # Visualization
-    python main.py visualize --eval_dir output/BLCA/exp_001/evaluate
+    # Visualization (Steps 1-5: interpretability pipeline)
+    python main.py visualize --eval-dir output/BLCA/exp_001/evaluation
+
+    # Visualization (Steps 1-6: include spatial overlays)
+    python main.py visualize --eval-dir output/BLCA/exp_001/evaluation \
+        --wsi-features-dir processed/BLCA/wsi_features_per_patient \
+        --wsi-dir /path/to/slides --fold 1
+
+    # Visualization (single patient spatial)
+    python main.py visualize --eval-dir output/BLCA/exp_001/evaluation \
+        --wsi-features-dir processed/BLCA/wsi_features_per_patient \
+        --patient TCGA-FD-A3B4 --fold 1
 """
 
 import argparse
@@ -97,8 +107,60 @@ def parse_args():
     # Visualize
     # -------------------------------------------------------------------------
     vis_p = subparsers.add_parser('visualize', help='Generate visualizations')
-    vis_p.add_argument('--eval_dir', required=True, help='Path to experiment results directory')
-    vis_p.add_argument('--output', default=None, help='Output directory (defaults to results/figures)')
+
+    # Core arguments
+    vis_p.add_argument(
+        '--eval-dir', required=True,
+        help='Path to evaluation directory with per-fold outputs')
+    vis_p.add_argument(
+        '--output', default=None,
+        help='Output directory for figures (default: eval_dir/../figures)')
+
+    # Analysis parameters
+    vis_p.add_argument(
+        '--risk-stratification', default='median', choices=['median', 'quartile'],
+        help='Risk stratification method (default: median)')
+    vis_p.add_argument(
+        '--n-bar', type=int, default=30,
+        help='Number of entities in bar plots (default: 30)')
+    vis_p.add_argument(
+        '--n-violin', type=int, default=15,
+        help='Number of entities in violin plots (default: 15)')
+    vis_p.add_argument(
+        '--n-pathways-per-direction', type=int, default=5,
+        help='Number of top pathways per direction for gene drill-down (default: 5)')
+    vis_p.add_argument(
+        '--top-k-crossmodal-pathways', type=int, default=20,
+        help='Number of top pathways in cross-modal heatmaps (default: 20)')
+    vis_p.add_argument(
+        '--n-crossmodal-gene-drilldown', type=int, default=5,
+        help='Number of pathways for cross-modal gene drill-down (default: 5)')
+
+    # Spatial visualization (Step 6)
+    vis_p.add_argument(
+        '--wsi-features-dir', default=None,
+        help='Directory with preprocessed .pt WSI files (enables Step 6)')
+    vis_p.add_argument(
+        '--wsi-dir', default=None,
+        help='Directory with original WSI slides (for tissue canvas rendering)')
+    vis_p.add_argument(
+        '--fold', type=int, default=None, dest='spatial_fold',
+        help='Fold index for spatial visualization (default: first available)')
+    vis_p.add_argument(
+        '--patient', default=None, dest='spatial_patient',
+        help='Specific patient ID for spatial visualization')
+    vis_p.add_argument(
+        '--spatial-n-per-group', type=int, default=2,
+        help='Number of patients per risk group for auto-selection (default: 2)')
+    vis_p.add_argument(
+        '--spatial-downsample', type=int, default=4,
+        help='Downsample factor for spatial rendering (default: 4)')
+    vis_p.add_argument(
+        '--spatial-patch-size', type=int, default=256,
+        help='Patch size at extraction magnification (default: 256)')
+    vis_p.add_argument(
+        '--spatial-single-pathway', default=None,
+        help='Single pathway name for IHC-style overlay')
 
     return parser.parse_args()
 
@@ -202,7 +264,7 @@ def main():
         run(cfg)
 
     elif args.command == 'visualize':
-        from experiments.visualize_v3 import run_simplified_visualization
+        from experiments.visualize import run_simplified_visualization
 
         eval_dir = args.eval_dir
         output_dir = args.output
@@ -232,6 +294,21 @@ def main():
             eval_dir=eval_dir,
             output_dir=output_dir,
             entity_names=entity_names,
+            risk_stratification=args.risk_stratification,
+            n_bar=args.n_bar,
+            n_violin=args.n_violin,
+            n_pathways_per_direction=args.n_pathways_per_direction,
+            top_k_crossmodal_pathways=args.top_k_crossmodal_pathways,
+            n_crossmodal_gene_drilldown=args.n_crossmodal_gene_drilldown,
+            # Spatial (Step 6)
+            wsi_features_dir=args.wsi_features_dir,
+            wsi_dir=args.wsi_dir,
+            spatial_fold=args.spatial_fold,
+            spatial_patient=args.spatial_patient,
+            spatial_n_per_group=args.spatial_n_per_group,
+            spatial_downsample=args.spatial_downsample,
+            spatial_patch_size=args.spatial_patch_size,
+            spatial_single_pathway=args.spatial_single_pathway,
         )
 
 

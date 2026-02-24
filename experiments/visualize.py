@@ -118,6 +118,20 @@ def run_simplified_visualization(
             output_dir=str(km_dir),
         )
 
+        # Risk distribution by event status (all folds pooled)
+        plot_risk_distribution_by_event(
+            predictions, fold_idx='all',
+            output_path=str(km_dir / 'risk_distribution_by_event.pdf'),
+        )
+
+        # Per-fold risk distributions
+        for fi in sorted(predictions['fold'].unique()):
+            fold_df = predictions[predictions['fold'] == fi]
+            plot_risk_distribution_by_event(
+                fold_df, fold_idx=int(fi),
+                output_path=str(km_dir / f'risk_distribution_fold_{int(fi)}.pdf'),
+            )
+
     # ── Step 3 ───────────────────────────────────────────────────────
     logger.info("Step 3: Cross-fold importance analysis")
     if use_fold_stratified:
@@ -498,50 +512,74 @@ def _run_per_fold(
             a.save_results(str(dirs['analysis']))
             analyzers[nm] = a
 
-    # ── Bar plots ────────────────────────────────────────────────────
-    logger.info(f"  Bar plots...")
-    create_all_bar_plots(str(dirs['analysis']), str(dirs['bar_plots']), n_bar)
+        # ── Risk distribution by event ───────────────────────────────────
+        logger.info(f"  Risk distribution by event status...")
+        try:
+            plot_risk_distribution_by_event(
+                fold_preds, fold_idx,
+                str(output_dir / f'risk_distribution_fold_{fold_idx}.pdf'),
+            )
+        except Exception as e:
+            logger.warning(f"  Risk distribution: {e}")
 
-    # ── Violin plots ─────────────────────────────────────────────────
-    logger.info(f"  Violin plots...")
-    for key, title, n_e, ori in [
-        ('prototype_raw', f'WSI Gate — Fold {fold_idx}', K, 'vertical'),
-        ('prototype_attended', f'Fusion Gate — Fold {fold_idx}', K, 'vertical'),
-    ]:
-        if key in analyzers:
+        # ── Gating comparison (WSI vs Fusion + delta) ────────────────────
+        if has_e and has_h:
+            logger.info(f"  Gating comparison (WSI vs Fusion)...")
+            try:
+                plot_gating_comparison(
+                    fold_attn, risk_map, valid, K, fold_idx,
+                    str(dirs['shift_plots'] / f'gating_comparison_fold_{fold_idx}.pdf'),
+                )
+            except Exception as e:
+                logger.warning(f"  Gating comparison: {e}")
+
+        # ── Bar plots ────────────────────────────────────────────────────
+        logger.info(f"  Bar plots...")
+        create_all_bar_plots(str(dirs['analysis']), str(dirs['bar_plots']), n_bar)
+
+        # ── Violin plots ─────────────────────────────────────────────────
+        logger.info(f"  Violin plots...")
+        for key, title, n_e, ori in [
+            ('prototype_raw', f'WSI Gate — Fold {fold_idx}', K, 'vertical'),
+            ('prototype_attended', f'Fusion Gate — Fold {fold_idx}', K, 'vertical'),
+        ]:
+            if key in analyzers:
+                try:
+                    plot_gate_importance_violin(
+                        analyzer=analyzers[key], title=title,
+                        output_path=str(dirs['violin_plots'] / f'{key}_violin.pdf'),
+                        n=n_e, orientation=ori,
+                        sort_by='rank_difference')
+                except Exception as e:
+                    logger.warning(f"  {key} violin: {e}")
+
+        # Assignment frequency violin (by risk group)
+        if 'prototype_assignment_freq' in analyzers:
             try:
                 plot_gate_importance_violin(
-                    analyzer=analyzers[key], title=title,
-                    output_path=str(dirs['violin_plots'] / f'{key}_violin.pdf'),
-                    n=n_e, orientation=ori)
+                    analyzer=analyzers['prototype_assignment_freq'],
+                    title=f'Assignment Frequency by Risk Group — Fold {fold_idx}',
+                    output_path=str(dirs['violin_plots'] / 'assignment_freq_violin.pdf'),
+                    n=K, orientation='vertical',
+                    sort_by='rank_difference')
             except Exception as e:
-                logger.warning(f"  {key} violin: {e}")
+                logger.warning(f"  Freq violin: {e}")
 
-    if 'prototype_assignment_freq' in analyzers:
-        try:
-            plot_assignment_frequency_violin(
-                analyzer=analyzers['prototype_assignment_freq'],
-                title=f'Assignment Frequency — Fold {fold_idx}',
-                output_path=str(dirs['violin_plots'] / 'assignment_freq_violin.pdf'),
-                n=K)
-        except Exception as e:
-            logger.warning(f"  Freq violin: {e}")
-
-    # ── Shift plots ──────────────────────────────────────────────────
-    if 'prototype_shift' in analyzers:
-        logger.info(f"  Shift plots...")
-        sa = analyzers['prototype_shift']
-        try:
-            plot_prototype_shift(sa, str(dirs['shift_plots'] / 'shift.pdf'),
-                                 title=f'Prototype Shift — Fold {fold_idx}',
-                                 show_by_risk=True)
-        except Exception as e:
-            logger.warning(f"  Shift bars: {e}")
-        try:
-            plot_shift_slope(sa, str(dirs['shift_plots'] / 'shift_slope.pdf'),
-                             title=f'Before vs After — Fold {fold_idx}')
-        except Exception as e:
-            logger.warning(f"  Slope: {e}")
+        # ── Shift plots ──────────────────────────────────────────────────
+        if 'prototype_shift' in analyzers:
+            logger.info(f"  Shift plots...")
+            sa = analyzers['prototype_shift']
+            try:
+                plot_prototype_shift(sa, str(dirs['shift_plots'] / 'shift.pdf'),
+                                     title=f'Prototype Shift — Fold {fold_idx}',
+                                     show_by_risk=True)
+            except Exception as e:
+                logger.warning(f"  Shift bars: {e}")
+            try:
+                plot_shift_slope(sa, str(dirs['shift_plots'] / 'shift_slope.pdf'),
+                                 title=f'Before vs After — Fold {fold_idx}')
+            except Exception as e:
+                logger.warning(f"  Slope: {e}")
 
     # ── Cross-modal heatmaps ─────────────────────────────────────────
     logger.info(f"  Cross-modal heatmaps...")
@@ -660,6 +698,109 @@ def _cm_gene_drilldown(
             logger.warning(f"    {pw}: {e}")
 
 
+def plot_gating_comparison(fold_attn, risk_map, valid, K, fold_idx, output_path):
+    """
+    Two-panel figure comparing WSI gate vs Fusion gate per prototype.
+
+    Left:  Paired bars — WSI (blue) vs Fusion (orange) per prototype.
+    Right: Delta (Fusion − WSI) per prototype, directional bar chart.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+
+    wsi_all, fus_all = [], []
+    for p in valid:
+        at = fold_attn[p]
+        w = np.asarray(at['patch_assignments']['gate_weights'])[:K]
+        f = np.asarray(at['fusion_gate_weights'])[:K]
+        wsi_all.append(w)
+        fus_all.append(f)
+
+    wsi_mean = np.stack(wsi_all).mean(axis=0)
+    fus_mean = np.stack(fus_all).mean(axis=0)
+    delta = fus_mean - wsi_mean
+
+    x = np.arange(K)
+    width = 0.35
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 5))
+
+    # Left panel: paired bars
+    ax1.bar(x - width / 2, wsi_mean, width, label='WSI Gates',
+            color='#1976D2', alpha=0.85, edgecolor='white', linewidth=0.5)
+    ax1.bar(x + width / 2, fus_mean, width, label='Fusion Gates',
+            color='#F57C00', alpha=0.85, edgecolor='white', linewidth=0.5)
+    ax1.set_xlabel('Prototype Index', fontsize=11)
+    ax1.set_ylabel('Gate Weight', fontsize=11)
+    ax1.set_title('Prototype Gating: WSI vs Fusion', fontsize=12, fontweight='bold')
+    ax1.set_xticks(x)
+    ax1.legend(fontsize=9)
+    ax1.grid(axis='y', alpha=0.3)
+
+    # Right panel: delta
+    colors = ['#F57C00' if d > 0 else '#1976D2' for d in delta]
+    ax2.bar(x, delta, color=colors, alpha=0.85, edgecolor='white', linewidth=0.5)
+    ax2.axhline(0, color='grey', lw=0.8)
+    ax2.set_xlabel('Prototype Index', fontsize=11)
+    ax2.set_ylabel('Fusion − WSI Gate Δ', fontsize=11)
+    ax2.set_title('Pathway Context Effect on Prototype Importance',
+                   fontsize=12, fontweight='bold')
+    ax2.set_xticks(x)
+    ax2.grid(axis='y', alpha=0.3)
+
+    plt.tight_layout()
+    output_path = _ensure_pdf(output_path)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    logger.info(f"Saved gating comparison to {output_path}")
+
+
+def plot_risk_distribution_by_event(fold_preds, fold_idx, output_path):
+    """
+    Histogram of risk scores coloured by event status (Image 2 style).
+
+    Shows whether events cluster at the high-risk end of the score
+    distribution — a basic sanity check for model calibration.
+    """
+    import matplotlib.pyplot as plt
+
+    if 'risk_score_raw' in fold_preds.columns:
+        scores = fold_preds['risk_score_raw'].values
+        xlabel = 'Risk Score'
+    elif 'risk_score' in fold_preds.columns:
+        scores = fold_preds['risk_score'].values
+        xlabel = 'Risk Score (rank-normalised)'
+    else:
+        logger.warning("  No risk scores for distribution plot")
+        return
+
+    events = fold_preds['event'].values.astype(int)
+    n_event = int(events.sum())
+    n_cens = int(len(events) - n_event)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    bins = np.histogram_bin_edges(scores, bins='auto')
+    ax.hist(scores[events == 0], bins=bins, alpha=0.7,
+            color='#5C6BC0', label=f'Censored (n={n_cens})', edgecolor='white')
+    ax.hist(scores[events == 1], bins=bins, alpha=0.7,
+            color='#EF5350', label=f'Event (n={n_event})', edgecolor='white')
+
+    ax.set_xlabel(xlabel, fontsize=11)
+    ax.set_ylabel('Frequency', fontsize=11)
+    ax.set_title(f'Risk Score Distribution by Event Status',
+                 fontsize=12, fontweight='bold')
+    ax.legend(fontsize=10)
+    ax.grid(axis='y', alpha=0.3)
+
+    plt.tight_layout()
+    output_path = _ensure_pdf(output_path)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    logger.info(f"Saved risk distribution to {output_path}")
+
 # =====================================================================
 # Plotting helpers
 # =====================================================================
@@ -718,38 +859,99 @@ def create_all_bar_plots(analysis_dir, output_dir, n=30, group_names=None):
         plot_rank_bars(df, t, os.path.join(output_dir, f'{nm}.pdf'), n, group_names=group_names)
 
 
-def plot_crossmodal_summary_heatmap(analysis_dir, output_path, pw_names=None,
-                                     top_k=20, figsize=None):
-    csvs = sorted(f for f in os.listdir(analysis_dir)
-                  if f.startswith('crossmodal_proto_') and f.endswith('_rank_analysis.csv'))
-    if not csvs: return
-    dfs = {}
-    for f in csvs:
-        pi = int(f.split('_')[-2])
-        df = pd.read_csv(os.path.join(analysis_dir, f))
-        dfs[pi] = dict(zip(df['entity'], df['rank_difference']))
-    pis = sorted(dfs.keys())
-    pws = set()
-    for d in dfs.values(): pws.update(d.keys())
-    top = sorted(pws, key=lambda pw: max(abs(dfs[p].get(pw, 0)) for p in pis), reverse=True)[:top_k]
-    M = np.zeros((len(pis), len(top)))
-    for i, p in enumerate(pis):
-        for j, pw in enumerate(top):
-            M[i, j] = dfs[p].get(pw, 0)
-    disp = [pw[:50] + '...' if len(pw) > 50 else pw for pw in top]
+def plot_crossmodal_summary_heatmap(
+    analysis_dir,
+    output_path,
+    pathway_names,
+    top_k_pathways=20,
+    figsize=None,
+):
+    """
+    Single heatmap summarising cross-modal attention across all prototypes.
+
+    Rows = prototypes, columns = top-K most differential pathways
+    (selected by max |rank_difference| across any prototype).
+    Cell colour = mean rank difference (blue = low risk, red = high risk).
+    """
+    csv_files = sorted(
+        f for f in os.listdir(analysis_dir)
+        if f.startswith('crossmodal_proto_') and f.endswith('_rank_analysis.csv')
+    )
+
+    if not csv_files:
+        logger.warning("No cross-modal prototype CSVs found for summary heatmap")
+        return
+
+    # Build matrix: prototypes × pathways
+    all_dfs = {}
+    for csv_file in csv_files:
+        proto_name = csv_file.replace('_rank_analysis.csv', '')
+        proto_idx = int(proto_name.split('_')[-1])
+        df = pd.read_csv(os.path.join(analysis_dir, csv_file))
+        all_dfs[proto_idx] = dict(zip(df['entity'], df['rank_difference']))
+
+    proto_indices = sorted(all_dfs.keys())
+    all_pathways = set()
+    for rd_map in all_dfs.values():
+        all_pathways.update(rd_map.keys())
+
+    # Select top-K pathways by max absolute rank difference across prototypes
+    pathway_max_abs = {}
+    for pw in all_pathways:
+        max_abs = max(abs(all_dfs[pi].get(pw, 0)) for pi in proto_indices)
+        pathway_max_abs[pw] = max_abs
+
+    top_pathways = sorted(
+        pathway_max_abs.keys(),
+        key=lambda pw: pathway_max_abs[pw],
+        reverse=True,
+    )[:top_k_pathways]
+
+    # Build matrix
+    matrix = np.zeros((len(proto_indices), len(top_pathways)))
+    for i, pi in enumerate(proto_indices):
+        for j, pw in enumerate(top_pathways):
+            matrix[i, j] = all_dfs[pi].get(pw, 0)
+
+    # Truncate pathway names for display
+    display_names = [
+        pw[:50] + '...' if len(pw) > 50 else pw
+        for pw in top_pathways
+    ]
+    proto_labels = [f'Proto {i}' for i in proto_indices]
+
+    # Plot
     if figsize is None:
-        figsize = (max(12, len(top) * 0.5), max(6, len(pis) * 0.6))
+        figsize = (max(12, len(top_pathways) * 0.5), max(6, len(proto_indices) * 0.6))
     fig, ax = plt.subplots(figsize=figsize)
-    vm = max(abs(M.min()), abs(M.max())) or 1.0
-    im = ax.imshow(M, cmap='RdBu_r', norm=TwoSlopeNorm(-vm, 0, vm), aspect='auto')
-    ax.set_xticks(np.arange(len(top))); ax.set_xticklabels(disp, fontsize=7, rotation=60, ha='right')
-    ax.set_yticks(np.arange(len(pis))); ax.set_yticklabels([f'Proto {i}' for i in pis], fontsize=9)
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04).set_label('Rank Diff', fontsize=9)
-    ax.set_title('Cross-Modal Summary', fontsize=13, fontweight='bold')
+
+    vmax = max(abs(matrix.min()), abs(matrix.max())) or 1.0
+    norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
+
+    im = ax.imshow(
+        matrix, cmap='RdBu_r', norm=norm,
+        aspect='auto', interpolation='nearest',
+    )
+
+    ax.set_xticks(np.arange(len(top_pathways)))
+    ax.set_xticklabels(display_names, fontsize=7, rotation=60, ha='right')
+    ax.set_yticks(np.arange(len(proto_indices)))
+    ax.set_yticklabels(proto_labels, fontsize=9)
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label('Mean Rank Difference\n(red=High Risk, blue=Low Risk)', fontsize=9)
+
+    ax.set_title(
+        'Cross-Modal Attention Summary\n(Rank Difference by Risk Group)',
+        fontsize=13, fontweight='bold',
+    )
+
     plt.tight_layout()
     output_path = _ensure_pdf(output_path)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    fig.savefig(output_path, dpi=300, bbox_inches='tight'); plt.close(fig)
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    logger.info(f"Saved cross-modal heatmap to {output_path}")
 
 
 def _select_top_pathways(analyzer, n_per_dir=5):

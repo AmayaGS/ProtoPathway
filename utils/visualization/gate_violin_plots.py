@@ -167,6 +167,15 @@ def _plot_vertical_violin(
     title, output_path, figsize_per_entity, show_significance
 ):
     """Vertical violin: entities on x-axis (better for short names like prototypes)."""
+    mean_vals = []
+    for e in entity_names:
+        if e in patient_df.columns:
+            mean_vals.append(patient_df[e].mean())
+        else:
+            mean_vals.append(0.0)
+    sort_order = np.argsort(mean_vals)[::-1]
+    entity_names = [entity_names[i] for i in sort_order]
+
     n_entities = len(entity_names)
     fig_width = max(8, n_entities * figsize_per_entity + 2)
     fig, ax = plt.subplots(figsize=(fig_width, 6))
