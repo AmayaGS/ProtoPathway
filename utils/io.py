@@ -217,3 +217,22 @@ def save_source_snapshot(output_dir, project_root,
             shutil.copy2(filepath, dest)
 
     logging.info(f"Source snapshot saved to {snapshot_dir}")
+
+
+_OUTPUT_FORMATS = ['pdf', 'svg', 'png']
+
+def save_figure(fig, base_path, dpi=300, formats=None):
+    """Save a matplotlib figure in PDF, SVG, and PNG."""
+    import matplotlib.pyplot as plt
+
+    if formats is None:
+        formats = _OUTPUT_FORMATS
+    base = Path(base_path)
+    # Strip extension if provided
+    base = base.parent / base.stem
+    base.parent.mkdir(parents=True, exist_ok=True)
+    for fmt in formats:
+        fig.savefig(
+            str(base) + f'.{fmt}',
+            dpi=dpi, bbox_inches='tight', facecolor='white',
+        )

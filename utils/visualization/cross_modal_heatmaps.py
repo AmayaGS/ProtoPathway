@@ -15,10 +15,10 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 from matplotlib.gridspec import GridSpec
+
+from utils.io import save_figure
 
 logger = logging.getLogger(__name__)
 
@@ -319,8 +319,7 @@ def plot_top_prototype_pathway_pairs(
     ax.grid(axis='x', alpha=0.3)
 
     plt.tight_layout()
-    output_path = _ensure_pdf(output_path)
-    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    save_figure(fig, output_path, dpi=300)
     plt.close(fig)
     logger.info(f"Saved top pairs plot to {output_path}")
 
@@ -404,14 +403,6 @@ def _render_single_heatmap(
     ax.set_title(title, fontsize=13, fontweight='bold')
 
     plt.tight_layout()
-    output_path = _ensure_pdf(output_path)
-    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    save_figure(fig, output_path, dpi=300)
     plt.close(fig)
     logger.info(f"Saved heatmap to {output_path}")
-
-
-def _ensure_pdf(path):
-    base, ext = os.path.splitext(path)
-    if ext.lower() != '.pdf':
-        return base + '.pdf'
-    return path

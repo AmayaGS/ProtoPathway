@@ -153,7 +153,8 @@ def parse_args():
         help='Fold index for spatial visualization (default: first available)')
     vis_p.add_argument(
         '--patient', default=None, dest='spatial_patient',
-        help='Specific patient ID for spatial visualization')
+        help='Specific patient ID(s) for spatial visualization '
+             '(comma-separated for multiple, e.g. TCGA-A6-2671,TCGA-AB-1234)')
     vis_p.add_argument(
         '--spatial-n-per-group', type=int, default=2,
         help='Number of patients per risk group for auto-selection (default: 2)')
@@ -166,6 +167,9 @@ def parse_args():
     vis_p.add_argument(
         '--spatial-single-pathway', default=None,
         help='Single pathway name for IHC-style overlay')
+    vis_p.add_argument(
+        '--spatial-single-gene', default=None,
+        help='Single gene name for IHC-style overlay')
 
     return parser.parse_args()
 
@@ -295,27 +299,19 @@ def main():
                 "attention pickle metadata"
             )
 
-        run_simplified_visualization(
-            eval_dir=eval_dir,
-            output_dir=output_dir,
-            entity_names=entity_names,
-            risk_stratification=args.risk_stratification,
-            n_bar=args.n_bar,
-            n_violin=args.n_violin,
-            n_pathways_per_direction=args.n_pathways_per_direction,
-            top_k_crossmodal_pathways=args.top_k_crossmodal_pathways,
-            n_crossmodal_gene_drilldown=args.n_crossmodal_gene_drilldown,
-            # Spatial (Step 6)
-            wsi_features_dir=args.wsi_features_dir,
-            wsi_dir=args.wsi_dir,
-            spatial_fold=args.spatial_fold,
-            spatial_patient=args.spatial_patient,
-            spatial_n_per_group=args.spatial_n_per_group,
-            spatial_downsample=args.spatial_downsample,
-            spatial_patch_size=args.spatial_patch_size,
-            spatial_single_pathway=args.spatial_single_pathway,
-            force_recalculate=args.force_recalculate
-        )
+        run_simplified_visualization(eval_dir=eval_dir, output_dir=output_dir, entity_names=entity_names,
+                                     risk_stratification=args.risk_stratification, n_bar=args.n_bar,
+                                     n_violin=args.n_violin, n_pathways_per_direction=args.n_pathways_per_direction,
+                                     top_k_crossmodal_pathways=args.top_k_crossmodal_pathways,
+                                     n_crossmodal_gene_drilldown=args.n_crossmodal_gene_drilldown,
+                                     wsi_features_dir=args.wsi_features_dir, wsi_dir=args.wsi_dir,
+                                     spatial_fold=args.spatial_fold, spatial_patient=args.spatial_patient,
+                                     spatial_n_per_group=args.spatial_n_per_group,
+                                     spatial_downsample=args.spatial_downsample,
+                                     spatial_patch_size=args.spatial_patch_size,
+                                     spatial_single_pathway=args.spatial_single_pathway,
+                                     spatial_single_gene=args.spatial_single_gene,
+                                     force_recalculate=args.force_recalculate)
 
 
 if __name__ == '__main__':

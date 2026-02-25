@@ -38,9 +38,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import matplotlib.colors as mcolors
-from matplotlib.colors import Normalize
+
+from utils.io import save_figure
 
 logger = logging.getLogger(__name__)
 
@@ -145,19 +144,6 @@ def plot_prototype_importance(
                 use_fusion_gate=True,
             )
 
-    # ── Top-by-risk-level comparison ─────────────────────────────────
-    # Shows which prototypes are specifically important for each risk
-    # group, side by side. Uses fusion gate if available, else WSI gate.
-    groups = groups_h if has_fusion else groups_e
-    gate_label = 'Fusion Gate (H)' if has_fusion else 'WSI Gate (E)'
-
-    if len(groups['High Risk']) > 0 and len(groups['Low Risk']) > 0:
-        mean_high = np.stack(groups['High Risk']).mean(axis=0)
-        mean_low = np.stack(groups['Low Risk']).mean(axis=0)
-        _plot_top_by_risk_comparison(
-            mean_high, mean_low, top_k, output_dir, dpi, gate_label,
-        )
-
 
 def _get_importance_weights(
     attn: Dict, use_fusion_gate: bool
@@ -238,92 +224,6 @@ def _plot_importance_bars(
         )
     plt.close(fig)
     logger.info(f"Saved prototype importance ({group_name}) to {base}.*")
-
-
-def _plot_top_by_risk_comparison(
-    mean_high: np.ndarray,
-    mean_low: np.ndarray,
-    top_k: int,
-    output_dir: Path,
-    dpi: int,
-    gate_label: str,
-):
-    """
-    Side-by-side comparison: which prototypes are specifically most
-    important for high-risk vs low-risk predictions.
-
-    Shows:
-        - Left panel: top-K prototypes ranked by high-risk mean weight
-        - Right panel: top-K prototypes ranked by low-risk mean weight
-        - Center panel: rank difference (high - low) for all prototypes
-
-    This answers the question: "Are different tissue patterns associated
-    with good vs poor prognosis?"
-    """
-    K = len(mean_high)
-    top_k = min(top_k, K)
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, max(4, top_k * 0.5)))
-
-    # Left: top-K by high-risk
-    ax = axes[0]
-    order_h = np.argsort(mean_high)[::-1][:top_k]
-    values_h = mean_high[order_h]
-    labels_h = [f'Proto {i}' for i in order_h]
-    ax.barh(range(top_k), values_h, color=COLOR_HIGH, alpha=0.85,
-            edgecolor='white', linewidth=0.5)
-    ax.set_yticks(range(top_k))
-    ax.set_yticklabels(labels_h, fontsize=9)
-    ax.invert_yaxis()
-    ax.set_xlabel(f'Mean {gate_label} Weight', fontsize=9)
-    ax.set_title('Top Prototypes — High Risk', fontsize=11, fontweight='bold')
-    ax.grid(axis='x', alpha=0.3)
-
-    # Right: top-K by low-risk
-    ax = axes[2]
-    order_l = np.argsort(mean_low)[::-1][:top_k]
-    values_l = mean_low[order_l]
-    labels_l = [f'Proto {i}' for i in order_l]
-    ax.barh(range(top_k), values_l, color=COLOR_LOW, alpha=0.85,
-            edgecolor='white', linewidth=0.5)
-    ax.set_yticks(range(top_k))
-    ax.set_yticklabels(labels_l, fontsize=9)
-    ax.invert_yaxis()
-    ax.set_xlabel(f'Mean {gate_label} Weight', fontsize=9)
-    ax.set_title('Top Prototypes — Low Risk', fontsize=11, fontweight='bold')
-    ax.grid(axis='x', alpha=0.3)
-
-    # Center: rank difference (all prototypes)
-    ax = axes[1]
-    diff = mean_high - mean_low
-    sort_idx = np.argsort(diff)  # ascending: most low-risk at top
-    diff_sorted = diff[sort_idx]
-    labels_diff = [f'Proto {i}' for i in sort_idx]
-    colors = [COLOR_HIGH if d > 0 else COLOR_LOW for d in diff_sorted]
-
-    ax.barh(range(K), diff_sorted, color=colors, alpha=0.85,
-            edgecolor='white', linewidth=0.5)
-    ax.set_yticks(range(K))
-    ax.set_yticklabels(labels_diff, fontsize=7 if K > 12 else 9)
-    ax.axvline(x=0, color='grey', linewidth=0.8)
-    ax.set_xlabel('Weight Difference (High − Low)', fontsize=9)
-    ax.set_title('Prototype Importance Difference', fontsize=11, fontweight='bold')
-    ax.grid(axis='x', alpha=0.3)
-
-    fig.suptitle(
-        f'Prototype Importance by Risk Level ({gate_label})',
-        fontsize=13, fontweight='bold', y=1.02,
-    )
-
-    plt.tight_layout()
-    base = output_dir / 'prototype_importance_by_risk_level'
-    for fmt in _FORMATS:
-        fig.savefig(
-            str(base) + f'.{fmt}', dpi=dpi,
-            bbox_inches='tight', facecolor='white',
-        )
-    plt.close(fig)
-    logger.info(f"Saved top-by-risk comparison to {base}.*")
 
 
 # =====================================================================
@@ -431,8 +331,9 @@ def extract_exemplar_patches(
         K = similarities.shape[1]
         weights = np.array([counts.get(i, 0) for i in range(K)], dtype=float)
 
-    top_k_protos = min(top_k_protos, len(weights))
-    top_proto_indices = np.argsort(weights)[::-1][:top_k_protos]
+    from scipy.stats import rankdata
+    ranks = rankdata(weights, method='average')
+    top_proto_indices = np.argsort(ranks)[::-1][:top_k_protos]
 
     # Try WSI-based extraction first
     use_wsi = wsi_path is not None and HAS_OPENSLIDE and os.path.exists(wsi_path)
@@ -612,7 +513,7 @@ def plot_prototype_exemplars(
 
     title = f'{title_prefix}Prototype Exemplar Patches'
     if slide_id:
-        title += f' — {slide_id}'
+        title += f' — {slide_id[:12]}'
     fig.suptitle(title, fontsize=11, fontweight='bold', y=1.01)
 
     plt.tight_layout()
@@ -625,123 +526,6 @@ def plot_prototype_exemplars(
         )
     plt.close(fig)
     logger.info(f"Saved prototype exemplars to {base}.*")
-
-
-# =====================================================================
-# 3. Per-overlay exemplar strips
-# =====================================================================
-
-def plot_overlay_exemplar_strip(
-    exemplars: Dict[int, List[np.ndarray]],
-    visible_protos: List[int],
-    importance_weights: np.ndarray,
-    overlay_title: str,
-    output_dir: str,
-    slide_id: str = '',
-    proto_colors: Optional[Dict[int, Tuple]] = None,
-    n_patches: int = 4,
-    dpi: int = 300,
-):
-    """
-    Standalone strip showing exemplar patches for prototypes visible
-    in a specific overlay panel.
-
-    Designed to be placed next to the corresponding spatial overlay in
-    a composite figure. Each prototype gets a column of patches with a
-    colored header matching the overlay.
-
-    Args:
-        exemplars: Full exemplar dict from extract_exemplar_patches.
-        visible_protos: Prototype indices present in this overlay.
-        importance_weights: [K] gate weights.
-        overlay_title: Title slug for filename (e.g., 'prototype_assignments').
-        output_dir: Save directory.
-        slide_id: Slide ID for filename.
-        proto_colors: Color dict from overlay rendering.
-        n_patches: Max patches to show per prototype.
-        dpi: Output DPI.
-    """
-    if not exemplars or not visible_protos:
-        return
-
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Sort by importance
-    sorted_protos = sorted(
-        visible_protos,
-        key=lambda p: float(importance_weights[p]) if p < len(importance_weights) else 0,
-        reverse=True,
-    )
-
-    # Limit to prototypes that have exemplars
-    sorted_protos = [p for p in sorted_protos if p in exemplars and len(exemplars[p]) > 0]
-    if not sorted_protos:
-        return
-
-    n_cols = len(sorted_protos)
-    n_rows = min(n_patches, max(len(exemplars[p]) for p in sorted_protos))
-
-    cell_size = 1.5
-    fig_w = n_cols * cell_size + 0.5
-    fig_h = n_rows * cell_size + 1.2
-
-    fig, axes = plt.subplots(
-        n_rows, n_cols,
-        figsize=(fig_w, fig_h),
-        squeeze=False,
-    )
-
-    for col, proto_idx in enumerate(sorted_protos):
-        patches = exemplars[proto_idx][:n_rows]
-
-        # Column header
-        weight = (
-            float(importance_weights[proto_idx])
-            if proto_idx < len(importance_weights) else 0.0
-        )
-        header = f'P{proto_idx}\n({weight:.3f})'
-
-        if proto_colors and proto_idx in proto_colors:
-            color_rgb = proto_colors[proto_idx]
-            color_norm = tuple(c / 255.0 for c in color_rgb)
-        else:
-            color_norm = (0.4, 0.4, 0.4)
-
-        axes[0, col].set_title(
-            header, fontsize=7, fontweight='bold',
-            color=color_norm, pad=3,
-        )
-
-        for row in range(n_rows):
-            ax = axes[row, col]
-            ax.axis('off')
-
-            if row < len(patches) and patches[row] is not None:
-                ax.imshow(patches[row])
-                # Thin colored border
-                for spine in ax.spines.values():
-                    spine.set_visible(True)
-                    spine.set_color(color_norm)
-                    spine.set_linewidth(2)
-
-    slug = overlay_title.lower().replace(' ', '_').replace('(', '').replace(')', '')
-    fig.suptitle(
-        f'Exemplar Patches — {overlay_title}',
-        fontsize=9, fontweight='bold', y=1.02,
-    )
-
-    plt.tight_layout()
-
-    name = f'{slide_id}_{slug}_exemplars' if slide_id else f'{slug}_exemplars'
-    base = output_dir / name
-    for fmt in _FORMATS:
-        fig.savefig(
-            str(base) + f'.{fmt}', dpi=dpi,
-            bbox_inches='tight', facecolor='white',
-        )
-    plt.close(fig)
-    logger.info(f"Saved overlay exemplar strip to {base}.*")
 
 
 # =====================================================================
@@ -781,14 +565,6 @@ def plot_cohort_prototype_exemplars(
         use_fusion_gate: Use Signal H for importance.
         dpi: Output DPI.
     """
-    import torch
-    from utils.visualization.spatial_heatmaps import (
-        infer_coord_spacing,
-        build_canvas_from_wsi,
-        build_canvas_from_coords,
-        _find_wsi_for_slide,
-    )
-
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -815,12 +591,16 @@ def plot_cohort_prototype_exemplars(
             groups['low_risk']['pids'].append(pid)
             groups['low_risk']['weights'].append(w)
 
+
     for group_name, group_data in groups.items():
         if len(group_data['weights']) == 0:
             continue
 
-        mean_weights = np.stack(group_data['weights']).mean(axis=0)
-        top_proto_indices = np.argsort(mean_weights)[::-1][:top_k_protos]
+        from scipy.stats import rankdata
+        all_weights = np.stack(group_data['weights'])
+        rank_matrix = np.array([rankdata(w, method='average') for w in all_weights])
+        mean_ranks = rank_matrix.mean(axis=0)
+        top_proto_indices = np.argsort(mean_ranks)[::-1][:top_k_protos]
 
         logger.info(
             f"Collecting cohort exemplars for {group_name} "
@@ -831,7 +611,31 @@ def plot_cohort_prototype_exemplars(
         # Collect (similarity, patient_id, patch_idx) for each prototype
         proto_candidates = {int(p): [] for p in top_proto_indices}
 
+        # Pre-scan for patients with available WSIs
+        available_wsi_pids = set()
+        if wsi_dir:
+            from utils.visualization.spatial_heatmaps import _find_wsi_for_slide
+            wsi_dir_path = Path(wsi_dir)
+            available_slides = {f.stem for f in wsi_dir_path.iterdir()
+                                if f.suffix in ('.svs', '.ndpi', '.tiff', '.tif', '.mrxs')}
+
+            # Match patient IDs: TCGA slide IDs start with patient ID prefix
+            for pid in attention_by_patient:
+                if any(slide.startswith(pid) for slide in available_slides):
+                    available_wsi_pids.add(pid)
+
+            logger.info(
+                f"WSI availability: {len(available_wsi_pids)} patients matched "
+                f"from {len(available_slides)} slides in {wsi_dir}"
+            )
+
+        if not available_wsi_pids:
+            logger.warning("No patients with available WSIs — skipping cohort exemplars")
+            return
+
         for pid in group_data['pids']:
+            if pid not in available_wsi_pids:
+                continue
             attn = attention_by_patient[pid]
             pa = attn.get('patch_assignments', {})
             sims = pa.get('similarities')
@@ -873,9 +677,8 @@ def plot_cohort_prototype_exemplars(
         # Plot
         plot_prototype_exemplars(
             exemplars=exemplars,
-            importance_weights=mean_weights,
+            importance_weights=mean_ranks,
             output_dir=str(output_dir),
-            slide_id=f'cohort_{group_name}',
             dpi=dpi,
             title_prefix=f'{group_name.replace("_", " ").title()} — ',
         )

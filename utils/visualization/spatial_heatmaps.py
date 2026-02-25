@@ -55,8 +55,7 @@ from matplotlib.colors import Normalize
 
 from utils.visualization.prototype_panels import (
     extract_exemplar_patches,
-    plot_prototype_exemplars,
-    plot_overlay_exemplar_strip,
+    plot_prototype_exemplars
 )
 
 logger = logging.getLogger(__name__)
@@ -779,6 +778,66 @@ def render_single_pathway_heatmap(
     return overlay, vmin, vmax
 
 
+def render_single_gene_heatmap(
+        coords: np.ndarray,
+        assignments: np.ndarray,
+        cross_modal_attention: np.ndarray,
+        gene_pathway_attention: np.ndarray,
+        gene_idx: int,
+        patch_size: int = 256,
+        downsample: int = 1,
+        cmap_name: str = 'inferno',
+        coord_spacing: Optional[int] = None,
+        rank_transform: bool = False,
+) -> Tuple[np.ndarray, float, float]:
+    """
+    Spatial gene importance heatmap — computational IHC for a gene.
+
+    For each patch, computes the dot product of its prototype's
+    cross-modal pathway attention with the gene's pathway attention,
+    measuring how much of this gene's signal flows through the
+    tissue region.
+
+    Args:
+        gene_pathway_attention: [G, P] gene-pathway attention matrix.
+        gene_idx: Index of the target gene.
+    """
+    if coord_spacing is None:
+        coord_spacing = infer_coord_spacing(coords)
+
+    effective_patch = int(coord_spacing / downsample)
+    max_x = int(coords[:, 0].max() / downsample) + effective_patch
+    max_y = int(coords[:, 1].max() / downsample) + effective_patch
+
+    # Gene's pathway attention profile
+    gene_pw = gene_pathway_attention[gene_idx]  # [P]
+
+    # Per-patch: dot(cross_modal[proto_k, :], gene_pw)
+    proto_gene_scores = cross_modal_attention @ gene_pw  # [K]
+    patch_attn = proto_gene_scores[assignments.astype(int)]  # [N]
+
+    if rank_transform:
+        from scipy.stats import rankdata
+        patch_values = (rankdata(patch_attn) - 1) / max(len(patch_attn) - 1, 1)
+        vmin, vmax = 0.0, 1.0
+    else:
+        patch_values = patch_attn
+        vmin, vmax = float(patch_attn.min()), float(patch_attn.max())
+
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    cmap = plt.cm.get_cmap(cmap_name)
+
+    overlay = np.zeros((max_y, max_x, 4), dtype=np.uint8)
+    for i, (x, y) in enumerate(coords):
+        cx, cy = int(x / downsample), int(y / downsample)
+        rgba = cmap(norm(patch_values[i]))
+        overlay[cy:cy + effective_patch, cx:cx + effective_patch] = [
+            int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255), 255
+        ]
+
+    return overlay, vmin, vmax
+
+
 # =====================================================================
 # 4. Pathway selection logic
 # =====================================================================
@@ -908,9 +967,11 @@ def plot_spatial_figure(
                 for rgb, lbl in ov['legend']
             ]
             ax_ov.legend(
-                handles=handles, loc='lower left',
+                handles=handles,
+                loc='upper left', bbox_to_anchor=(1.02, 1.0),
                 fontsize=6, framealpha=0.85, ncol=1,
                 borderpad=0.3, handlelength=1.0, handletextpad=0.3,
+                borderaxespad=0
             )
 
         # Continuous colorbar
@@ -959,9 +1020,11 @@ def plot_spatial_figure(
                 for rgb, lbl in ov['legend']
             ]
             ax.legend(
-                handles=handles, loc='lower left',
+                handles=handles,
+                loc='upper left', bbox_to_anchor=(1.02, 1.0),
                 fontsize=6, framealpha=0.85, ncol=1,
                 borderpad=0.3, handlelength=1.0, handletextpad=0.3,
+                borderaxespad=0
             )
 
         if 'colorbar' in ov and ov['colorbar']:
@@ -1088,6 +1151,7 @@ def generate_patient_spatial_viz(
     patient_id: str,
     attention_data: Dict,
     pathway_names: List[str],
+    gene_names: List[str],
     fold_analysis_dir: str,
     output_dir: str,
     risk_group: str,
@@ -1101,6 +1165,7 @@ def generate_patient_spatial_viz(
     max_slides: int = 2,
     single_pathway_name: Optional[str] = None,
     single_pathway_idx: Optional[int] = None,
+    single_gene_name: Optional[str] = None,
     rank_transform: bool = False,
 ):
     """
@@ -1134,6 +1199,7 @@ def generate_patient_spatial_viz(
         max_slides: Max slides per patient.
         single_pathway_name: Name of pathway for single-pathway heatmap.
         single_pathway_idx: Index of pathway (alternative to name).
+        single_gene_name: Name of gene for single-gene heatmap.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1189,6 +1255,15 @@ def generate_patient_spatial_viz(
     if single_pathway_idx is not None and single_pathway_name is None:
         single_pathway_name = pathway_names[single_pathway_idx]
 
+    # ── Resolve single gene ──────────────────────────────────────
+    single_gene_idx = None
+    if single_gene_name and gene_names:
+        try:
+            single_gene_idx = gene_names.index(single_gene_name)
+        except ValueError:
+            logger.warning(f"Gene '{single_gene_name}' not found in gene_names")
+            single_gene_name = None
+
     # ── Generate per-slide visualizations ────────────────────────────
     for slide in slides:
         slide_id = slide['slide_id']
@@ -1236,7 +1311,7 @@ def generate_patient_spatial_viz(
             patch_size, downsample, coord_spacing=cs,
         )
         proto_legend = [
-            (proto_colors[i], f'Proto {i}')
+            (proto_colors[i], f'P{i}')
             for i in sorted(set(slide_assignments.astype(int)))
         ]
         overlays.append({
@@ -1267,7 +1342,7 @@ def generate_patient_spatial_viz(
 
             overlays.append({
                 'image': pw_overlay,
-                'title': f'Pathway ({risk_group.split()[0]}-Risk Direction)',
+                'title': f'Pathways',
                 'legend': pw_legend,
             })
 
@@ -1301,11 +1376,49 @@ def generate_patient_spatial_viz(
                 )
                 overlays.append({
                     'image': rank_overlay,
-                    'title': f'{display_name} (rank)',
+                    'title': f'{display_name}',
                     'colorbar': {
                         'cmap': 'inferno',
                         'vmin': rvmin,
                         'vmax': rvmax,
+                        'label': 'Percentile',
+                    },
+                })
+
+        # ── Overlay 4: Single-gene heatmap (computational IHC) ────
+        gene_pw_attn = np.asarray(attention_data.get('gene_pathway_attention', []))
+        if single_gene_idx is not None and len(slide_cross_modal) > 0 and len(gene_pw_attn) > 0:
+            display_gene = single_gene_name[:40]
+
+            gene_overlay, gvmin, gvmax = render_single_gene_heatmap(
+                coords, slide_assignments, slide_cross_modal,
+                gene_pw_attn, single_gene_idx,
+                patch_size, downsample, coord_spacing=cs,
+                rank_transform=False,
+            )
+            overlays.append({
+                'image': gene_overlay,
+                'title': f'{display_gene}',
+                'colorbar': {
+                    'cmap': 'inferno',
+                    'vmin': gvmin, 'vmax': gvmax,
+                    'label': 'Attention',
+                },
+            })
+
+            if rank_transform:
+                gene_rank_overlay, grvmin, grvmax = render_single_gene_heatmap(
+                    coords, slide_assignments, slide_cross_modal,
+                    gene_pw_attn, single_gene_idx,
+                    patch_size, downsample, coord_spacing=cs,
+                    rank_transform=True,
+                )
+                overlays.append({
+                    'image': gene_rank_overlay,
+                    'title': f'{display_gene}',
+                    'colorbar': {
+                        'cmap': 'inferno',
+                        'vmin': grvmin, 'vmax': grvmax,
                         'label': 'Percentile',
                     },
                 })

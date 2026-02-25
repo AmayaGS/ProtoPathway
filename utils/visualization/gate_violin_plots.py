@@ -15,6 +15,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+from utils.io import save_figure
+
 logger = logging.getLogger(__name__)
 
 COLOR_LOW = '#2196F3'
@@ -156,8 +158,7 @@ def _plot_horizontal_violin(
     ax.legend(handles=legend_elements, loc='lower right', fontsize=9)
 
     plt.tight_layout()
-    output_path = _ensure_pdf(output_path)
-    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    save_figure(fig, output_path, dpi=300)
     plt.close(fig)
     logger.info(f"Saved violin plot to {output_path}")
 
@@ -215,13 +216,10 @@ def _plot_vertical_violin(
     # Significance markers
     for i, entity in enumerate(entity_names):
         if show_significance and sig_map.get(entity, False):
-            y_max = max(
-                np.max(low_data[i]) if len(low_data[i]) else 0,
-                np.max(high_data[i]) if len(high_data[i]) else 0
-            )
             ax.text(
-                i, y_max * 1.05, '★',
-                ha='center', va='bottom', fontsize=12, color='#FF6F00'
+                i, 0, '★',
+                ha='center', va='top', fontsize=12, color='#FF6F00',
+                transform=ax.get_xaxis_transform()
             )
 
     labels = [e[:20] + '...' if len(e) > 20 else e for e in entity_names]
@@ -238,9 +236,7 @@ def _plot_vertical_violin(
     ]
     ax.legend(handles=legend_elements, loc='upper right', fontsize=9)
 
-    fig.subplots_adjust(bottom=0.2)
-    output_path = _ensure_pdf(output_path)
-    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    save_figure(fig, output_path, dpi=300)
     plt.close(fig)
     logger.info(f"Saved violin plot to {output_path}")
 

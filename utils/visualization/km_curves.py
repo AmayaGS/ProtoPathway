@@ -18,6 +18,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
+from utils.io import save_figure
+
 logger = logging.getLogger(__name__)
 
 from utils.analysis.fold_aggregation import stratify_risk_scores, GROUP_NAMES_2, GROUP_NAMES_4
@@ -37,6 +39,7 @@ def plot_kaplan_meier(
     show_ci: bool = True,
     show_censors: bool = True,
     title: Optional[str] = None,
+    dataset_name: Optional[str] = None
 ):
     """
     Plot publication-quality Kaplan-Meier curves stratified by risk.
@@ -102,10 +105,13 @@ def plot_kaplan_meier(
     # Format title with p-value
     if title is None:
         p_str = _format_pvalue(p_value)
-        sig_marker = '*' if p_value < 0.05 else ''
-        title = f"Log-rank p = {p_str}{sig_marker}"
+        sig_marker = ' *' if p_value < 0.05 else ''
+        p_title = f"Log-rank p = {p_str}{sig_marker}"
 
-    ax.set_title(title, fontsize=14, fontweight='bold')
+        if dataset_name:
+            fig.suptitle(dataset_name, fontsize=14, fontweight='bold', y=0.95)
+            ax.set_title(p_title, fontsize=11, fontstyle='italic', pad=10)
+
     ax.set_xlabel('Time (months)', fontsize=12)
     ax.set_ylabel('Survival Probability', fontsize=12)
     ax.set_ylim(0, 1.05)
@@ -120,17 +126,16 @@ def plot_kaplan_meier(
     ax.legend(handles=legend_elements, loc='lower left', fontsize=10,
               framealpha=0.9)
 
-    # Ensure PDF output
-    output_path = _ensure_pdf(output_path)
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+    save_figure(fig, output_path, dpi=300)
 
-    fig.savefig(
-        output_path,
-        bbox_inches='tight',
-        transparent=True,
-        dpi=300,
-        metadata={'Creator': 'ProtoPathway'}
-    )
+    # fig.savefig(
+    #     output_path,
+    #     bbox_inches='tight',
+    #     transparent=True,
+    #     dpi=300,
+    #     metadata={'Creator': 'ProtoPathway'}
+    # )
     plt.close(fig)
 
     logger.info(f"Saved KM plot ({n_groups}-group) to {output_path}")
@@ -146,6 +151,7 @@ def plot_kaplan_meier_both(
     events: np.ndarray,
     risk_scores: np.ndarray,
     output_dir: str,
+    dataset_name=None,
     **kwargs
 ) -> Dict:
     """Convenience: generate both 2-group and 4-group KM plots."""
@@ -153,12 +159,12 @@ def plot_kaplan_meier_both(
     results['2_group'] = plot_kaplan_meier(
         times, events, risk_scores,
         os.path.join(output_dir, 'kaplan_meier_2group.pdf'),
-        n_groups=2, **kwargs
+        n_groups=2, dataset_name=dataset_name, **kwargs
     )
     results['4_group'] = plot_kaplan_meier(
         times, events, risk_scores,
         os.path.join(output_dir, 'kaplan_meier_4group.pdf'),
-        n_groups=4, **kwargs
+        n_groups=4, dataset_name=dataset_name, **kwargs
     )
     return results
 
@@ -221,11 +227,3 @@ def _format_pvalue(p):
         return f"{p:.4f}"
     else:
         return f"{p:.3f}"
-
-
-def _ensure_pdf(path):
-    """Ensure output path has .pdf extension."""
-    base, ext = os.path.splitext(path)
-    if ext.lower() != '.pdf':
-        return base + '.pdf'
-    return path
