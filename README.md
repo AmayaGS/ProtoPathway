@@ -46,7 +46,7 @@ git clone https://github.com/AmayaGS/ProtoPathway
 cd ProtoPathway
 ```
 
-Then create a virtual environmemt and install the requirements.txt
+Then create a virtual environment and install the requirements.txt
 
 #### General Requirements
 - Python 3.11.7
@@ -61,8 +61,7 @@ source protopath/bin/activate
 # PyTorch with cuda capabilities
 pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
 
-pip install -r requirements.txt  
-
+pip install -r requirements.txt
 ```
 
 ## Data
@@ -122,16 +121,47 @@ python main.py preprocess all
 ## Quick start
  
 All commands are run through the `main.py` entry point.
+
+### Use pretrained checkpoints
+
+To evaluate or visualize the published model without re-running preprocessing or training:
+
+1. **Download the cohort and checkpoints from the Hub:**
+
+```python
+   from huggingface_hub import snapshot_download
+
+   snapshot_download(
+       repo_id="AmayaGS/ProtoPathway",
+       local_dir="./assets",
+       allow_patterns=["cohorts/TCGA-BLCA/*", "pathways/pathways_base_*"],
+   )
+```
+
+2. **Extract UNI2-h patch features for the TCGA-BLCA slides** (see [WSI patch features](#wsi-patch-features) above). This is the only step that cannot be skipped, since the patch features are not redistributed.
+
+3. **Point `configs/experiments/experiment.yaml` at your local copies** of `./assets/cohorts/TCGA-BLCA/`, `./assets/pathways/`, and the UNI2-h features.
+
+4. **Evaluate and visualize:**
+
+```bash
+   python main.py evaluate --checkpoint-dir ./assets/cohorts/TCGA-BLCA/checkpoints
+   python main.py visualize --eval-dir ./assets/cohorts/TCGA-BLCA/checkpoints/evaluation
+```
+
+The numbered steps below cover the full pipeline if you want to retrain or change the preprocessing.
  
 ### 1. Edit the configs
- 
-The YAML files in `configs/` contain paths and hyperparameters. Update the `paths` blocks at the top of each file:
- 
+
+The `paths` block at the top of each YAML file in `configs/` controls where data is read from and where outputs are written:
+
 ```yaml
 paths:
-  base_data_dir: /path/to/TCGA_data
-  output_dir:    /path/to/results
+  base_data_dir: /path/to/data       # raw or preprocessed cohort data
+  output_dir:    /path/to/results    # training and evaluation outputs
 ```
+
+The preprocessing configs (`configs/preprocessing/*.yaml`) read raw inputs from `base_data_dir`. The experiment config (`configs/experiments/experiment.yaml`) reads the preprocessed inputs and writes checkpoints, predictions, and attention exports under `output_dir/{cohort}/{experiment_name}/`.
  
 ### 2. Preprocess
  
@@ -145,10 +175,10 @@ python main.py preprocess wsi    --config configs/preprocessing/preprocess_wsi.y
 python main.py preprocess splits --config configs/preprocessing/create_splits.yaml     dataset=TCGA-BLCA
 ```
  
-Or run all four steps at once:
- 
+Or run all four steps at once with the default config locations:
+
 ```bash
-python main.py preprocess all --config configs/preprocessing/preprocess_pathways.yaml
+python main.py preprocess all
 ```
  
 ### 3. Train
@@ -246,7 +276,6 @@ ProtoPathway/
 ├── utils/
 │   ├── analysis/              cross-fold pooling, rank-based statistics
 │   └── visualization/         KM curves, heatmaps, spatial overlays
-├── scripts/
 │   └── upload_to_hf.py        push checkpoints and assets to the Hub
 └── main.py                    single CLI entry point
 ```
