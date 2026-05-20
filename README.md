@@ -269,10 +269,10 @@ If you use this code in your research, please cite:
  
 ```bibtex
 @article{protopathway2026,
-  title   = {ProtoPathway: Interpretable Multimodal Cancer Survival Prediction
-             via Prototype-Pathway Cross-Modal Attention},
-  author  = {...},
-  journal = {...},
+  title   = {ProtoPathway: Biologically Structured Prototype-Pathway Fusion for Multimodal Cancer Survival Prediction},
+  author  = {Amaya Gallagher-Syed, Costantino Pitzalis, Myles J. Lewis, Michael R. 
+  Barnes, Gregory Slabaugh},
+  journal = {arxiv},
   year    = {2026},
 }
 ```
