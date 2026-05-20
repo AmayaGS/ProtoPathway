@@ -65,47 +65,60 @@ pip install -r requirements.txt
 
 ```
 
-## Pretrained models and curated cohort data
+## Data
  
-The Hugging Face repo at [AmayaGS/ProtoPathway](https://huggingface.co/AmayaGS/ProtoPathway) ships preprocessed cohort data, so most users do not need to run the preprocessing pipeline themselves. The only piece you need to obtain separately is the WSI patch features.
+All preprocessed cohort data, trained checkpoints, the curated pathway graph, and the raw inputs used for preprocessing are mirrored on Hugging Face:
  
-### What is on the Hub
+**[AmayaGS/ProtoPathway](https://huggingface.co/AmayaGS/ProtoPathway)**
  
-For each of the five TCGA cohorts (BRCA, BLCA, COADREAD, HNSC, STAD):
+```
+pathways/pathways_base_*.pkl           curated Reactome + Hallmark pathway graph
+raw_inputs/                            raw files for re-running preprocessing
+    Reactome/                          Reactome hierarchy files
+    Hallmark/                          MSigDB Hallmark gene sets
+    {cohort}/                          rna_clean.csv, clinical CSV, SurvPath splits
+cohorts/{cohort}/                      preprocessed data and trained models
+    gene_expression.csv                preprocessed expression matrix
+    bipartite_graph.pt                 cohort-specific gene-pathway graph
+    labels.csv                         survival times, events, and discretized bins
+    data_splits.pkl                    5-fold CV splits (SurvPath-compatible)
+    checkpoints/best_fold_{0..4}.pt    trained model weights
+```
  
-- `gene_expression.csv`: preprocessed gene expression matrix (from the SurvPath release)
-- `bipartite_graph.pt`: cohort-specific gene-pathway graph
-- `labels.csv`: survival times, events, and discretized risk bins
-- `data_splits.pkl`: 5-fold cross-validation splits matching the SurvPath release
-- `checkpoints/best_fold_{0..4}.pt`: trained model weights with `config.yaml`
-Plus a shared curated Reactome and MSigDB Hallmark pathway file at `pathways/pathways_base_d5_g3-200_j100.pkl`.
- 
-Download everything for a single cohort with:
+### Quick download (one cohort)
  
 ```python
 from huggingface_hub import snapshot_download
  
 snapshot_download(
     repo_id="AmayaGS/ProtoPathway",
-    local_dir="./protopathway_assets",
-    allow_patterns=["cohorts/TCGA-BLCA/*", "pathways/*"],
+    local_dir="./assets",
+    allow_patterns=["cohorts/TCGA-BLCA/*", "pathways/pathways_base_*"],
 )
 ```
  
-After downloading, update the `paths` and `input` blocks in `configs/experiments/experiment.yaml` to point at your local copies of `gene_expression.csv`, `bipartite_graph.pt`, `labels.csv`, and `data_splits.pkl`.
+This is sufficient for evaluating BLCA out of the box. Substitute any cohort name (`TCGA-BRCA`, `TCGA-BLCA`, `TCGA-COADREAD`, `TCGA-HNSC`, `TCGA-STAD`).
  
-### What you still need to obtain
+### WSI patch features
  
-**WSI patch features.** UNI2-h embeddings are not redistributed here. The model expects per-slide HDF5 files with `features` and `coords` keys, one file per slide. You have two options:
+UNI2-h patch features are the only assets not redistributed here. Obtain them directly from the [Mahmood Lab](https://huggingface.co/MahmoodLab/UNI2-h) and extract per-WSI features for the TCGA slides in your chosen cohorts. Slide-level features (one `.pt` per WSI) are referenced via the manifest path in `configs/data.yaml`.
  
-1. Use pre-extracted UNI2-h features if they are already available for your cohort.
-2. Download raw TCGA WSIs from the [GDC Data Portal](https://portal.gdc.cancer.gov) and extract features using [UNI2-h](https://huggingface.co/MahmoodLab/UNI2-h).
-Once you have the per-slide HDF5 files, run the WSI preprocessing step to convert them into the per-patient `.pt` format ProtoPathway uses at training time:
+### Optional: re-running preprocessing from scratch
+ 
+If you want different gene-set filters, alternative pathway sources, or custom splits, you can rebuild everything from the raw inputs. All raw files used for the published checkpoints are mirrored on the Hub under `raw_inputs/`, in the layout the preprocessing configs expect:
  
 ```bash
-python main.py preprocess wsi --config configs/preprocessing/preprocess_wsi.yaml dataset=TCGA-BLCA
+huggingface-cli download AmayaGS/ProtoPathway \
+    --include "raw_inputs/Reactome/*" "raw_inputs/Hallmark/*" "raw_inputs/TCGA-BLCA/*" \
+    --local-dir ./data
 ```
  
+Set `paths.base_data_dir` in `configs/preprocessing/*.yaml` to `./data/raw_inputs`, then run:
+ 
+```bash
+python main.py preprocess all
+```
+
 ## Quick start
  
 All commands are run through the `main.py` entry point.
