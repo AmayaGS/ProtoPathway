@@ -65,69 +65,46 @@ pip install -r requirements.txt
 
 ```
 
-## Pretrained models and curated pathways
+## Pretrained models and curated cohort data
  
-Pretrained checkpoints, the curated Reactome and Hallmark pathway base, and SurvPath-compatible CV splits are hosted on the Hugging Face Hub.
-
-```bash
-pip install huggingface_hub
-```
+The Hugging Face repo at [AmayaGS/ProtoPathway](https://huggingface.co/AmayaGS/ProtoPathway) ships preprocessed cohort data, so most users do not need to run the preprocessing pipeline themselves. The only piece you need to obtain separately is the WSI patch features.
+ 
+### What is on the Hub
+ 
+For each of the five TCGA cohorts (BRCA, BLCA, COADREAD, HNSC, STAD):
+ 
+- `gene_expression.csv`: preprocessed gene expression matrix (from the SurvPath release)
+- `bipartite_graph.pt`: cohort-specific gene-pathway graph
+- `labels.csv`: survival times, events, and discretized risk bins
+- `data_splits.pkl`: 5-fold cross-validation splits matching the SurvPath release
+- `checkpoints/best_fold_{0..4}.pt`: trained model weights with `config.yaml`
+Plus a shared curated Reactome and MSigDB Hallmark pathway file at `pathways/pathways_base_d5_g3-200_j100.pkl`.
+ 
+Download everything for a single cohort with:
  
 ```python
 from huggingface_hub import snapshot_download
  
 snapshot_download(
     repo_id="AmayaGS/ProtoPathway",
-    repo_type="model",
     local_dir="./protopathway_assets",
+    allow_patterns=["cohorts/TCGA-BLCA/*", "pathways/*"],
 )
 ```
-
-Or just the pieces you need:
  
-```python
-from huggingface_hub import hf_hub_download
+After downloading, update the `paths` and `input` blocks in `configs/experiments/experiment.yaml` to point at your local copies of `gene_expression.csv`, `bipartite_graph.pt`, `labels.csv`, and `data_splits.pkl`.
  
-# Curated pathway base (Reactome + Hallmark)
-hf_hub_download(
-    repo_id="AmayaGS/ProtoPathway",
-    filename="pathways/pathways_base_d5_g3-200_j100.pkl",
-    local_dir="./assets",
-)
+### What you still need to obtain
  
-# A specific cohort checkpoint
-hf_hub_download(
-    repo_id="AmayaGS/ProtoPathway",
-    filename="checkpoints/BLCA/best_fold_0.pt",
-    local_dir="./assets",
-)
+**WSI patch features.** UNI2-h embeddings are not redistributed here. The model expects per-slide HDF5 files with `features` and `coords` keys, one file per slide. You have two options:
+ 
+1. Use pre-extracted UNI2-h features if they are already available for your cohort.
+2. Download raw TCGA WSIs from the [GDC Data Portal](https://portal.gdc.cancer.gov) and extract features using [UNI2-h](https://huggingface.co/MahmoodLab/UNI2-h).
+Once you have the per-slide HDF5 files, run the WSI preprocessing step to convert them into the per-patient `.pt` format ProtoPathway uses at training time:
+ 
+```bash
+python main.py preprocess wsi --config configs/preprocessing/preprocess_wsi.yaml dataset=TCGA-BLCA
 ```
-
-### Repository layout on the Hub
- 
-```
-AmayaGS/ProtoPathway/
-├── README.md                         model card
-├── pathways/
-│   └── pathways_base_d5_g3-200_j100.pkl
-├── splits/
-│   └── {BRCA,BLCA,COADREAD,HNSC,STAD}/data_splits.pkl
-└── checkpoints/
-    └── {BRCA,BLCA,COADREAD,HNSC,STAD}/best_fold_{0..4}.pt
-```
-
- 
-## Data
- 
-ProtoPathway is trained on five TCGA cohorts. Two pieces of input data must be obtained separately:
- 
-**Gene expression** is downloaded from [UCSC Xena](https://xenabrowser.net/datapages/) per cohort.
- 
-**WSI patch features** are pre-extracted with [UNI2-h](https://huggingface.co/MahmoodLab/UNI2-h) from the Mahmood Lab. The model expects per-slide HDF5 files with `features` and `coords` keys, one per slide.
- 
-**Pathway hierarchy** is from [Reactome](https://reactome.org/download-data) (`ReactomePathways.gmt`, `ReactomePathwaysRelation.txt`, `ReactomePathways.txt`) and [MSigDB Hallmark](https://www.gsea-msigdb.org/gsea/msigdb/) gene sets. If you do not want to rebuild the pathway graph yourself, download the curated pkl from the Hugging Face repo above.
- 
----
  
 ## Quick start
  
