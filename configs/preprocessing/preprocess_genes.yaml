@@ -6,7 +6,7 @@
 # - Dataset-specific pathway set (genes present in this dataset)
 # - Bipartite graph structure for the model
 
-dataset: TCGA-COADREAD  # Dataset name - used for input/output paths
+dataset: TCGA-HNSC  # Dataset name - used for input/output paths
 
 paths:
   base_data_dir: C:/Users/Amaya/Documents/PhD/Data/TGCA_data

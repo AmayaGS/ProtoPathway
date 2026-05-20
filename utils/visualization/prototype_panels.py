@@ -195,22 +195,23 @@ def _plot_importance_bars(
         edgecolor='white', linewidth=0.5,
     )
     ax.set_yticks(range(top_k))
-    ax.set_yticklabels(labels, fontsize=9)
+    ax.set_yticklabels(labels, fontsize=12)
     ax.invert_yaxis()
 
     signal_label = 'Fusion Gate (H)' if use_fusion_gate else 'WSI Gate (E)'
-    ax.set_xlabel(f'Mean {signal_label} Weight', fontsize=10)
+    ax.set_xlabel(f'Mean {signal_label} Weight', fontsize=14)
     ax.set_title(
         f'Top {top_k} Prototypes — {group_name}',
-        fontsize=11, fontweight='bold',
+        fontsize=16, fontweight='bold',
     )
     ax.grid(axis='x', alpha=0.3)
+    ax.tick_params(axis='x', labelsize=12)
 
     # Value labels
     for bar, val in zip(bars, values):
         ax.text(
             bar.get_width() + 0.002, bar.get_y() + bar.get_height() / 2,
-            f'{val:.4f}', ha='left', va='center', fontsize=8,
+            f'{val:.4f}', ha='left', va='center', fontsize=10,
         )
 
     plt.tight_layout()
@@ -507,14 +508,14 @@ def plot_prototype_exemplars(
         # Row label (leftmost cell annotation)
         label = f'Proto {proto_idx}\n(w={weight:.4f})'
         axes[row, 0].set_title(
-            label, fontsize=8, fontweight='bold',
+            label, fontsize=10, fontweight='bold',
             loc='left', pad=2,
         )
 
     title = f'{title_prefix}Prototype Exemplar Patches'
     if slide_id:
         title += f' — {slide_id[:12]}'
-    fig.suptitle(title, fontsize=11, fontweight='bold', y=1.01)
+    fig.suptitle(title, fontsize=14, fontweight='bold', y=1.01)
 
     plt.tight_layout()
 

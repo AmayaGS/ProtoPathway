@@ -218,23 +218,24 @@ def _plot_vertical_violin(
         if show_significance and sig_map.get(entity, False):
             ax.text(
                 i, 0, '★',
-                ha='center', va='top', fontsize=12, color='#FF6F00',
+                ha='center', va='top', fontsize=14, color='#FF6F00',
                 transform=ax.get_xaxis_transform()
             )
 
     labels = [e[:20] + '...' if len(e) > 20 else e for e in entity_names]
     ax.set_xticks(positions)
-    ax.set_xticklabels(labels, fontsize=9, rotation=45, ha='right')
+    ax.set_xticklabels(labels, fontsize=12, rotation=45, ha='right')
 
-    ax.set_ylabel('Importance Score', fontsize=11)
-    ax.set_title(title, fontsize=13, fontweight='bold')
+    ax.set_ylabel('Importance Score', fontsize=14)
+    ax.tick_params(axis='y', labelsize=12)
+    ax.set_title(title, fontsize=16, fontweight='bold')
     ax.grid(axis='y', alpha=0.3)
 
     legend_elements = [
         mpatches.Patch(facecolor=COLOR_LOW, alpha=0.6, label='Low Risk'),
         mpatches.Patch(facecolor=COLOR_HIGH, alpha=0.6, label='High Risk'),
     ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=9)
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=11)
 
     save_figure(fig, output_path, dpi=300)
     plt.close(fig)

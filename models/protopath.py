@@ -49,7 +49,8 @@ class ProtoPathway(nn.Module):
         # Fusion params
         fusion_type='cross_attention',
         fusion_num_heads=2,
-        fusion_dropout=0.25
+        fusion_dropout=0.25,
+        fusion_output_dim=64,
     ):
         """
         Initialize ProtoPathway.
@@ -62,6 +63,7 @@ class ProtoPathway(nn.Module):
             wsi_centroids: Optional pre-computed centroids for prototype init
             wsi_enabled: Whether to use WSI branch
             fusion_*: Fusion mechanism parameters
+            fusion_output_dim: Dimensionality of fused embedding (input to classifier)
         """
         super().__init__()
 
@@ -112,19 +114,27 @@ class ProtoPathway(nn.Module):
             self.fusion = get_fusion_module(
                 fusion_type=fusion_type,
                 hidden_dim=hidden_dim,
+                output_dim=fusion_output_dim,
                 num_heads=fusion_num_heads,
                 dropout=fusion_dropout
             )
-            self.classifier = nn.Linear(64, num_classes) # TODO need to set same behaviour everywhere
-            logging.info(f"Fusion: {fusion_type}, classifier dim={hidden_dim}")
+            self.projection = nn.Identity()
+            logging.info(
+                f"Fusion: {fusion_type}, output_dim={fusion_output_dim}, "
+                f"classifier {fusion_output_dim}->{num_classes}"
+            )
         else:
             # Unimodal - no fusion needed
             self.fusion = None
-            if gene_enabled:
-                self.classifier = nn.Linear(gene_hidden_dim, num_classes)
-            else:
-                self.classifier = nn.Linear(wsi_hidden_dim, num_classes)
+            unimodal_dim = gene_hidden_dim if gene_enabled else wsi_hidden_dim
+            self.projection = nn.Sequential(
+                nn.Linear(unimodal_dim, fusion_output_dim),
+                nn.ReLU(),
+                nn.Dropout(fusion_dropout),
+            )
             logging.info("Unimodal mode - no fusion")
+
+        self.classifier = nn.Linear(fusion_output_dim, num_classes)
 
         # Storage for visualization outputs
         self.last_attention_weights = None
@@ -140,6 +150,7 @@ class ProtoPathway(nn.Module):
                 - num_genes, num_pathways: Graph structure info
                 - wsi_features: WSI patch features [num_patches, num_features]
             return_attention: Whether to compute and store attention weights
+            return_embeddings: Whether to return per-modality embeddings
 
         Returns:
             logits: [1, num_classes] prediction logits
@@ -165,11 +176,11 @@ class ProtoPathway(nn.Module):
         # Fusion
         if self.gene_enabled and self.wsi_enabled:
             fused, attn_weights = self.fusion(
-                                            pathway_mean=pathway_mean,
-                                            wsi_embedding=wsi_embedding,
-                                            pathway_embeddings=pathway_embeddings,
-                                            proto_tokens=proto_tokens
-                                            )
+                pathway_mean=pathway_mean,
+                wsi_embedding=wsi_embedding,
+                pathway_embeddings=pathway_embeddings,
+                proto_tokens=proto_tokens
+            )
             embedding = fused
 
             if return_attention:
@@ -177,6 +188,7 @@ class ProtoPathway(nn.Module):
         else:
             # Unimodal
             embedding = pathway_mean if self.gene_enabled else wsi_embedding
+            embedding = self.projection(embedding)
 
         # Classification
         logits = self.classifier(embedding.unsqueeze(0))  # [1, num_classes]
@@ -194,6 +206,7 @@ class ProtoPathway(nn.Module):
         - 'gene_pathway_attention': Gene-pathway attention from GATv2
         - 'pathway_importance': Pathway gate weights
         - 'patch_assignments': Patch-prototype assignments
+        - 'fusion_gate_weights': Prototype-pathway gate weights (if available)
         - 'cross_modal_attention': Prototype-pathway cross attention (if applicable)
         """
         outputs = {}
@@ -204,11 +217,12 @@ class ProtoPathway(nn.Module):
 
         if self.wsi_enabled:
             outputs['patch_assignments'] = self.wsi_encoder.get_prototype_assignments()
-            outputs['fusion_gate_weights'] = self.fusion.proto_pathway_gate_weights
+
+            # All fusion modules expose proto_pathway_gate_weights (None if N/A)
+            if self.fusion is not None and self.fusion.proto_pathway_gate_weights is not None:
+                outputs['fusion_gate_weights'] = self.fusion.proto_pathway_gate_weights
 
         if self.last_attention_weights is not None:
             outputs['cross_modal_attention'] = self.last_attention_weights
 
         return outputs
-
-

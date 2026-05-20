@@ -242,6 +242,13 @@ class GeneEncoderUnimodal(nn.Module):
 
         self.classifier = nn.Linear(hidden_dim, num_classes)
 
+        nn.Sequential(
+            nn.Linear(hidden_dim * 3, 64),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(64, num_classes),
+        )
+
     def forward(self, data, return_attention=False):
         """
         Forward pass for unimodal prediction.

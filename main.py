@@ -121,7 +121,7 @@ def parse_args():
         '--risk-stratification', default='median', choices=['median', 'quartile'],
         help='Risk stratification method (default: median)')
     vis_p.add_argument(
-        '--n-bar', type=int, default=30,
+        '--n-bar', type=int, default=10,
         help='Number of entities in bar plots (default: 30)')
     vis_p.add_argument(
         '--n-violin', type=int, default=15,
@@ -130,7 +130,7 @@ def parse_args():
         '--n-pathways-per-direction', type=int, default=5,
         help='Number of top pathways per direction for gene drill-down (default: 5)')
     vis_p.add_argument(
-        '--top-k-crossmodal-pathways', type=int, default=20,
+        '--top-k-crossmodal-pathways', type=int, default=15,
         help='Number of top pathways in cross-modal heatmaps (default: 20)')
     vis_p.add_argument(
         '--n-crossmodal-gene-drilldown', type=int, default=5,
@@ -159,7 +159,7 @@ def parse_args():
         '--spatial-n-per-group', type=int, default=2,
         help='Number of patients per risk group for auto-selection (default: 2)')
     vis_p.add_argument(
-        '--spatial-downsample', type=int, default=8,
+        '--spatial-downsample', type=int, default=4,
         help='Downsample factor for spatial rendering (default: 4)')
     vis_p.add_argument(
         '--spatial-patch-size', type=int, default=256,
@@ -170,6 +170,20 @@ def parse_args():
     vis_p.add_argument(
         '--spatial-single-gene', default=None,
         help='Single gene name for IHC-style overlay')
+
+    # -------------------------------------------------------------------------
+    # Profile
+    # -------------------------------------------------------------------------
+
+    profile_p = subparsers.add_parser('profile', help='Profile model computational efficiency')
+    profile_p.add_argument('--config', default='configs/experiments/experiment.yaml')
+    profile_p.add_argument('--models', nargs='*', default=None,
+                           help='Models to profile (default: all registered)')
+    profile_p.add_argument('--num-patients', type=int, default=5,
+                           help='Number of patients to profile over')
+    profile_p.add_argument('--num-warmup', type=int, default=1,
+                           help='Warmup iterations before timing')
+    profile_p.add_argument('overrides', nargs='*', help='Config overrides (e.g., dataset=BLCA)')
 
     return parser.parse_args()
 
@@ -312,6 +326,13 @@ def main():
                                      spatial_single_pathway=args.spatial_single_pathway,
                                      spatial_single_gene=args.spatial_single_gene,
                                      force_recalculate=args.force_recalculate)
+
+    elif args.command == 'profile':
+        from utils.profiling import run as profile_run
+        cfg = load_config(args.config, args.overrides)
+        profile_run(cfg, models_to_profile=args.models,
+                    num_patients=args.num_patients,
+                    num_warmup=args.num_warmup)
 
 
 if __name__ == '__main__':

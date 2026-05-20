@@ -295,7 +295,10 @@ def train_fold(
     centroids = None
     if model_reqs.get('needs_centroids') and cfg.model.get('branches', {}).get('wsi', False):
         if cfg.model.wsi_encoder.use_precomputed_centroids:
-            centroid_path = os.path.join(cfg.paths.processed_dir, f'centroids_fold_{fold_idx}.pt')
+            K = cfg.model.wsi_encoder.num_prototypes
+            centroid_dir = os.path.join(cfg.paths.processed_dir, 'centroids', f'K{K}')
+            os.makedirs(centroid_dir, exist_ok=True)
+            centroid_path = os.path.join(centroid_dir, f'centroids_fold_{fold_idx}.pt')
 
             if os.path.exists(centroid_path):
                 logging.info(f"Loading pre-computed centroids from {centroid_path}")
@@ -346,26 +349,17 @@ def train_fold(
         criterion = nn.CrossEntropyLoss()
 
     if cfg.model.name == 'protopath':
-        # score_params = list(model.gene_encoder.conv_final.score_nn.parameters())
-        # score_ids = {id(p) for p in score_params}
-        # gene_backbone_params = [p for p in model.gene_encoder.parameters() if id(p) not in score_ids]
-        #
         # optimizer = AdamW([
-        #     {'params': gene_backbone_params, 'lr': cfg.model.gene_encoder.lr_gene},
-        #     {'params': score_params, 'lr': cfg.model.gene_encoder.lr_gene * 0.1},  # 10x slower
-        #     {'params': model.wsi_encoder.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,
-        #      'weight_decay': cfg.training.weight_decay},
-        #     {'params': model.fusion.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,
-        #      'weight_decay': cfg.training.weight_decay},
-        #     {'params': model.classifier.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,
-        #      'weight_decay': cfg.training.weight_decay},
+        #     {'params': model.gene_encoder.parameters(), 'lr': cfg.model.gene_encoder.lr_gene},
+        #     {'params': model.wsi_encoder.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi, 'weight_decay': cfg.training.weight_decay},
+        #     {'params': model.fusion.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi, 'weight_decay': cfg.training.weight_decay},
+        #     {'params': model.classifier.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,'weight_decay': cfg.training.weight_decay},
         # ])
-        optimizer = AdamW([
-            {'params': model.gene_encoder.parameters(), 'lr': cfg.model.gene_encoder.lr_gene},  # Needs higher LR
-            {'params': model.wsi_encoder.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi, 'weight_decay': cfg.training.weight_decay},  # Needs lower LR
-            {'params': model.fusion.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi, 'weight_decay': cfg.training.weight_decay},  # Tied to WSI pace
-            {'params': model.classifier.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,'weight_decay': cfg.training.weight_decay},  # Tied to fusion
-        ])
+
+        optimizer = AdamW(
+            model.parameters(),
+            lr=cfg.training.learning_rate,
+            weight_decay=cfg.training.weight_decay)
     else:
         optimizer = AdamW(
             model.parameters(),
@@ -487,6 +481,12 @@ def train_fold(
 
     final_val_metrics = validate(model, val_loader, criterion, cfg, device)
 
+    del model, optimizer, criterion
+    if scheduler is not None:
+        del scheduler
+    del train_loader, val_loader
+    torch.cuda.empty_cache()
+
     return {
         'fold_idx': fold_idx,
         'best_epoch': best_epoch,
@@ -548,6 +548,10 @@ def run(cfg):
             )
 
             fold_results.append(result)
+            del train_dataset, val_dataset
+            torch.cuda.empty_cache()
+            import gc
+            gc.collect()
     else:
         # Single train/test split
         if len(splits['Test']) > 0:

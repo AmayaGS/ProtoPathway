@@ -109,11 +109,11 @@ def plot_kaplan_meier(
         p_title = f"Log-rank p = {p_str}{sig_marker}"
 
         if dataset_name:
-            fig.suptitle(dataset_name, fontsize=14, fontweight='bold', y=0.95)
-            ax.set_title(p_title, fontsize=11, fontstyle='italic', pad=10)
+            fig.suptitle(dataset_name, fontsize=18, fontweight='bold', y=0.95)
+            ax.set_title(p_title, fontsize=14, fontstyle='italic', pad=8)
 
-    ax.set_xlabel('Time (months)', fontsize=12)
-    ax.set_ylabel('Survival Probability', fontsize=12)
+    ax.set_xlabel('Time (months)', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Survival Probability', fontsize=14, fontweight='bold')
     ax.set_ylim(0, 1.05)
     ax.grid(True, alpha=0.3)
 
@@ -123,8 +123,10 @@ def plot_kaplan_meier(
         for i in range(len(group_names))
         if (groups == i).sum() > 0
     ]
-    ax.legend(handles=legend_elements, loc='lower left', fontsize=10,
+    ax.legend(handles=legend_elements, loc='lower left', fontsize=12,
               framealpha=0.9)
+
+    ax.tick_params(axis='both', labelsize=12)
 
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
     save_figure(fig, output_path, dpi=300)

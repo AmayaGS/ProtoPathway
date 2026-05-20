@@ -13,7 +13,7 @@
 # -----------------------------------------------------------------------------
 # Dataset Configuration
 # -----------------------------------------------------------------------------
-dataset: TCGA-STAD
+dataset: TCGA-HNSC
 
 paths:
   output_dir: C:/Users/Amaya/Documents/PhD/ProtoPathway_results
@@ -88,6 +88,7 @@ model:
   fusion:
     type: cross_attention  # choices: [concat, cross_attention, bilinear, gated]
     hidden_dim: 128
+    output_dim: 64
     num_heads: 2
     dropout: 0.25
 
@@ -95,7 +96,6 @@ model:
     gamma: 1 # gamma for PIBD model
     sigma: 0.1
     num_patches: 4096
-
 
 # -----------------------------------------------------------------------------
 # Training Configuration

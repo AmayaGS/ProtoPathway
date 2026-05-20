@@ -115,7 +115,8 @@ def build_protopath(cfg, **kwargs):
         # Fusion
         fusion_type=model_cfg.fusion.type,
         fusion_num_heads=model_cfg.fusion.num_heads,
-        fusion_dropout=model_cfg.fusion.dropout
+        fusion_dropout=model_cfg.fusion.dropout,
+        fusion_output_dim=model_cfg.fusion.get('output_dim', 64),
     )
 
     return model

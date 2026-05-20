@@ -3,9 +3,13 @@ Fusion Mechanisms for Multimodal Integration.
 
 Provides multiple fusion strategies:
 - Concatenation
-- Cross-attention (pathway ↔ prototype)
+- Cross-attention (pathway <-> prototype)
+- Simple cross-attention
 - Bilinear fusion
 - Gated fusion
+
+All modules output [output_dim] and expose a `proto_pathway_gate_weights`
+attribute (None when not applicable) for a uniform attention interface.
 """
 
 import torch
@@ -23,8 +27,14 @@ class ConcatFusion(nn.Module):
     def __init__(self, gene_dim, wsi_dim, output_dim, dropout=0.3):
         super().__init__()
 
-        self.projection = nn.Linear(gene_dim + wsi_dim, output_dim)
+        self.projection = nn.Sequential(
+            nn.Linear(gene_dim + wsi_dim, output_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+        )
 
+        # Uniform interface
+        self.proto_pathway_gate_weights = None
 
     def forward(self, pathway_mean, wsi_embedding, pathway_embeddings=None, proto_tokens=None):
         """
@@ -51,15 +61,10 @@ class CrossAttentionFusion(nn.Module):
     Final embedding combines: pathway_mean, attended_proto_mean, wsi_embedding
     """
 
-    def __init__(self, hidden_dim, num_heads=4, dropout=0.3):
+    def __init__(self, hidden_dim, output_dim, num_heads=4, dropout=0.3):
         super().__init__()
 
         self.hidden_dim = hidden_dim
-
-        # self.pre_q_norm = nn.LayerNorm(hidden_dim)
-        # self.pre_k_norm = nn.LayerNorm(hidden_dim)
-
-        # self.raw_temperature = nn.Parameter(torch.tensor(0.0))
 
         # Multi-head cross attention: prototypes (query) attend to pathways (key, value)
         self.cross_attention = nn.MultiheadAttention(
@@ -76,9 +81,10 @@ class CrossAttentionFusion(nn.Module):
         self.norm_pp = nn.LayerNorm(hidden_dim)
 
         self.projection = nn.Sequential(
-                          nn.Linear(hidden_dim * 3, 64),
-                          nn.ReLU(),
-                          nn.Dropout(0.3))
+            nn.Linear(hidden_dim * 3, output_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+        )
 
         self.proto_pathway_gate_weights = None
 
@@ -91,19 +97,11 @@ class CrossAttentionFusion(nn.Module):
             proto_tokens: [num_prototypes, hidden_dim] prototype embeddings
 
         Returns:
-            fused: [hidden_dim] fused embedding
+            fused: [output_dim] fused embedding
             attention_weights: [num_prototypes, num_pathways] cross-modal attention
         """
-        # Add batch dimension for attention
-        # pathways = self.pre_k_norm(pathway_embeddings).unsqueeze(0)  # [1, num_pathways, hidden_dim]
-        # prototypes = self.pre_q_norm(proto_tokens).unsqueeze(0)  # [1, num_prototypes, hidden_dim]
-        #
-        pathways = pathway_embeddings.unsqueeze(0)  # [1, num_pathways, hidden_dim]
-        prototypes = proto_tokens.unsqueeze(0)  # [1, num_prototypes, hidden_dim]
-
-        # temperature = 1.0 + F.softplus(self.raw_temperature)
-
-        # scaled_prototypes = prototypes / temperature
+        pathways = pathway_embeddings.unsqueeze(0)   # [1, num_pathways, hidden_dim]
+        prototypes = proto_tokens.unsqueeze(0)        # [1, num_prototypes, hidden_dim]
 
         # Cross attention: prototypes query pathways
         attended_proto, attn_weights = self.cross_attention(
@@ -114,7 +112,7 @@ class CrossAttentionFusion(nn.Module):
             average_attn_weights=True
         )
 
-        gates_proto = self.gate_pp(attended_proto) # [1, N, 1]
+        gates_proto = self.gate_pp(attended_proto)          # [1, N, 1]
         gates_proto = F.softmax(gates_proto, dim=1)
         weighted_proto = (gates_proto * attended_proto).sum(dim=1)  # [1, hidden_dim]
 
@@ -122,9 +120,9 @@ class CrossAttentionFusion(nn.Module):
 
         # Combine all three embeddings
         combined = torch.cat([
-            self.norm_gene(pathway_mean),  # Pathway-aggregated gene embedding
-            self.norm_pp(weighted_proto.squeeze(0)),  # Cross-modal attended prototype embedding
-            self.norm_wsi(wsi_embedding)  # Prototype-aggregated WSI embedding
+            self.norm_gene(pathway_mean),
+            self.norm_pp(weighted_proto.squeeze(0)),
+            self.norm_wsi(wsi_embedding)
         ], dim=-1)
 
         fused = self.projection(combined)
@@ -139,7 +137,7 @@ class SimpleCrossAttention(nn.Module):
     Uses learned query/key/value projections with scaled dot-product attention.
     """
 
-    def __init__(self, hidden_dim, dropout=0.1):
+    def __init__(self, hidden_dim, output_dim, dropout=0.1):
         super().__init__()
 
         self.hidden_dim = hidden_dim
@@ -151,7 +149,14 @@ class SimpleCrossAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         # Final projection
-        self.projection = nn.Linear(hidden_dim * 3, hidden_dim)
+        self.projection = nn.Sequential(
+            nn.Linear(hidden_dim * 3, output_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+        )
+
+        # Uniform interface
+        self.proto_pathway_gate_weights = None
 
     def forward(self, pathway_mean, wsi_embedding, pathway_embeddings, proto_tokens):
         """
@@ -162,24 +167,20 @@ class SimpleCrossAttention(nn.Module):
             proto_tokens: [num_prototypes, hidden_dim]
 
         Returns:
-            fused: [hidden_dim] fused embedding
+            fused: [output_dim] fused embedding
             attention_weights: [num_prototypes, num_pathways]
         """
-        # Project
-        Q = self.query_proj(proto_tokens)  # [N_proto, hidden_dim]
-        K = self.key_proj(pathway_embeddings)  # [N_pathway, hidden_dim]
+        Q = self.query_proj(proto_tokens)       # [N_proto, hidden_dim]
+        K = self.key_proj(pathway_embeddings)    # [N_pathway, hidden_dim]
         V = self.value_proj(pathway_embeddings)  # [N_pathway, hidden_dim]
 
-        # Attention scores
-        scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale  # [N_proto, N_pathway]
+        scores = torch.matmul(Q, K.transpose(-2, -1)) * self.scale
         attn_weights = F.softmax(scores, dim=-1)
         attn_weights = self.dropout(attn_weights)
 
-        # Attended output
         attended = torch.matmul(attn_weights, V)  # [N_proto, hidden_dim]
-        attended_mean = attended.mean(dim=0)  # [hidden_dim]
+        attended_mean = attended.mean(dim=0)       # [hidden_dim]
 
-        # Combine
         combined = torch.cat([pathway_mean, attended_mean, wsi_embedding], dim=-1)
         fused = self.projection(combined)
 
@@ -203,26 +204,30 @@ class BilinearFusion(nn.Module):
         self.V = nn.Linear(wsi_dim, rank, bias=False)
 
         # Combine bilinear term with original embeddings
-        self.projection = nn.Linear(rank + gene_dim + wsi_dim, output_dim)
+        self.projection = nn.Sequential(
+            nn.Linear(rank + gene_dim + wsi_dim, output_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+        )
 
+        # Uniform interface
+        self.proto_pathway_gate_weights = None
 
-    def forward(self, gene_embedding, wsi_embedding, pathway_embeddings=None, proto_tokens=None):
+    def forward(self, pathway_mean, wsi_embedding, pathway_embeddings=None, proto_tokens=None):
         """
         Args:
-            gene_embedding: [hidden_dim] from gene encoder
+            pathway_mean: [hidden_dim] from gene encoder
             wsi_embedding: [hidden_dim] from WSI encoder
 
         Returns:
             fused: [output_dim] fused embedding
             attention_weights: None
         """
-        # Bilinear interaction via low-rank factorization
-        gene_proj = self.U(gene_embedding)  # [rank]
-        wsi_proj = self.V(wsi_embedding)  # [rank]
-        bilinear = gene_proj * wsi_proj  # Element-wise [rank]
+        gene_proj = self.U(pathway_mean)  # [rank]
+        wsi_proj = self.V(wsi_embedding)    # [rank]
+        bilinear = gene_proj * wsi_proj     # Element-wise [rank]
 
-        # Combine
-        combined = torch.cat([bilinear, gene_embedding, wsi_embedding], dim=-1)
+        combined = torch.cat([bilinear, pathway_mean, wsi_embedding], dim=-1)
         fused = self.projection(combined)
 
         return fused, None
@@ -233,12 +238,17 @@ class GatedFusion(nn.Module):
     Gated fusion with learned modality weighting.
 
     Learns to weight contributions from each modality based on their content.
+    Projects to output_dim first, then applies learned gates.
     """
 
     def __init__(self, gene_dim, wsi_dim, output_dim, dropout=0.3):
         super().__init__()
 
-        # Gate networks
+        # Project each modality to output_dim
+        self.gene_proj = nn.Linear(gene_dim, output_dim)
+        self.wsi_proj = nn.Linear(wsi_dim, output_dim)
+
+        # Gate networks (operate on original dims for richer gating signal)
         self.gene_gate = nn.Sequential(
             nn.Linear(gene_dim, gene_dim // 2),
             nn.ReLU(),
@@ -253,16 +263,15 @@ class GatedFusion(nn.Module):
             nn.Sigmoid()
         )
 
-        # Projection to common dimension if needed   ### TODO check this, I think I made a mistake somewhere
-        self.gene_proj = nn.Linear(gene_dim, output_dim) if gene_dim != output_dim else nn.Identity()
-        self.wsi_proj = nn.Linear(wsi_dim, output_dim) if wsi_dim != output_dim else nn.Identity()
-
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, gene_embedding, wsi_embedding, pathway_embeddings=None, proto_tokens=None):
+        # Uniform interface — populated with [2] gate values each forward
+        self.proto_pathway_gate_weights = None
+
+    def forward(self, pathway_mean, wsi_embedding, pathway_embeddings=None, proto_tokens=None):
         """
         Args:
-            gene_embedding: [hidden_dim] from gene encoder
+            pathway_mean: [hidden_dim] from gene encoder
             wsi_embedding: [hidden_dim] from WSI encoder
 
         Returns:
@@ -270,8 +279,8 @@ class GatedFusion(nn.Module):
             gate_weights: [2] gene and WSI gate values
         """
         # Compute gates
-        gene_gate = self.gene_gate(gene_embedding)  # [1]
-        wsi_gate = self.wsi_gate(wsi_embedding)  # [1]
+        gene_gate = self.gene_gate(pathway_mean)  # [1]
+        wsi_gate = self.wsi_gate(wsi_embedding)      # [1]
 
         # Normalize gates
         gate_sum = gene_gate + wsi_gate + 1e-6
@@ -279,7 +288,7 @@ class GatedFusion(nn.Module):
         wsi_weight = wsi_gate / gate_sum
 
         # Project and weight
-        gene_proj = self.gene_proj(gene_embedding)
+        gene_proj = self.gene_proj(pathway_mean)
         wsi_proj = self.wsi_proj(wsi_embedding)
 
         fused = gene_weight * gene_proj + wsi_weight * wsi_proj
@@ -287,16 +296,24 @@ class GatedFusion(nn.Module):
 
         gate_weights = torch.stack([gene_weight.squeeze(), wsi_weight.squeeze()])
 
+        # Store for attention interface (detached, like CrossAttentionFusion)
+        self.proto_pathway_gate_weights = gate_weights.detach()
+
         return fused, gate_weights
 
 
-def get_fusion_module(fusion_type, hidden_dim, num_heads=4, dropout=0.3):
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
+
+def get_fusion_module(fusion_type, hidden_dim, output_dim=64, num_heads=4, dropout=0.3):
     """
     Factory function to create fusion module.
 
     Args:
         fusion_type: 'concat', 'cross_attention', 'simple_cross_attention', 'bilinear', 'gated'
         hidden_dim: Hidden dimension (assumes same for gene and WSI)
+        output_dim: Output dimension for the fused embedding (fed to classifier)
         num_heads: Number of attention heads (for cross_attention)
         dropout: Dropout rate
 
@@ -304,14 +321,14 @@ def get_fusion_module(fusion_type, hidden_dim, num_heads=4, dropout=0.3):
         Fusion module instance
     """
     if fusion_type == 'concat':
-        return ConcatFusion(hidden_dim, hidden_dim, hidden_dim, dropout)
+        return ConcatFusion(hidden_dim, hidden_dim, output_dim, dropout)
     elif fusion_type == 'cross_attention':
-        return CrossAttentionFusion(hidden_dim, num_heads, dropout)
+        return CrossAttentionFusion(hidden_dim, output_dim, num_heads, dropout)
     elif fusion_type == 'simple_cross_attention':
-        return SimpleCrossAttention(hidden_dim, dropout)
+        return SimpleCrossAttention(hidden_dim, output_dim, dropout)
     elif fusion_type == 'bilinear':
-        return BilinearFusion(hidden_dim, hidden_dim, hidden_dim, rank=64, dropout=dropout)
+        return BilinearFusion(hidden_dim, hidden_dim, output_dim, rank=64, dropout=dropout)
     elif fusion_type == 'gated':
-        return GatedFusion(hidden_dim, hidden_dim, hidden_dim, dropout)
+        return GatedFusion(hidden_dim, hidden_dim, output_dim, dropout)
     else:
         raise ValueError(f"Unknown fusion type: {fusion_type}")

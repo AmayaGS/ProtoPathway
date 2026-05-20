@@ -59,14 +59,14 @@ filtering:
 
   # Hallmark gene sets to add (fills gaps from excluded categories)
   hallmark_additions:
-    # Metabolism gap-fill (Warburg effect, metabolic reprogramming)
-    - "HALLMARK_GLYCOLYSIS"
-    - "HALLMARK_OXIDATIVE_PHOSPHORYLATION"
-    - "HALLMARK_FATTY_ACID_METABOLISM"
-    - "HALLMARK_CHOLESTEROL_HOMEOSTASIS"
-
-    # EMT gap-fill (metastasis)
-    - "HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION"
+#    # Metabolism gap-fill (Warburg effect, metabolic reprogramming)
+#    - "HALLMARK_GLYCOLYSIS"
+#    - "HALLMARK_OXIDATIVE_PHOSPHORYLATION"
+#    - "HALLMARK_FATTY_ACID_METABOLISM"
+#    - "HALLMARK_CHOLESTEROL_HOMEOSTASIS"
+#
+#    # EMT gap-fill (metastasis)
+#    - "HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION"
 
   # Redundancy removal
   redundancy:

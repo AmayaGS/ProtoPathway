@@ -339,7 +339,8 @@ def run(cfg):
 
         model_reqs = get_model_requirements(cfg.model.name)
         if model_reqs.get('needs_centroids') and cfg.model.get('branches', {}).get('wsi', False):
-            centroid_path = exp_dir / f'centroids_fold_{fold_idx}.pt'
+            K = cfg.model.wsi_encoder.num_prototypes
+            centroid_path = Path(cfg.paths.processed_dir) / 'centroids' / f'K{K}' / f'centroids_fold_{fold_idx}.pt'
             if centroid_path.exists():
                 model_kwargs['wsi_centroids'] = torch.load(centroid_path, weights_only=True)
                 logging.info("  Loaded pre-computed centroids")

@@ -45,6 +45,7 @@ import os
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from collections import Counter
 
 import h5py
 import numpy as np
@@ -57,6 +58,8 @@ from utils.visualization.prototype_panels import (
     extract_exemplar_patches,
     plot_prototype_exemplars
 )
+
+from utils.io import save_figure
 
 logger = logging.getLogger(__name__)
 
@@ -934,7 +937,7 @@ def plot_spatial_figure(
     # ── Individual H&E panel ─────────────────────────────────────
     fig_he, ax_he = plt.subplots(figsize=(panel_w, panel_h))
     ax_he.imshow(canvas)
-    ax_he.set_title(f'H&E  |  {patient_id}', fontsize=11, fontweight='bold')
+    ax_he.set_title(f'H&E  |  {patient_id}', fontsize=14, fontweight='bold')
     ax_he.axis('off')
     plt.tight_layout()
     _save_multi_format(fig_he, str(output_dir / f'{patient_id}_HE'), dpi=dpi)
@@ -954,7 +957,7 @@ def plot_spatial_figure(
         fig_ov, ax_ov = plt.subplots(figsize=(panel_w, panel_h))
         ax_ov.imshow(canvas)
         ax_ov.imshow(ov['image'], alpha=overlay_alpha)
-        ax_ov.set_title(f'{title}  |  {risk_group}', fontsize=11, fontweight='bold')
+        ax_ov.set_title(f'{title}  |  {risk_group}', fontsize=14, fontweight='bold')
         ax_ov.axis('off')
 
         # Categorical legend
@@ -969,7 +972,7 @@ def plot_spatial_figure(
             ax_ov.legend(
                 handles=handles,
                 loc='upper left', bbox_to_anchor=(1.02, 1.0),
-                fontsize=6, framealpha=0.85, ncol=1,
+                fontsize=9, framealpha=0.85, ncol=1,
                 borderpad=0.3, handlelength=1.0, handletextpad=0.3,
                 borderaxespad=0
             )
@@ -983,7 +986,7 @@ def plot_spatial_figure(
             )
             sm.set_array([])
             cbar = fig_ov.colorbar(sm, ax=ax_ov, fraction=0.046, pad=0.02)
-            cbar.set_label(cb.get('label', ''), fontsize=8)
+            cbar.set_label(cb.get('label', ''), fontsize=11)
 
         plt.tight_layout()
         _save_multi_format(fig_ov, str(output_dir / f'{patient_id}_{slug}'), dpi=dpi)
@@ -1001,14 +1004,14 @@ def plot_spatial_figure(
         axes = [axes]
 
     axes[0].imshow(canvas)
-    axes[0].set_title('H&E', fontsize=11, fontweight='bold')
+    axes[0].set_title('H&E', fontsize=14, fontweight='bold')
     axes[0].axis('off')
 
     for i, ov in enumerate(overlays):
         ax = axes[i + 1]
         ax.imshow(canvas)
         ax.imshow(ov['image'], alpha=overlay_alpha)
-        ax.set_title(ov.get('title', ''), fontsize=11, fontweight='bold')
+        ax.set_title(ov.get('title', ''), fontsize=14, fontweight='bold')
         ax.axis('off')
 
         if 'legend' in ov and ov['legend']:
@@ -1022,7 +1025,7 @@ def plot_spatial_figure(
             ax.legend(
                 handles=handles,
                 loc='upper left', bbox_to_anchor=(1.02, 1.0),
-                fontsize=6, framealpha=0.85, ncol=1,
+                fontsize=9, framealpha=0.85, ncol=1,
                 borderpad=0.3, handlelength=1.0, handletextpad=0.3,
                 borderaxespad=0
             )
@@ -1035,11 +1038,11 @@ def plot_spatial_figure(
             )
             sm.set_array([])
             cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.02)
-            cbar.set_label(cb.get('label', ''), fontsize=8)
+            cbar.set_label(cb.get('label', ''), fontsize=11)
 
     fig.suptitle(
         f'{patient_id} | {risk_group}',
-        fontsize=13, fontweight='bold', y=0.98,
+        fontsize=16, fontweight='bold', y=0.98,
     )
     fig.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
     plt.close(fig)
@@ -1345,6 +1348,51 @@ def generate_patient_spatial_viz(
                 'title': f'Pathways',
                 'legend': pw_legend,
             })
+
+            # ── Gene drill-down for dominant spatial pathway ─────────
+            patch_pathway = [
+                proto_pw_map.get(int(slide_assignments[i]))
+                for i in range(len(slide_assignments))
+            ]
+            pathway_counts = Counter(pw for pw in patch_pathway if pw is not None)
+            if pathway_counts:
+                dominant_pathway = pathway_counts.most_common(1)[0][0]
+                pw_idx = pathway_names.index(dominant_pathway)
+
+                gene_pw_attn = np.asarray(
+                    attention_data.get('gene_pathway_attention', [])
+                )
+                if len(gene_pw_attn) > 0 and gene_names:
+                    gene_scores = gene_pw_attn[:, pw_idx]
+
+                    # Filter to genes with non-trivial attention (in-pathway)
+                    nonzero_mask = gene_scores > 1e-6
+                    valid_gene_idx = np.where(nonzero_mask)[0]
+
+                    if len(valid_gene_idx) > 0:
+                        # Top 20 within pathway members
+                        top_gene_idx = valid_gene_idx[
+                            np.argsort(gene_scores[valid_gene_idx])[::-1]
+                        ][:20]
+
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    names = [gene_names[i] for i in top_gene_idx]
+                    values = gene_scores[top_gene_idx]
+                    ax.barh(range(len(names)), values, color='#2E7D32',
+                            alpha=0.85, edgecolor='white', linewidth=0.5)
+                    ax.set_yticks(range(len(names)))
+                    ax.set_yticklabels(names, fontsize=8)
+                    ax.invert_yaxis()
+                    ax.set_xlabel('Gene-Pathway Attention', fontsize=11)
+                    ax.set_title(
+                        f'Top Genes in {dominant_pathway[:50]}\n'
+                        f'(dominant pathway for {patient_id})',
+                        fontsize=12, fontweight='bold',
+                    )
+                    ax.grid(axis='x', alpha=0.3)
+                    plt.tight_layout()
+                    save_figure(fig, str(output_dir / f'{patient_id}_gene_drilldown'))
+                    plt.close(fig)
 
         # ── Overlay 3: Single-pathway heatmap ────────────────────────
         if single_pathway_idx is not None and len(slide_cross_modal) > 0:

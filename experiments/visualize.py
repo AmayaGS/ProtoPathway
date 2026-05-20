@@ -39,9 +39,6 @@ logger = logging.getLogger(__name__)
 COLOR_LOW = '#2196F3'
 COLOR_HIGH = '#E53935'
 
-
-
-
 # =====================================================================
 # Main entry point
 # =====================================================================
@@ -629,7 +626,7 @@ def _run_per_fold(
         logger.info(f"  Gating rank comparison (WSI vs Fusion)...")
         try:
             plot_gating_comparison(
-                fold_attn, risk_map, valid, K, fold_idx,
+                fold_attn, risk_map, valid, 10, fold_idx,
                 str(dirs['shift_plots'] / f'rank_shift_fold_{fold_idx}.pdf'),
             )
         except Exception as e:
@@ -823,19 +820,20 @@ def plot_gating_comparison(fold_attn, risk_map, valid, K, fold_idx, output_path)
     ax.barh(y_pos, delta_sorted, color=colors, alpha=0.85,
             edgecolor='white', linewidth=0.5)
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels, fontsize=8)
+    ax.set_yticklabels(labels, fontsize=12)
     ax.axvline(x=0, color='grey', linewidth=0.8)
-    ax.set_xlabel('Rank Shift (Fusion − WSI)', fontsize=11)
+    ax.set_xlabel('Rank Shift (Fusion − WSI)', fontsize=14)
     ax.set_title(
         f'Pathway Context Effect on Prototype Importance — Fold {fold_idx}',
-        fontsize=12, fontweight='bold',
+        fontsize=16, fontweight='bold',
     )
     ax.grid(axis='x', alpha=0.3)
+    ax.tick_params(axis='x', labelsize=12)
 
     ax.legend(handles=[
         mpatches.Patch(facecolor=COLOR_PROMOTED, alpha=0.85, label='Rank increased'),
         mpatches.Patch(facecolor=COLOR_DEMOTED, alpha=0.85, label='Rank decreased'),
-    ], loc='lower right', fontsize=9)
+    ], loc='lower right', fontsize=11)
 
     plt.tight_layout()
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -912,14 +910,16 @@ def plot_rank_bars(df, title, output_path, n=30, entity_col='entity',
     y = np.arange(len(df))
     ax.barh(y, df[metric_col], color=colors, edgecolor='white', linewidth=0.5, alpha=0.85)
     labels = [str(l)[:55] + '...' if len(str(l)) > 55 else str(l) for l in df[entity_col]]
-    ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=8)
-    ax.set_xlabel('Rank Difference', fontsize=11)
-    ax.set_title(title, fontsize=12, fontweight='bold')
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=13, fontweight='bold')
+    ax.set_xlabel('Rank Difference', fontsize=15)
+    ax.set_title(title, fontsize=18, fontweight='bold')
     ax.axvline(0, color='grey', lw=0.8); ax.grid(axis='x', alpha=0.3)
     ax.legend(handles=[
         mpatches.Patch(facecolor=COLOR_HIGH, alpha=0.85, label=f'Higher in {group_names[1]}'),
         mpatches.Patch(facecolor=COLOR_LOW, alpha=0.85, label=f'Higher in {group_names[0]}'),
-    ], loc='lower right', fontsize=9)
+    ], loc='lower right', fontsize=12)
+    ax.tick_params(axis='x', labelsize=13)
     plt.tight_layout()
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     save_figure(fig, output_path, dpi=300)
