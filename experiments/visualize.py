@@ -364,28 +364,20 @@ def _run_spatial(
             )
         except Exception as e:
             logger.error(f"  Failed: {e}")
-    #
-    # # Cohort prototype panels
-    # logger.info("\n  Cohort prototype panels...")
-    # proto_dir = spatial_dir / 'prototype_panels'
-    # # try:
-    # #     plot_prototype_importance(
-    # #         attention_by_patient=attention_by_patient,
-    # #         output_dir=str(proto_dir), top_k=5, dpi=300,
-    # #     )
-    # # except Exception as e:
-    # #     logger.error(f"  Prototype importance failed: {e}")
-    #
-    # try:
-    #     plot_cohort_prototype_exemplars(
-    #         attention_by_patient=attention_by_patient,
-    #         wsi_features_dir=wsi_features_dir,
-    #         output_dir=str(proto_dir),
-    #         top_k_protos=16, n_patches_per_proto=8,
-    #         wsi_dir=wsi_dir, downsample=downsample, patch_size=patch_size,
-    #     )
-    # except Exception as e:
-    #     logger.error(f"  Cohort exemplars failed: {e}")
+
+    # Cohort prototype panels
+    logger.info("\n  Cohort prototype panels...")
+    proto_dir = spatial_dir / 'prototype_panels'
+    try:
+        plot_cohort_prototype_exemplars(
+            attention_by_patient=attention_by_patient,
+            wsi_features_dir=wsi_features_dir,
+            output_dir=str(proto_dir),
+            top_k_protos=16, n_patches_per_proto=8,
+            wsi_dir=wsi_dir, downsample=downsample, patch_size=patch_size,
+        )
+    except Exception as e:
+        logger.error(f"  Cohort exemplars failed: {e}")
 
     logger.info(f"  Spatial outputs in {spatial_dir}")
 

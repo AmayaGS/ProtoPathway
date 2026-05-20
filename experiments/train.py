@@ -349,13 +349,6 @@ def train_fold(
         criterion = nn.CrossEntropyLoss()
 
     if cfg.model.name == 'protopath':
-        # optimizer = AdamW([
-        #     {'params': model.gene_encoder.parameters(), 'lr': cfg.model.gene_encoder.lr_gene},
-        #     {'params': model.wsi_encoder.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi, 'weight_decay': cfg.training.weight_decay},
-        #     {'params': model.fusion.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi, 'weight_decay': cfg.training.weight_decay},
-        #     {'params': model.classifier.parameters(), 'lr': cfg.model.wsi_encoder.lr_wsi,'weight_decay': cfg.training.weight_decay},
-        # ])
-
         optimizer = AdamW(
             model.parameters(),
             lr=cfg.training.learning_rate,
@@ -398,13 +391,6 @@ def train_fold(
 
         # Train
         train_metrics = train_epoch(model, train_loader, optimizer, criterion, cfg, device)
-
-        # if hasattr(model.gene_encoder, '_gate_entropy'):
-        #     logging.info(f"  Gate entropy: {model.gene_encoder._gate_entropy:.3f} (max={np.log(617):.3f}), "
-        #                 f" range: [{model.gene_encoder._gate_min:.4f}, {model.gene_encoder._gate_max:.4f}]" )
-        #
-        # if hasattr(model.gene_encoder, '_gat_entropy'):
-        #     logging.info(f" GAT entropy: {model.gene_encoder._gat_entropy:.3f} (max={model.gene_encoder._gat_max:.4f}), ")
 
         # Validate
         val_metrics = validate(model, val_loader, criterion, cfg, device)
