@@ -6,7 +6,7 @@ ProtoPathway fuses whole slide image (WSI) morphology with bulk transcriptomics 
 
 
 <p align="center">
-  <a href="https://arxiv.org/abs/XXXX.XXXXX"><img alt="Paper" src="https://img.shields.io/badge/paper-arXiv-b31b1b.svg"></a>
+  <a href="https://arxiv.org/abs/2605.21454v1"><img alt="Paper" src="https://img.shields.io/badge/paper-arXiv-b31b1b.svg"></a>
   <a href="https://huggingface.co/AmayaGS/ProtoPathway"><img alt="Hugging Face" src="https://img.shields.io/badge/🤗-Hugging%20Face-yellow"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/python-3.11+-blue.svg"></a>
