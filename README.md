@@ -291,7 +291,7 @@ If you use this code in your research, please cite:
   title   = {ProtoPathway: Biologically Structured Prototype-Pathway Fusion for Multimodal Cancer Survival Prediction},
   author  = {Amaya Gallagher-Syed, Costantino Pitzalis, Myles J. Lewis, Michael R. 
   Barnes, Gregory Slabaugh},
-  journal = {arxiv},
+  journal = {arXiv preprint arXiv:2605.21454},
   year    = {2026},
 }
 ```
